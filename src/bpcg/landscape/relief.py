@@ -63,7 +63,9 @@ def river_relief(
             f"relief.hack_coefficient_km, hack_exponent 는 0 보다 커야 합니다: {c_h}, {h}"
         )
     out = np.zeros(k_s.shape, dtype=np.float64)
-    ok = (a_star > 0.0) & (a_star < cell_area) & (k_s > 0.0) & (runoff_eff > 0.0)
+    # A* 가 1 m² 보다 작으면 (k_s 가 거의 0) 로그 간격 적분이 무한대가 되므로 계산하지 않습니다.
+    ok = (a_star > 1.0) & (a_star < cell_area) & (k_s > 0.0) & (runoff_eff > 0.0)
+    ok &= np.isfinite(a_star) & np.isfinite(k_s)
     if not ok.any():
         return out
     ks = k_s[ok]

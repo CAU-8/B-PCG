@@ -4,7 +4,7 @@ U 는 실제 단위 [m/yr] 입니다. 바다 칸은 0 입니다.
 - 크라톤: 모든 대륙 칸에 U₀ = craton_erosion_m_per_myr·1e-6 (설계도 5장 2번).
 - 섭입 위판(kind 1·2, side +1): U += orogen_factor·γ·exp(−((δ − d_arc)/w)²).
   d_arc 는 섭입판을 얕은·깊은 두 구간으로 나눠 정합니다 (설계도 5장 16번).
-- 충돌(kind 3): U += collision_factor·γ·exp(−(δ/(1.5w))²).
+- 충돌(kind 3): U += collision_factor·γ·exp(−(δ/w_c)²), w_c = collision_width_m (없으면 1.5·w).
 - 대륙 열곡(δ_div < 50 km): U += rift_subsidence·exp(−(δ_div/30 km)²).
 - 산맥 성분에 (1 + 0.25·fbm3) 을 곱합니다.
 - 깎인 두께 = clip(max(U, 0)·기간, 0, 상한) (설계도 5장 8번).
@@ -25,7 +25,8 @@ from bpcg.planet.plates import (
 
 STREAM_OROGEN_NOISE = 321
 
-COLLISION_WIDTH_FACTOR = 1.5  # 충돌 융기 폭 = 1.5·w
+COLLISION_WIDTH_FACTOR = 1.5  # collision_width_m 가 없을 때 충돌 융기 폭 = 1.5·w
+MIN_MOUNTAIN_UPLIFT_M_PER_YR = 1e-9  # 이보다 작은 산맥 융기는 0 (1 mm/Myr)
 RIFT_MAX_DIST_M = 50_000.0  # 대륙 열곡: δ_div < 50 km
 RIFT_WIDTH_M = 30_000.0  # exp(−(δ_div/30 km)²)
 OROGEN_NOISE_AMPLITUDE = 0.25  # 산맥 성분 × (1 + 0.25·fbm3)
@@ -95,10 +96,15 @@ def generate_uplift(graph: CellGraph, fields: dict[str, np.ndarray], cfg) -> dic
     w = float(u.orogen_width_m)
     if not w > 0:
         raise ValueError(f"orogen_width_m 는 0 보다 커야 합니다: {w}")
+    w_col = float(u.get("collision_width_m", COLLISION_WIDTH_FACTOR * w))
+    if not w_col > 0:
+        raise ValueError(f"collision_width_m 는 0 보다 커야 합니다: {w_col}")
     d_arc = arc_distance_m(cfg)
     radius = float(cfg.planet.radius_m)
 
-    uplift = np.where(cont, float(u.craton_erosion_m_per_myr) * 1e-6, 0.0)
+    # 기본 깎임은 육지 전체에 줍니다.
+    # 해양 지각이 바다로 이어지지 않아 육지가 된 낮은 분지도 깎입니다.
+    uplift = np.where(cont | ~is_ocean, float(u.craton_erosion_m_per_myr) * 1e-6, 0.0)
 
     overriding = (side == 1) & ((kind == KIND_OCEAN_CONTINENT) | (kind == KIND_OCEAN_OCEAN))
     collision = kind == KIND_COLLISION
@@ -109,10 +115,11 @@ def generate_uplift(graph: CellGraph, fields: dict[str, np.ndarray], cfg) -> dic
         * np.exp(-(((d_conv[overriding] - d_arc) / w) ** 2))
     )
     mountain[collision] += (
-        float(u.collision_factor)
-        * gamma[collision]
-        * np.exp(-((d_conv[collision] / (COLLISION_WIDTH_FACTOR * w)) ** 2))
+        float(u.collision_factor) * gamma[collision] * np.exp(-((d_conv[collision] / w_col) ** 2))
     )
+    # 가우스 꼬리의 아주 작은 값(1e-300 등)은 0 으로 둡니다.
+    # 뒤 단계의 거듭제곱에서 0 으로 사라져 NaN 을 만듭니다.
+    mountain[mountain < MIN_MOUNTAIN_UPLIFT_M_PER_YR] = 0.0
     active = mountain > 0.0
     if active.any():
         pts = noise_points(graph, radius)[active]

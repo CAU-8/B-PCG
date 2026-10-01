@@ -998,9 +998,17 @@ class HeroVolume:
             for _ in range(SURFACE_FIXED_POINT_ITERS):
                 hh = base + amp * self._detail_noise(xs, ys, hh)
             h[noisy] = hh
-        near = (cols["river_half_width"] > 0) & (
-            cols["river_dist"] < cols["river_half_width"] + RIVER_SMOOTH_K_M
-        )
+        # smax_k 가 지표를 바꾸는 기둥은 z_s' 에서 강 항 d_riv < k 인 곳입니다. d_riv 는
+        # min(W/2, D)/(W/2) 배로 줄어든 거리라, D < W/2 인 강(Leopold–Maddock 계수로는 모든 강)
+        # 에서는 띠가 ℓ < W/2 + k 보다 넓습니다(z_s' = z_q 이면 ℓ < W/2·(1 + k/D) 까지).
+        hw, dd, ell = cols["river_half_width"], cols["river_depth"], cols["river_dist"]
+        has = (hw > 0) & (dd > 0) & (ell < FAR_M)
+        d_riv = np.full(h.shape, np.inf)
+        if has.any():
+            a = ell[has] / hw[has]
+            v = (cols["z_surface"][has] - cols["river_bank"][has]) / dd[has]
+            d_riv[has] = np.minimum(hw[has], dd[has]) * (np.sqrt(a * a + v * v) - 1.0)
+        near = d_riv < RIVER_SMOOTH_K_M
         todo = np.flatnonzero(near & (cols["m"] <= 0)).astype(np.int64)
         if todo.size:
             _bisect_surface_kernel(
