@@ -74,11 +74,12 @@ def git_commit() -> str | None:
     return sha if out.returncode == 0 and sha else None
 
 
-def jsonable(obj: Any, max_array: int = JSON_ARRAY_MAX) -> Any:
+def jsonable(obj: Any, max_array: int | None = JSON_ARRAY_MAX) -> Any:
     """JSON 으로 쓸 수 있는 값으로 바꿉니다.
 
     numpy 스칼라·배열은 파이썬 값·리스트로, NaN·inf 는 null 로 바꿉니다(JSON 표준이 아님).
-    원소가 max_array 보다 많은 배열은 {"__array__": 모양, "dtype"} 요약만 남깁니다.
+    원소가 max_array 보다 많은 배열은 {"__array__": 모양, "dtype"} 요약만 남깁니다
+    (리스트는 {"__list__": 길이}). max_array 가 None 이면 줄이지 않습니다.
     dataclass 처럼 __dict__ 가 있는 객체는 그 dict 로, 그 밖은 문자열로 바꿉니다.
     """
     if obj is None or isinstance(obj, bool | str):
@@ -91,13 +92,13 @@ def jsonable(obj: Any, max_array: int = JSON_ARRAY_MAX) -> Any:
     if isinstance(obj, np.bool_):
         return bool(obj)
     if isinstance(obj, np.ndarray):
-        if obj.size > max_array:
+        if max_array is not None and obj.size > max_array:
             return {"__array__": list(obj.shape), "dtype": str(obj.dtype)}
         return jsonable(obj.tolist(), max_array)
     if isinstance(obj, dict):
         return {str(k): jsonable(v, max_array) for k, v in obj.items()}
     if isinstance(obj, list | tuple):
-        if len(obj) > max_array:
+        if max_array is not None and len(obj) > max_array:
             return {"__list__": len(obj)}
         return [jsonable(v, max_array) for v in obj]
     if isinstance(obj, Path):
@@ -113,11 +114,15 @@ def _write_text_atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def write_json(path: str | os.PathLike, obj: Any) -> None:
-    """obj 를 jsonable 로 바꿔 들여쓰기 2 의 UTF-8 JSON 으로 씁니다(임시 파일 뒤 이름 바꾸기)."""
+def write_json(path: str | os.PathLike, obj: Any, max_array: int | None = JSON_ARRAY_MAX) -> None:
+    """obj 를 jsonable 로 바꿔 들여쓰기 2 의 UTF-8 JSON 으로 씁니다(임시 파일 뒤 이름 바꾸기).
+
+    max_array: jsonable 과 같음. 목록 자체가 내용인 파일(동굴 입구 등)은 None 으로 줄이지 않습니다.
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(jsonable(obj), ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    data = jsonable(obj, max_array)
+    text = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     _write_text_atomic(p, text)
 
 

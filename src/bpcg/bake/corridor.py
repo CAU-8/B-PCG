@@ -20,6 +20,8 @@
 | caves.glb | 동굴 벽 메시 (bake.mesh). 회랑에 동굴이 없으면 쓰지 않고 manifest 에 적음 |
 | strata.u8/.json | 재질 부피 (수평 4 m, 수직 2 m, uint8). 위는 strata_top 을 따라감 |
 | strata_top.bin/.json | 재질 부피의 윗면 (지표, 수평 4 m) — 명세에 더한 파일 |
+| entrances.json | 동굴 입구 캡슐 양 끝 (엔진 좌표, 입구로 옮겨 갈 때) — 명세에 더한 파일 |
+| cave_mouth.bin/.json | 지표 점의 동굴 거리 d_cave (높이맵 격자). 음수면 입구 구멍 |
 | manifest.json | 국소 좌표 원점, 엔진 변환, 회랑 사각형, 파일 목록, 시드, 설정 해시, git 커밋 |
 
 모든 높이맵은 bake.heightmap.write_heightmap 형식입니다. 값은 해수면 기준 고도 [m] 그대로이고
@@ -50,6 +52,7 @@ STRATA_AIR = MATERIAL_EMPTY  # 재질 부피의 공기 (255)
 MAX_CANDIDATES = 256  # 회랑 시작점 후보 수 상한
 STRATA_CHUNK_POINTS = 4_000_000  # 재질 부피를 이만큼씩 나눠 계산 (메모리 상한)
 WATER_SURFACE_TOL_M = 0.01  # 수면이 지표보다 이만큼 이상 낮으면 물 없음으로 봄
+CAVE_MOUTH_CLIP_M = 20.0  # cave_mouth 값(지표 점의 d_cave)을 ±이 값으로 자름 (inf 없애기)
 
 
 def _log(log, msg: str) -> None:
@@ -345,6 +348,15 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
     files["water_table"] = write_heightmap(out / "water_table", zgw, voxel, origin)
     sec["water"] = time.perf_counter() - t
 
+    # --- 동굴 입구 구멍: 지표 점에서의 동굴 거리. 음수면 지표가 동굴 빈 곳 안이라 엔진이 지형을
+    # 뚫습니다. SDF 라 쌍선형 보간해도 구멍 가장자리가 매끄럽습니다.
+    t = time.perf_counter()
+    d_mouth = vol.evaluate_grid(gx.ravel(), gy.ravel(), surf.reshape(-1, 1), keys=("d_cave",))
+    mouth = np.clip(d_mouth["d_cave"].reshape(gx.shape), -CAVE_MOUTH_CLIP_M, CAVE_MOUTH_CLIP_M)
+    files["cave_mouth"] = write_heightmap(out / "cave_mouth", mouth, voxel, origin)
+    files["cave_mouth"]["n_open"] = int((mouth < 0.0).sum())
+    sec["cave_mouth"] = time.perf_counter() - t
+
     # --- 히어로 전체 25 m 지표
     g = hero_state.graph
     ny, nx = g.shape
@@ -392,8 +404,9 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
     shp = st["strata"]["shape"]
     _log(log, f"[굽기] 재질 부피 {shp[2]}×{shp[0]}×{shp[1]} (열×행×층), {sec['strata']:.2f} s")
 
-    # --- 입구 위치 (엔진 좌표)
-    ent_xyz = []
+    # --- 입구 위치 (엔진 좌표). 캡슐 inside 끝은 통로 한가운데, outside 끝은 산비탈 밖 공중입니다.
+    ent_in: list = []
+    ent_out: list = []
     if vol.cap_a.shape[0]:
         mid = 0.5 * (vol.cap_a + vol.cap_b)
         ins = (
@@ -402,12 +415,26 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
             & (mid[:, 1] >= rect[2])
             & (mid[:, 1] <= rect[3])
         )
-        ent_xyz = frame.to_engine(vol.cap_b[ins]).round(3).tolist()
+        ent_in = frame.to_engine(vol.cap_a[ins]).round(3).tolist()
+        ent_out = frame.to_engine(vol.cap_b[ins]).round(3).tolist()
+    write_json(
+        out / "entrances.json",
+        {
+            "format": "bpcg-entrances",
+            "axes": "x_east_y_up_z_south",
+            "count": len(ent_in),
+            "inside": ent_in,
+            "outside": ent_out,
+            "rule": "inside = 통로 한가운데 끝, outside = 산비탈 밖 공중 끝 (같은 동굴 층 높이)",
+        },
+        max_array=None,
+    )
 
     file_names = [
         "heightmap.bin", "heightmap.json", "surround25.bin", "surround25.json",
         "water.bin", "water.json", "water_table.bin", "water_table.json",
-        "strata.u8", "strata.json", "strata_top.bin", "strata_top.json",
+        "strata.u8", "strata.json", "strata_top.bin", "strata_top.json", "entrances.json",
+        "cave_mouth.bin", "cave_mouth.json",
     ]  # fmt: skip
     if "caves" in files:
         file_names.append("caves.glb")
@@ -449,7 +476,8 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
             "note": caves_note,
             "n_capsules": int(vol.cap_a.shape[0]),
             "n_unopened_entrances": int(vol.n_unopened),
-            "entrances_engine_xyz": ent_xyz,
+            "n_entrances": len(ent_in),
+            "entrances_file": "entrances.json",
         },
         "seconds": sec,
     }

@@ -32,7 +32,7 @@ from bpcg.geology import rocks as rk
 from bpcg.pipeline import generate_hero
 from bpcg.volume.sample import HeroVolume
 
-HEIGHTMAP_STEMS = ("heightmap", "surround25", "water", "water_table", "strata_top")
+HEIGHTMAP_STEMS = ("heightmap", "surround25", "water", "water_table", "strata_top", "cave_mouth")
 
 
 # 회랑 굽기 검사는 선상지 꼭짓점·호수와 동굴·입구(동굴 메시)가 있어야 의미가 있으므로,
@@ -144,6 +144,16 @@ def test_hero_state_save_load(hero_cfg, tmp_path):
     assert np.allclose(h2.fields["z_m"], hero.fields["z_m"], rtol=1e-6)
     # 다시 읽은 히어로로도 3D 함수가 만들어짐
     HeroVolume(h2, cfg)
+
+
+def test_write_json_keeps_long_lists_when_asked(tmp_path):
+    from bpcg.bake.bundle import JSON_ARRAY_MAX, write_json
+
+    rows = [[float(i), 0.0, -float(i)] for i in range(JSON_ARRAY_MAX + 5)]
+    write_json(tmp_path / "short.json", {"rows": rows})
+    write_json(tmp_path / "full.json", {"rows": rows}, max_array=None)
+    assert json.loads((tmp_path / "short.json").read_text())["rows"] == {"__list__": len(rows)}
+    assert json.loads((tmp_path / "full.json").read_text())["rows"] == rows
 
 
 def test_jsonable_handles_numpy_and_nan():
@@ -264,6 +274,26 @@ def test_bake_corridor_writes_consistent_files(baked, hero_cfg):
     vol3 = raw.reshape(rows_n, layers_n, cols_n)
     assert (vol3[:, -1, :] < rk.N_ROCKS).mean() > 0.95  # 맨 아래 층은 거의 다 암석
     assert man["corridor"]["n_entrance_cells"] >= 0
+    # 입구 캡슐 양 끝 (엔진 좌표): 회랑 안이고, 같은 동굴 층 높이이며, 개수가 manifest 와 같음
+    ent = json.loads((out / "entrances.json").read_text())
+    assert ent["count"] == man["caves"]["n_entrances"] == len(ent["inside"]) == len(ent["outside"])
+    assert ent["count"] > 0
+    ins, outs = np.asarray(ent["inside"]), np.asarray(ent["outside"])
+    re = man["corridor"]["rect_engine_m"]
+    mid = 0.5 * (ins + outs)
+    assert np.all((mid[:, 0] >= re["x_min"] - 1e-3) & (mid[:, 0] <= re["x_max"] + 1e-3))
+    assert np.all((mid[:, 2] >= re["z_min"] - 1e-3) & (mid[:, 2] <= re["z_max"] + 1e-3))
+    np.testing.assert_allclose(ins[:, 1], outs[:, 1], atol=1e-6)
+    assert np.all(np.linalg.norm(outs - ins, axis=1) > 0)
+    # 동굴 입구 구멍: 지표 점의 d_cave. 입구가 있으면 음수(지표가 동굴 빈 곳 안)인 곳이 있고,
+    # 그 값은 3D 함수의 d_cave 와 같습니다.
+    mouth, mm = read_heightmap(out / "cave_mouth")
+    assert mouth.shape == z.shape and mm["origin"] == meta["origin"]
+    assert man["file_meta"]["cave_mouth"]["n_open"] == int((mouth < 0).sum()) > 0
+    assert np.all(np.abs(mouth) <= 20.0)
+    pick = np.flatnonzero((mouth < 0).ravel())[:50]
+    pts = np.stack([gx.ravel()[pick], gy.ravel()[pick], h.ravel()[pick]], axis=1)
+    np.testing.assert_allclose(mouth.ravel()[pick], vol.evaluate(pts)["d_cave"], atol=1e-3)
 
 
 def test_cave_mesh_faces_into_void(baked, hero_cfg):
