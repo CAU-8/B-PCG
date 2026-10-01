@@ -396,34 +396,36 @@ def test_layered_columns_surface_rock_consistency():
     assert np.all(res.slope[land] <= s_tab.max() + 1e-12)
 
 
-def test_geology_columns_drive_slopes():
+@pytest.mark.parametrize("n_exp", [1.0, 2.0])
+def test_geology_columns_drive_slopes(n_exp):
     """geology.build_columns 의 실제 템플릿(습곡충상대)으로 풉니다.
 
     지표 암석이 여러 층에 걸치고, 솔버의 S_crit·k_s 가 rock_at 이 고른 암석의 표 값과 같습니다
-    ('경사를 만든 암석 = 보이는 암석').
+    ('경사를 만든 암석 = 보이는 암석'). k_s = k_ref·(E/(U_ref·K 배율))^(1/n) 이 경사 지수 n 에
+    맞는지 보려고 n 을 1 과 2 로 고정해 둘 다 풉니다.
     """
     from bpcg.geology import rocks as rk
     from bpcg.geology.model import FOLD_THRUST, build_columns
 
+    cfg = CFG.with_overrides({"landscape.slope_exponent_n": n_exp})
     g, is_outlet = island(n=64, seed=8)
     n = g.n_cells
     template = np.full(n, FOLD_THRUST, dtype=np.uint8)
     exhumation = np.full(n, 1500.0)  # 기둥 꼭대기 1500 m: 셰일 300, 석회암 800, 셰일 400 ...
-    sb, sr = build_columns(template, exhumation, None, CFG)
+    sb, sr = build_columns(template, exhumation, None, cfg)
     layers = LayerColumns.from_columns(sb, sr)
     U = np.where(is_outlet, 0.0, 1.5e-3)
     R = np.full(n, 0.8)
-    res = solve_steady_state(g, is_outlet, 0.0, U, R, layers, CFG)
+    res = solve_steady_state(g, is_outlet, 0.0, U, R, layers, cfg)
     assert res.converged
     land = ~is_outlet
     rid = layers.rock_at(res.z)
     assert set(np.unique(rid[land])) >= {rk.SHALE, rk.LIMESTONE}
     np.testing.assert_array_equal(res.s_crit_surface, rk.S_CRIT[rid])
-    E = U + CFG.landscape.deposition_g * CFG.climate.runoff_ref_m_per_yr * (
-        res.sediment_flux / res.discharge
-    )
+    ls = cfg.landscape
+    E = U + ls.deposition_g * cfg.climate.runoff_ref_m_per_yr * (res.sediment_flux / res.discharge)
     pos = land & (E > 0)
-    ks = CFG.landscape.k_ref * (E[pos] / (CFG.landscape.u_ref_m_per_yr * rk.K_MULT[rid[pos]]))
+    ks = ls.k_ref * (E[pos] / (ls.u_ref_m_per_yr * rk.K_MULT[rid[pos]])) ** (1.0 / n_exp)
     np.testing.assert_allclose(res.k_s[pos], ks, rtol=1e-12)
     zh = fill_depressions(res.z, g.nbr, is_outlet)
     np.testing.assert_array_equal(zh[land], res.z[land])

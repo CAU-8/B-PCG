@@ -35,9 +35,19 @@ from bpcg.volume.sample import HeroVolume
 HEIGHTMAP_STEMS = ("heightmap", "surround25", "water", "water_table", "strata_top")
 
 
+# 회랑 굽기 검사는 선상지 꼭짓점·호수와 동굴·입구(동굴 메시)가 있어야 의미가 있으므로,
+# 둘이 반드시 생기는 조건으로 고정합니다.
+# 평면 히어로의 호수는 선상지 원뿔이 강을 막아서만 생기는데,
+# 기본 경사 지수 n = 2 에서는 산지 앞 경사 차이(∝ 융기 차이^(1/n))가 fans.slope_drop_ratio 4 에
+# 못 미쳐 선상지가 없으므로 n = 1 로 둡니다. tiny 영역(6.4 km, 41 km²)은 기본 강 문턱 0.3 m³/s
+# (상류 약 19 km²)보다 작아 강이 출구 옆뿐이고, 그러면 지하수면이 거의 모든 칸에서 지표로 잘려
+# 덮인 동굴이 드물어지므로 강 문턱을 0.02 m³/s 로 낮춥니다.
+HERO_OVERRIDES = {"landscape.slope_exponent_n": 1.0, "rivers.min_discharge_m3_per_s": 0.02}
+
+
 @pytest.fixture(scope="module")
 def hero_cfg():
-    cfg = load_config("earth", "tiny")
+    cfg = load_config("earth", "tiny", overrides=HERO_OVERRIDES)
     return generate_hero(cfg, log=None), cfg
 
 
@@ -261,8 +271,8 @@ def test_cave_mesh_faces_into_void(baked, hero_cfg):
 
     man, out, _ = baked
     hero, cfg = hero_cfg
-    if "caves.glb" not in man["files"]:
-        pytest.skip("이 시드의 회랑에는 동굴이 없습니다")
+    # HERO_OVERRIDES 로 회랑에 동굴이 생기는 조건을 고정했으므로 건너뛰지 않습니다.
+    assert "caves.glb" in man["files"], "회랑에 동굴이 없습니다 (HERO_OVERRIDES 설명)"
     scene = trimesh.load(out / "caves.glb")
     mesh = next(iter(scene.geometry.values()))
     assert len(mesh.faces) == man["file_meta"]["caves"]["faces"]
@@ -276,8 +286,7 @@ def test_cave_surface_orientation_fine_voxels(hero_cfg):
     # 고운 복셀(2 m)로 입구 둘레를 굽고, 법선이 d_cave 가 줄어드는 쪽(빈 곳)을 보는지 확인
     hero, cfg = hero_cfg
     vol = HeroVolume(hero, cfg)
-    if vol.cap_a.shape[0] == 0:
-        pytest.skip("동굴 입구가 없습니다")
+    assert vol.cap_a.shape[0] > 0, "동굴 입구가 없습니다 (HERO_OVERRIDES 설명)"
     c = 0.5 * (vol.cap_a[0] + vol.cap_b[0])
     rect = (c[0] - 60.0, c[0] + 60.0, c[1] - 60.0, c[1] + 60.0)
     verts, faces, diag = cave_surface(vol, rect, 2.0)

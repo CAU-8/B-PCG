@@ -15,10 +15,19 @@ from bpcg.volume.sample import (
 )
 from bpcg.volume.slices import vertical_slice
 
+# 이 파일의 검사는 호수(물 규칙)와 동굴·입구가 있어야 의미가 있으므로, 둘이 반드시 생기는
+# 조건으로 고정합니다.
+# 평면 히어로의 호수는 선상지 원뿔이 강을 막아서만 생기는데,
+# 기본 경사 지수 n = 2 에서는 산지 앞 경사 차이(∝ 융기 차이^(1/n))가 fans.slope_drop_ratio 4 에
+# 못 미쳐 선상지가 없으므로 n = 1 로 둡니다. tiny 영역(6.4 km, 41 km²)은 기본 강 문턱 0.3 m³/s
+# (상류 약 19 km²)보다 작아 강이 출구 옆뿐이고, 그러면 지하수면이 거의 모든 칸에서 지표로 잘려
+# 덮인 동굴이 드물어지므로 강 문턱을 0.02 m³/s 로 낮춥니다.
+HERO_OVERRIDES = {"landscape.slope_exponent_n": 1.0, "rivers.min_discharge_m3_per_s": 0.02}
+
 
 @pytest.fixture(scope="module")
 def hero_cfg():
-    cfg = load_config("earth", "tiny")
+    cfg = load_config("earth", "tiny", overrides=HERO_OVERRIDES)
     return generate_hero(cfg, log=None), cfg
 
 
@@ -224,11 +233,17 @@ def test_surface_height_is_root_of_sdf(vol, hero_cfg):
     x0, x1, y0, y1 = vol.extent
     x = rng.uniform(x0, x1, 3000)
     y = rng.uniform(y0, y1, 3000)
-    # 강 위 점도 섞음
-    if vol.river_pts.shape[0]:
-        k = rng.integers(0, vol.river_pts.shape[0], 500)
-        x = np.concatenate([x, vol.river_pts[k, 0]])
-        y = np.concatenate([y, vol.river_pts[k, 1]])
+    # 강 위 점과 둑 바로 밖(강 점에서 4 m 안) 점도 섞음. 작은 강은 D < W/2 라 smax 가 지표를 바꾸는
+    # 띠가 ℓ < W/2 + k 보다 넓습니다(ℓ < W/2·(1 + k/D) 까지).
+    assert vol.river_pts.shape[0] > 0
+    k = rng.integers(0, vol.river_pts.shape[0], 500)
+    x = np.concatenate([x, vol.river_pts[k, 0]])
+    y = np.concatenate([y, vol.river_pts[k, 1]])
+    k = rng.integers(0, vol.river_pts.shape[0], 1000)
+    r = rng.uniform(0.0, 4.0, k.size)
+    th = rng.uniform(0.0, 2.0 * np.pi, k.size)
+    x = np.concatenate([x, vol.river_pts[k, 0] + r * np.cos(th)])
+    y = np.concatenate([y, vol.river_pts[k, 1] + r * np.sin(th)])
     h = vol.surface_height(x, y)
     d1 = lambda dz: vol.evaluate(np.stack([x, y, h + dz], axis=1))["d1"]  # noqa: E731
     assert np.abs(d1(0.0)).max() < 1e-3

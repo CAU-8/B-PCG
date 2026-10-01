@@ -26,6 +26,7 @@ from bpcg.hero.domain import (
     tangent_frame,
 )
 from bpcg.hero.finder import (
+    SCORE_WEIGHTS,
     HeroSite,
     carbonate_fraction,
     dry_fraction,
@@ -52,8 +53,10 @@ from bpcg.planet.climate import budyko_runoff
 
 R_EARTH = 6_371_000.0
 
-# 2~4단계가 늘 만드는 필드 (pipeline.run_stages_2_to_4, 평면이라 relief_m·z_mean_m 없음)
+# 2~4단계가 늘 만드는 필드 (pipeline.run_stages_2_to_4, 평면이라 relief_m·z_mean_m 없음).
+# uplift_m_per_yr 는 솔버가 실제로 쓴 융기(SolverResult.uplift_effective)를 그대로 돌려줍니다.
 STAGE_FIELDS = {
+    "uplift_m_per_yr",
     "z_m",
     "receiver",
     "drainage_area_m2",
@@ -106,6 +109,20 @@ def cfg():
 @pytest.fixture(scope="module")
 def flat_tiny(cfg):
     return flat_hero(cfg)
+
+
+@pytest.fixture(scope="module")
+def flat_tiny_rivers():
+    """강 문턱을 작은 영역에 맞춘 평면 히어로 (동굴 검사용).
+
+    tiny 영역(6.4 km, 41 km²)은 기본 강 문턱 0.3 m³/s(유출 0.5 m/yr 에서 상류 약 19 km²)보다 작아
+    강이 출구 옆 몇 칸뿐입니다. 기본값(n = 2)에서는 산지 앞 경사 차이가 fans.slope_drop_ratio 에
+    못 미쳐 선상지 호수도 없습니다. 그러면 물가가 멀어 띠 대수층 수위 H 가 기복을 넘고 지하수면이
+    모든 칸에서 지표로 잘려(z_gw = z) 덮인 동굴이 생기지 않습니다. 문턱을 0.02 m³/s(약 1.3 km²)로
+    낮추면 석회암이 드러난 산허리까지 강이 닿아 지하수면이 땅속으로 내려갑니다.
+    """
+    cfg = load_config("earth", "tiny", overrides={"rivers.min_discharge_m3_per_s": 0.02})
+    return cfg, flat_hero(cfg)
 
 
 @pytest.fixture(scope="module")
@@ -198,14 +215,20 @@ def test_flat_hero_invariants(cfg, flat_tiny):
     _check_hero_invariants(flat_tiny, cfg, cells)
 
 
-def test_flat_hero_has_river_and_caves(flat_tiny):
+def test_flat_hero_has_river_and_caves(flat_tiny, flat_tiny_rivers):
     f = flat_tiny.fields
     assert len(flat_tiny.rivers) >= 1
     assert np.asarray(f["is_river"]).sum() >= 1
-    # 깎인 두께를 지표 + U·T_e 로 두어 템플릿 1 의 여러 층이 드러나고 석회암 동굴이 생깁니다.
+    # 깎인 두께를 지표 + U·T_e 로 두어 템플릿 1 의 여러 층이 드러납니다.
     rocks = set(np.unique(f["surface_rock"]).tolist())
     assert rk.LIMESTONE in rocks and len(rocks) >= 3
-    assert np.isfinite(f["cave_level_0_m"]).sum() >= 1
+    # 그 석회암 산허리까지 강이 닿으면 석회암 동굴과 입구가 생깁니다 (flat_tiny_rivers 설명).
+    cfg_r, hero_r = flat_tiny_rivers
+    fr = hero_r.fields
+    assert rk.LIMESTONE in set(np.unique(fr["surface_rock"]).tolist())
+    assert np.isfinite(fr["cave_level_0_m"]).sum() >= 1
+    assert np.asarray(fr["cave_entrance"]).any()
+    _check_hero_invariants(hero_r, cfg_r, hero_r.diag["boundary"]["outlet_cells"])
 
 
 def test_flat_hero_solver_converged_and_deterministic(cfg, flat_tiny):
@@ -394,6 +417,12 @@ def test_find_hero_picks_highest_score(cfg):
     assert set(site.parts) == {"uplift_gradient", "carbonate", "relief", "dry_fraction"}
     assert all(0.0 <= v <= 1.0 for v in site.parts.values())
     assert site.parts["relief"] == 1.0 and site.parts["dry_fraction"] == 0.0
+    # pipeline.md 9장: 점수 = 0.3·융기 기울기 + 0.4·탄산염 + 0.15·기복 + 0.15·건조 칸 비율
+    weights = {"uplift_gradient": 0.3, "carbonate": 0.4, "relief": 0.15, "dry_fraction": 0.15}
+    assert SCORE_WEIGHTS == weights
+    assert site.score == pytest.approx(
+        sum(w * site.parts[k] for k, w in weights.items()), rel=1e-12
+    )
     assert site.lat_deg == pytest.approx(lat[hot], abs=1e-9)
     M = np.stack([site.east, site.north, site.center_unit])
     assert np.allclose(M @ M.T, np.eye(3), atol=1e-12)
@@ -437,3 +466,5 @@ def test_run_stages_validation(cfg):
     st = run_stages_2_to_4(*args, lat_deg=30.0)
     assert "relief_m" not in st.fields  # 기복 보정은 구면만
     assert set(st.fields) == STAGE_FIELDS
+    # 솔버는 융기를 바꾸지 않으므로 돌려준 융기는 넣은 값과 같습니다.
+    np.testing.assert_array_equal(st.fields["uplift_m_per_yr"], args[3])

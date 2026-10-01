@@ -23,9 +23,17 @@ from bpcg.landscape.relief import (
 from bpcg.landscape.solver import solve_steady_state
 
 CFG = load_config("earth", "tiny")
-# 산지 앞 경사 차이가 뚜렷하도록 퇴적 계수를 줄이고, 작은 시험 영역에서도 강이 여러 개 생기게
-# 선상지 최소 유량을 낮춥니다(기본값 1e6 m³/yr 는 L2 히어로 크기 기준).
-FAN_CFG = CFG.with_overrides({"landscape.deposition_g": 0.2, "fans.min_discharge_m3_per_yr": 2.0e5})
+# 산지 앞 경사 차이가 뚜렷하도록 경사 지수 n = 1 로 고정하고(강 경사 ∝ E^(1/n) 이라 n = 2 면
+# 융기 30배 차이가 경사 약 5.5배로 줄고, 유량·퇴적 항까지 더해 slope_drop_ratio 4 에 못 미침)
+# 퇴적 계수를 줄이며, 작은 시험 영역에서도 강이 여러 개 생기게 선상지 최소 유량을 낮춥니다
+# (기본값 1e6 m³/yr 는 L2 히어로 크기 기준).
+FAN_CFG = CFG.with_overrides(
+    {
+        "landscape.slope_exponent_n": 1.0,
+        "landscape.deposition_g": 0.2,
+        "fans.min_discharge_m3_per_yr": 2.0e5,
+    }
+)
 
 
 # ---------------------------------------------------------------- 선상지

@@ -39,9 +39,10 @@ trench_depth_m = 3_000.0              # 해구에서 더 깊어지는 양 (L0 �
 trench_width_m = 40_000.0
 
 [uplift]
-orogen_factor = 0.04                  # 섭입 산맥 융기 = 계수 × 수렴 속도 (5 cm/yr → 2 mm/yr)
-collision_factor = 0.06               # 대륙-대륙 충돌 융기 계수
-orogen_width_m = 150_000.0            # 산맥 융기 띠의 폭 (가우스 σ)
+orogen_factor = 0.03                  # 섭입 산맥 융기 = 계수 × 수렴 속도 (5 cm/yr → 1.5 mm/yr)
+collision_factor = 0.04               # 대륙-대륙 충돌 융기 계수
+orogen_width_m = 80_000.0             # 산맥 융기 띠의 폭 (가우스 σ). 150 km 는 띠가 너무 넓어 L0 가 10 km 를 넘음
+collision_width_m = 100_000.0         # 충돌 융기 띠의 폭 (가우스 σ)
 slab_shallow_dip_deg = 15.0           # 섭입판 얕은 구간 경사 (설계도 5장 16번: 10~20°)
 slab_shallow_depth_m = 40_000.0       # 얕은 구간이 끝나는 깊이 (30~50 km)
 slab_deep_dip_deg = 50.0              # 깊은 구간 경사
@@ -74,7 +75,7 @@ runoff_ref_m_per_yr = 0.3             # 기준 유출 (k_s 단위와 G-법칙의
 # ---------------------------------------------------------------- 사슬 2: 솔버
 [landscape]
 theta = 0.45                          # 강이 하류로 갈수록 완만해지는 정도 (생성기에서는 고정)
-slope_exponent_n = 1.0                # 1.5~2 도 시험 (설계도 5장 6번)
+slope_exponent_n = 2.0                # 깎임 ∝ 가파름^n. n > 1 이 흔함 (설계도 5장 6번). n = 1 은 L0 가 수십 km
 k_ref = 150.0                         # U_ref, 기준 암석에서의 강 가파름 k_s (Q 단위 m³/yr)
 u_ref_m_per_yr = 1.0e-3               # 1 mm/yr
 hillslope_diffusivity_m2_per_yr = 0.005
@@ -84,7 +85,7 @@ s_crit_default = 0.6                  # 암석 정보가 없을 때의 임계 �
 s_min = 1.0e-5                        # 가장 완만한 경사 (평탄한 퇴적 분지에서도 물이 흐르게)
 fill_epsilon_m = 1.0e-3               # 라우팅용 채움 기울기
 hysteresis_eta = 0.02                 # 확실히 더 가파를 때만 방향을 바꿈
-jitter = 0.4                          # 노드 흔들기 세기 (칸 크기 대비)
+jitter = 1.0                          # 노드 흔들기 세기 (칸 크기 대비). 0.4 는 격자 정렬 지수 1.70, 1.0 은 1.12~1.2
 max_flow_iterations = 200             # 물길 방향 맞추기 반복 상한 (설정값)
 stop_dz_m = 0.1                       # 멈춤: 방향 변화 0 그리고 고도 변화 < 0.1 m
 

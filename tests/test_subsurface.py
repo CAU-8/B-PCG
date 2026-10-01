@@ -188,8 +188,11 @@ def test_dam_lake_is_flat_and_rivers_monotone(island):
         r = rcv[c]
         dam = np.asarray(tree.query_ball_point(g.pos[r], 1.5 * g.spacing), dtype=np.int64)
         dam = dam[(dam != c) & ~ocean[dam]]
+        # 둑 높이는 강을 칸 5개 거슬러 오를 만큼(강 경사 × 5칸, 최소 20 m)입니다. 강 경사는 경사
+        # 지수 n 에 따라 달라서(n = 2 면 이 섬의 강 경사 약 0.1) 20 m 고정이면 호수가 1~2칸뿐입니다.
+        dam_h = max(20.0, 5.0 * res.slope[c] * g.spacing)
         z = z0.copy()
-        z[dam] = np.maximum(z[dam], z0[c] + 20.0)
+        z[dam] = np.maximum(z[dam], z0[c] + dam_h)
         rr = reroute(g, z, ocean, R, CFG)
         wb = water_bodies(g, z, rr, ocean, CFG)
         if wb["is_lake"].sum() >= 3:
@@ -498,11 +501,15 @@ def test_soil_invariants_on_island(island):
     P = np.full(n, 0.8)
     fan = np.zeros(n)
     fan[np.flatnonzero(~ocean)[:5]] = 1.5
+    # 경사는 지표 암석의 S_crit(사암 0.75, 석회암 0.8) 를 넘지 않으므로 기본 bare_slope 0.8 로는
+    # '가파르면 맨 암반' 규칙이 이 섬에서 한 칸도 걸리지 않습니다. 규칙을 실제로 보려고 0.6 으로
+    # 둡니다.
+    cfg = CFG.with_overrides({"soil.bare_slope": 0.6})
     out = soil_and_alluvium(
-        z, res.slope, island["U"], T, P, res, fan, island["srock"], CFG, is_ocean=ocean
+        z, res.slope, island["U"], T, P, res, fan, island["srock"], cfg, is_ocean=ocean
     )
     h, a, bare = out["soil_thickness_m"], out["alluvium_m"], out["bare_rock"]
-    s = CFG.soil
+    s = cfg.soil
     assert np.all(h[res.slope > s.bare_slope] == 0.0)
     assert np.all((h >= 0.0) & (h <= s.thickness_cap_m))
     assert h[~ocean].max() > 0.5 and (res.slope[~ocean] > s.bare_slope).any()

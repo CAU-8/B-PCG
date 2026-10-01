@@ -1,6 +1,7 @@
 """히어로 후보 찾기: L0 육지 칸에 점수를 매겨 가장 높은 칸을 고릅니다 (docs/pipeline.md 9장).
 
-점수 = 0.35·융기 기울기 + 0.25·지표 탄산염 + 0.2·기복 + 0.2·200 km 안 건조 칸 비율.
+점수 = 0.3·융기 기울기 + 0.4·지표 탄산염 + 0.15·기복 + 0.15·200 km 안 건조 칸 비율.
+동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다(pipeline.md 9장에서 바꿈).
 항목은 모두 [0, 1] 입니다(설계도 8장 '히어로 유역은 도구로 고른다').
 
 - 융기 기울기 |∇U| [1/yr]: 이웃 방향 미분 g_s = (U_n − U_c)/d 로 |∇U| ≈ sqrt(2·평균 g_s²)
@@ -30,10 +31,10 @@ from bpcg.hero.domain import hero_grid_size, tangent_frame
 from bpcg.planet.climate import latitude_rad
 
 SCORE_WEIGHTS = {  # pipeline.md 9장 점수 가중치
-    "uplift_gradient": 0.35,
-    "carbonate": 0.25,
-    "relief": 0.2,
-    "dry_fraction": 0.2,
+    "uplift_gradient": 0.3,
+    "carbonate": 0.4,
+    "relief": 0.15,
+    "dry_fraction": 0.15,
 }
 MAX_LAT_DEG = 55.0  # 위도 55° 넘으면 0점 (pipeline.md 9장)
 DRY_RADIUS_M = 200_000.0  # 건조 칸 비율을 세는 반경 (pipeline.md 9장)
