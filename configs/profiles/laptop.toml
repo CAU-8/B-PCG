@@ -1,16 +1,17 @@
 # 노트북(16 GB) 프로필: 꼭 할 일은 모두 이 프로필로 돌아가야 합니다 (11/11 데모 기기 점검).
 
 [grid]
-coarse_n_per_face = 256        # 거친 격자 약 39 km (128 이면 약 78 km)
+coarse_n_per_face = 128        # 거친 격자 약 78 km (판·기후)
 l0_n_per_face = 512            # L0 약 19.5 km, 157만 칸
 
 [hero]
 spacing_m = 25.0               # L2 히어로 유역
-basin_size_km = [30, 40]
+size_m = 32_000.0              # 한 변 (30~40 km)
 
 [corridor]
-voxel_m = 1.0                  # L3 회랑
-size_km = [1.0, 8.0]           # 폭 1 km × 길이 6~8 km
+voxel_m = 2.0                  # L3 회랑 복셀 (1.0 은 연구실 PC)
+width_m = 1_000.0
+length_m = 6_000.0
 
 [compute]
 numba_threads = 0              # 0 = 모든 코어

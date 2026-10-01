@@ -1,0 +1,17 @@
+# 테스트·CI 프로필: 몇 초 안에 파이프라인 전체를 한 번 돕니다. 결과의 모양은 보지 않습니다.
+
+[grid]
+coarse_n_per_face = 16
+l0_n_per_face = 32
+
+[hero]
+spacing_m = 100.0
+size_m = 6_400.0
+
+[corridor]
+voxel_m = 8.0
+width_m = 400.0
+length_m = 1_200.0
+
+[compute]
+numba_threads = 0

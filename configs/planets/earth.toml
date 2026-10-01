@@ -1,16 +1,136 @@
-# 지구 크기 행성 기본값 (설계도 1·3장). 단위: m, kg, s, yr.
+# 지구 크기 행성 기본값 (설계도 1~5장, docs/pipeline.md). 단위: m, kg, s, yr, °C.
 # 중력은 여기 적지 않고 반지름과 밀도에서 계산합니다 (g = 4/3·π·G·ρ·R ≈ 9.82 m/s²).
+# 이 파일의 값은 실제 지형 자료로 맞추기(설계도 6장) 전의 문헌 기본값입니다.
+# 맞춘 값이 생기면 configs/learned/ 의 값이 같은 키를 덮어씁니다.
 
 [planet]
 name = "earth"
 radius_m = 6_371_000.0
 mean_density_kg_m3 = 5514.0
-rotation_period_s = 86_164.1   # 항성일
-seed = 0                       # 히어로 유역과 함께 6주차에 고정합니다
+rotation_period_s = 86_164.1          # 항성일
+axis = [0.0, 0.0, 1.0]                # 자전축 (위도 계산용)
+seed = 0                              # 히어로 유역과 함께 6주차에 고정합니다
 
+# ---------------------------------------------------------------- 사슬 1: 판·지각·해양저
+[plates]
+count = 12                            # 판 개수
+continental_area_fraction = 0.40      # 대륙 지각 면적 비율 목표 (지구 약 40%, 원문 확인 필요)
+warp_amplitude = 0.12                 # 판 경계를 구불구불하게 하는 노이즈 세기 (단위 구 위 길이)
+warp_frequency = 2.5                  # 그 노이즈의 기본 주파수 (단위 구 기준)
+speed_m_per_yr = [0.02, 0.08]         # 판 속도 범위 2~8 cm/yr
+boundary_kappa = 0.3                  # 수렴·발산과 변환을 가르는 비율 (가이드 5장 κ)
+
+[crust]
+continental_thickness_m = 35_000.0
+oceanic_thickness_m = 7_000.0
+collision_thickening_m = 25_000.0     # 대륙-대륙 충돌대에서 더하는 두께의 최댓값
+thickening_width_m = 300_000.0        # 그 두께가 퍼지는 폭 (가우스 σ)
+margin_width_m = 150_000.0            # 대륙-해양 전이(대륙붕·대륙사면) 폭
+continental_platform_m = 250.0        # 두께 35 km 대륙 지각이 뜨는 높이 (해수면 기준 근사)
+rho_crust = 2_800.0
+rho_mantle = 3_300.0
+rho_water = 1_030.0
+
+[ocean]
+water_volume_m3 = 1.335e18            # 지구 바다 물 부피 (해수면을 이 부피 보존으로 정함)
+ridge_depth_m = 2_500.0               # Parsons & Sclater 1977 해령 꼭대기 깊이
+age_cap_myr = 200.0                   # 안전장치. 나이는 흐름선 거리로 잘리게 함 (설계도 5장 17번)
+trench_depth_m = 3_000.0              # 해구에서 더 깊어지는 양 (L0 에서 좁은 단면으로 계산)
+trench_width_m = 40_000.0
+
+[uplift]
+orogen_factor = 0.04                  # 섭입 산맥 융기 = 계수 × 수렴 속도 (5 cm/yr → 2 mm/yr)
+collision_factor = 0.06               # 대륙-대륙 충돌 융기 계수
+orogen_width_m = 150_000.0            # 산맥 융기 띠의 폭 (가우스 σ)
+slab_shallow_dip_deg = 15.0           # 섭입판 얕은 구간 경사 (설계도 5장 16번: 10~20°)
+slab_shallow_depth_m = 40_000.0       # 얕은 구간이 끝나는 깊이 (30~50 km)
+slab_deep_dip_deg = 50.0              # 깊은 구간 경사
+arc_slab_depth_m = 100_000.0          # 화산호 아래 섭입판 깊이
+craton_erosion_m_per_myr = 5.0        # 크라톤 기본 깎임 (2~10 m/Myr)
+rift_subsidence_m_per_yr = -1.0e-4    # 대륙 열곡 축의 침강
+orogen_duration_myr = 30.0            # 깎인 두께 = 융기 × 기간
+exhumation_cap_m = 30_000.0           # 누적 융기 상한 (25~35 km, 설계도 5장 8번)
+
+# ---------------------------------------------------------------- 가벼운 기후
+[climate]
+p_base_m_per_yr = 0.25                # 위도 띠 강수 (가이드 5장): P = P0[p0 + p1·e^… + p2·e^…]·e^(η ξ)
+p_equator = 1.8
+p_equator_sigma_deg = 12.0
+p_midlat = 0.9
+p_midlat_center_deg = 50.0
+p_midlat_sigma_deg = 12.0
+p_noise = 0.35                        # 강수 노이즈 세기 η_P
+t_equator_c = 27.0
+t_pole_c = -25.0
+lapse_rate_c_per_m = 0.0065
+pet_per_degc_m_per_yr = 0.055         # 잠재 증발산 = a·max(T, 0) + b
+pet_base_m_per_yr = 0.1
+runoff_floor_fraction = 0.1           # 침식에 쓰는 유출의 바닥값 (설계도 5장 1번)
+runoff_floor_m_per_yr = 0.01
+runoff_ref_m_per_yr = 0.3             # 기준 유출 (k_s 단위와 G-법칙의 기준)
+
+# ---------------------------------------------------------------- 사슬 2: 솔버
 [landscape]
-theta = 0.45                   # 강이 하류로 갈수록 완만해지는 정도 (생성기에서는 고정)
-s_crit_default = 0.6           # 산비탈이 버티는 가장 가파른 경사 [m/m], 암석별 값은 geology 가 정함
-slope_exponent_n = 1.0         # 1.5~2 도 시험 (설계도 5장 6번)
-max_flow_iterations = 200      # 물길 방향 맞추기 반복 상한 (설정값)
-stop_dz_m = 0.1                # 멈춤: 방향 변화 0 그리고 고도 변화 < 0.1 m
+theta = 0.45                          # 강이 하류로 갈수록 완만해지는 정도 (생성기에서는 고정)
+slope_exponent_n = 1.0                # 1.5~2 도 시험 (설계도 5장 6번)
+k_ref = 150.0                         # U_ref, 기준 암석에서의 강 가파름 k_s (Q 단위 m³/yr)
+u_ref_m_per_yr = 1.0e-3               # 1 mm/yr
+hillslope_diffusivity_m2_per_yr = 0.005
+deposition_g = 1.0                    # G-법칙 계수 (Yuan 2019)
+s_crit_default = 0.6                  # 암석 정보가 없을 때의 임계 경사 [m/m]
+s_min = 1.0e-5                        # 가장 완만한 경사 (평탄한 퇴적 분지에서도 물이 흐르게)
+fill_epsilon_m = 1.0e-3               # 라우팅용 채움 기울기
+hysteresis_eta = 0.02                 # 확실히 더 가파를 때만 방향을 바꿈
+jitter = 0.4                          # 노드 흔들기 세기 (칸 크기 대비)
+max_flow_iterations = 200             # 물길 방향 맞추기 반복 상한 (설정값)
+stop_dz_m = 0.1                       # 멈춤: 방향 변화 0 그리고 고도 변화 < 0.1 m
+
+[relief]
+hack_coefficient_km = 2.02            # L = 2.02·A^0.49 (km, km²; Montgomery & Dietrich 1992)
+hack_exponent = 0.49
+mean_fraction = 0.5                   # 평균 지표 = 골짜기 바닥 + 이 비율 × 기복
+
+[fans]
+enabled = true
+slope_drop_ratio = 4.0                # 하류로 가며 경사가 이만큼 줄면 산지 앞으로 봄
+min_discharge_m3_per_yr = 1.0e6
+max_discharge_m3_per_yr = 1.0e9
+radius_m = 3_000.0
+slope = 0.03
+
+# ---------------------------------------------------------------- 사슬 2: 지질
+[geology]
+geotherm_c_per_m = 0.030              # 30 °C/km
+surface_temperature_c = 10.0
+fold_wavelength_m = 15_000.0          # 습곡 파장 (자그로스 10~20 km)
+fold_amplitude_m = 1_500.0
+fold_belt_width_m = 400_000.0         # 수렴 경계에서 이 거리 안이 습곡충상대 후보
+arc_belt_width_m = 250_000.0
+
+# ---------------------------------------------------------------- 사슬 3: 흙·지하수·동굴
+[soil]
+production_max_m_per_yr = 3.0e-4      # 흙 생산 최댓값 (Heimsath). 따뜻하고 습하면 늘어남
+production_max_cap_m_per_yr = 2.5e-3  # 남알프스 관측 (Larsen 2014, 설계도 5장 14번)
+decay_depth_m = 0.5
+thickness_cap_m = 3.0
+bare_slope = 0.8                      # 이보다 가파르면 맨 암반
+alluvium_max_m = 30.0
+
+[groundwater]
+recharge_fraction = 0.5               # 유출 중 지하수로 들어가는 몫
+fan_alpha_m = 120.0                   # 대수층 e-folding 깊이 f = α / (1 + β·S) (Fan 2013, 원문 확인 필요)
+fan_beta = 150.0
+max_depth_m = 300.0
+
+[caves]
+incision_fraction = 0.35              # 하각 비율 f_k (우리 가정, 설계도 5장)
+levels = 2
+valley_window_m = 1_500.0             # 골짜기 가장자리 높이를 찾는 반경
+entrance_tolerance_m = 3.0
+passage_radius_m = 3.0
+noise_wavelength_m = 60.0
+
+[rivers]
+min_discharge_m3_per_s = 0.3          # 이보다 많이 흐르면 강
+width_coefficient = 4.0               # W = k_W · Q^0.5 (Q 단위 m³/s, Leopold–Maddock)
+depth_coefficient = 0.35              # D = k_D · Q^0.4
