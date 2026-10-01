@@ -54,14 +54,17 @@ func is_valid() -> bool:
 ## 그리기용 메시를 만듭니다. 꼭짓점은 origin 을 뺀 타일 국소 좌표이므로
 ## MeshInstance3D 를 origin 에 놓아야 합니다.
 ## [br]법선은 중심 차분으로 직접 계산합니다 (SurfaceTool.generate_normals 보다 훨씬 빠름).
-func build_mesh() -> ArrayMesh:
+## [br]skirt_m > 0 이면 가장자리를 따라 그만큼 아래로 내려가는 벽(양면)을 덧붙입니다.
+## 옆 타일과 높이가 조금 달라 생기는 틈을 가립니다. 꼭짓점은 width * height 개 뒤에 붙습니다.
+func build_mesh(skirt_m: float = 0.0) -> ArrayMesh:
 	var count := width * height
+	var ring := _perimeter() if skirt_m > 0.0 else PackedInt32Array()
 	var vertices := PackedVector3Array()
-	vertices.resize(count)
+	vertices.resize(count + ring.size())
 	var normals := PackedVector3Array()
-	normals.resize(count)
+	normals.resize(count + ring.size())
 	var uvs := PackedVector2Array()
-	uvs.resize(count)
+	uvs.resize(count + ring.size())
 
 	for row in height:
 		var row_n := maxi(row - 1, 0)
@@ -81,7 +84,7 @@ func build_mesh() -> ArrayMesh:
 
 	# Godot 는 시계 방향(위에서 볼 때)을 앞면으로 봅니다.
 	var indices := PackedInt32Array()
-	indices.resize((width - 1) * (height - 1) * 6)
+	indices.resize((width - 1) * (height - 1) * 6 + ring.size() * 12)
 	var k := 0
 	for row in height - 1:
 		for col in width - 1:
@@ -97,6 +100,25 @@ func build_mesh() -> ArrayMesh:
 			indices[k + 5] = sw
 			k += 6
 
+	# 치마(skirt): 둘레 표본마다 skirt_m 아래 꼭짓점을 하나 두고, 이웃 둘레 표본과 사각형을 만듭니다.
+	# 양쪽에서 보이도록 두 감김 방향을 모두 넣습니다.
+	for j in ring.size():
+		var top := ring[j]
+		var v := count + j
+		vertices[v] = vertices[top] - Vector3(0.0, skirt_m, 0.0)
+		normals[v] = normals[top]
+		uvs[v] = uvs[top]
+	for j in ring.size():
+		var a := ring[j]
+		var b := ring[(j + 1) % ring.size()]
+		var a_low := count + j
+		var b_low := count + (j + 1) % ring.size()
+		for tri in [[a, b, a_low], [b, b_low, a_low], [a, a_low, b], [b, a_low, b_low]]:
+			indices[k] = tri[0]
+			indices[k + 1] = tri[1]
+			indices[k + 2] = tri[2]
+			k += 3
+
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
@@ -109,11 +131,26 @@ func build_mesh() -> ArrayMesh:
 
 
 ## 충돌 모양을 만듭니다. 놓을 자리는 shape_transform() 으로 얻습니다.
-func build_shape() -> HeightMapShape3D:
+## [br]hole 의 넓이가 0 보다 크면 그 사각형(국소 X, Z) 안 표본을 최저 높이보다 hole_drop_m 아래로
+## 내립니다. 더 고운 지형이 그 자리를 맡을 때 두 충돌면이 겹치지 않게 합니다.
+func build_shape(hole := Rect2(), hole_drop_m: float = 50.0) -> HeightMapShape3D:
 	var shape := HeightMapShape3D.new()
 	shape.map_width = width
 	shape.map_depth = height
-	shape.map_data = heights
+	if hole.has_area():
+		var data := heights.duplicate()
+		var low := min_height_m - hole_drop_m
+		# 사각형 안쪽(경계 제외)에 드는 행·열 범위
+		var col_lo := maxi(floori((hole.position.x - origin.x) / spacing_m) + 1, 0)
+		var col_hi := mini(ceili((hole.end.x - origin.x) / spacing_m) - 1, width - 1)
+		var row_lo := maxi(floori((hole.position.y - origin.z) / spacing_m) + 1, 0)
+		var row_hi := mini(ceili((hole.end.y - origin.z) / spacing_m) - 1, height - 1)
+		for row in range(row_lo, row_hi + 1):
+			for col in range(col_lo, col_hi + 1):
+				data[row * width + col] = low
+		shape.map_data = data
+	else:
+		shape.map_data = heights
 	return shape
 
 
@@ -149,6 +186,20 @@ func height_at(local_pos: Vector3) -> float:
 	var north := lerpf(heights[i], heights[i + 1], tx)
 	var south := lerpf(heights[i + width], heights[i + width + 1], tx)
 	return origin.y + lerpf(north, south, tz)
+
+
+## 둘레 표본 번호 (시계 방향, 겹침 없음): 북쪽 행 → 동쪽 열 → 남쪽 행 → 서쪽 열.
+func _perimeter() -> PackedInt32Array:
+	var ring := PackedInt32Array()
+	for col in width:
+		ring.append(col)
+	for row in range(1, height):
+		ring.append(row * width + width - 1)
+	for col in range(width - 2, -1, -1):
+		ring.append((height - 1) * width + col)
+	for row in range(height - 2, 0, -1):
+		ring.append(row * width)
+	return ring
 
 
 func _read(path_stem: String) -> void:
