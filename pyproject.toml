@@ -10,6 +10,9 @@ dependencies = [
     "numba>=0.68",
 ]
 
+[project.scripts]
+bpcg = "bpcg.cli:main"
+
 # 패키지 묶음. 설치: uv sync (기본 = dev, data, mesh) / uv sync --group analysis / uv sync --all-groups
 [dependency-groups]
 dev = [
