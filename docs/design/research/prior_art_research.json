@@ -1,0 +1,2692 @@
+[
+ {
+  "key": "academic-terrain",
+  "result": {
+   "findings": [
+    {
+     "name": "Tzathas, Gailleton, Steer, Cordonnier — Physically-based analytical erosion for fast terrain generation (CGF / Eurographics 2024)",
+     "kind": "paper",
+     "year": "2024",
+     "url": "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf",
+     "what_it_does": "stream power law(n=1)의 특성곡선 해석해로 시간 적분 없이 시각 t의 지형을 바로 계산함. t가 충분히 크면 식 (9) z(x)=z0(0)+∫u(s)/(k A(s)^m) ds, 즉 하구에서 상류로 적분한 정상상태 지형이 됨. 하천망(최급경사 경로)과 고도가 서로에게 의존하므로 '흐름 계산 → 해석해 적분'을 반복하는 고정점 반복을 쓰고(Steer 2021 계승), 진동하면 이전 반복과 지수이동평균으로 감쇠함. 멀티그리드로 수렴을 가속하고 업샘플링 때 노드 위치를 [-0.25,0.25]² 범위에서 지터함. 능선 근처 특이점은 hillslope 항(Hack 법칙)과 thermal 임계경사 sc(≈30°)로 처리함. 공간적으로 변하는 uplift를 지원하고, depression breaching으로 모든 물이 경계로 빠지게 함.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "5"
+     ],
+     "overlap_level": "near-duplicate",
+     "key_difference_vs_bpcg": "평면 정규 격자만 다루고 구면/큐브스피어는 없음. 흐름은 단일 최급경사 경로이고 MFD 정상상태 적분은 없음. 파라미터는 문헌값(m=0.4, n=1)을 쓰며 DEM에서 학습하지 않음. 판 구조 입력과 3D 볼륨도 없음. 4장 D8 솔버(하구부터 z=z_r+d·k_s Q^-θ 적분, 수신 셀 고정점 반복, 감쇠, 지터, S_crit 상한)는 이 논문의 정상상태 경우와 사실상 같음.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (depression breaching, 모든 셀이 경계로 배수됨)"
+    },
+    {
+     "name": "Steer — Short communication: Analytical models for 2D landscape evolution (Earth Surface Dynamics 9, 2021; 'Salève')",
+     "kind": "paper",
+     "year": "2021",
+     "url": "https://esurf.copernicus.org/articles/9/1239/2021/",
+     "what_it_does": "선형 stream power 1D 해석해를 흐름 경로 순서(DAG/스택)로 2D에 적용함. 식 (5) z(l)=z_R(l)+U(l)(τ(l)−τ_R(l))를 하구에서 상류로 계산해 정상상태 지형을 '한 번의 시간 단계 + 반복'으로 구함. 매 반복마다 최급경사·노드 순서·유역 면적/유량을 다시 계산하고 수십 회 안에 수렴함. 공간적으로 변하는 U, K, runoff(강수)를 지원하고 TopoToolbox 단일 흐름을 씀. MATLAB 코드가 Zenodo에 공개되어 있음.",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "near-duplicate",
+     "key_difference_vs_bpcg": "평면 격자, 단일 흐름만 지원하고 S_crit 상한이나 MFD는 없음. 수렴 지표로 '능선 불평형'을 씀. b-pcg의 수신 셀 히스테리시스(η)는 이 반복의 진동 처리를 조금 바꾼 정도이고, 핵심 아이디어인 '시간 적분 대신 정상상태를 직접 적분하고 흐름과 번갈아 반복'은 여기서 이미 제안됨.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Cordonnier, Braun, Cani, Benes, Galin, Peytavie, Guérin — Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion (CGF / Eurographics 2016)",
+     "kind": "paper",
+     "year": "2016",
+     "url": "https://www.cs.purdue.edu/cgvlab/www/resources/papers/Cordonnier-Computer_Graphics_Forum-2016-Large_Scale_Terrain_Generation_from_Tectonic_Uplift_and_Fluvial_.pdf",
+     "what_it_does": "사용자가 그린 uplift 맵을 Poisson-disc + Delaunay 스트림 그래프 위에서 Braun–Willett 암시적 stream power(n=1, O(N))로 시뮬레이션함. 정규 격자보다 무작위 삼각망이 하천 방향을 더 자연스럽게 만든다고 명시함. 호수 넘침을 처리하는 lake graph가 있고, 경사 30° 초과를 막는 thermal 보정을 함. 스트림 그래프 위상 변화를 수렴 지표로 써서 100~300 스텝에 수렴함. 이후 그래프를 procedural 커널로 DEM화함. 한계로 '파라미터를 실제 지형에서 측정할 수 있을 것', 향후 과제로 '판 구조 시뮬레이션으로 uplift 맵 자동 계산'을 적어 둠.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "시간 스텝 방식(정상상태 직접 적분 아님)이고 평면이며 판 구조 입력이 없음. 다만 b-pcg의 S_crit 상한(30° 계열), 격자 결 회피(노드 흔들기와 같은 동기), '수신 셀/위상이 안 바뀌면 수렴' 판정은 이미 여기 있음. 이 논문의 한계와 향후 과제(실측 파라미터, 판 구조 기반 uplift)는 b-pcg 3장과 5장의 동기로 인용할 수 있음.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (lake overflow 처리)"
+    },
+    {
+     "name": "Schott, Paris, Fournier, Guérin, Galin — Large-scale terrain authoring through interactive erosion simulation (ACM TOG 42(5), SIGGRAPH 2023)",
+     "kind": "paper",
+     "year": "2023",
+     "url": "https://hal.science/hal-04049125/",
+     "what_it_does": "정규 격자에서 explicit stream power(+라플라시안 hillslope)를 GPU로 병렬 시뮬레이션해 정상상태까지 수 초에 수렴시킴. 유역 면적은 MFD(가중치 s^p, p=4, Holmgren 1994 근거)를 5×5 이웃 반복 근사로 계산함. uplift를 construction tree로 저작하고, crust fold 텐서장으로 procedural uplift를 만들며, 입력 DEM에서 uplift를 역추정하는 inverse procedural modeling을 제공함. 점·곡선 고도 제약도 지원함.",
+     "overlapping_chapters": [
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "평면이고 시간 스텝 방식이며, 유량 의존 적응형 지수나 Quinn 가중을 쓰지 않음. DEM에서 θ/k_s/S_crit를 학습하지 않고 uplift를 역추정함. 'stream power에 MFD 결합'과 'DEM으로부터 역방향 보정'이라는 큰 아이디어는 이미 있음. 판 구조, 구면, 3D는 없음.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (pit 없이 경계로 배수되는 상태로 수렴)"
+    },
+    {
+     "name": "Schott, Galin, Guérin, Peytavie, Paris — Terrain Amplification using Multi-scale Erosion (ACM TOG 43(4), SIGGRAPH 2024)",
+     "kind": "paper",
+     "year": "2024",
+     "url": "https://hal.science/hal-04565030v1/file/2024-MultiScaleHydro-Author.pdf",
+     "what_it_does": "저해상도 지형을 여러 스케일에서 stream power, thermal, hillslope 침식과 퇴적 근사로 증폭해 수문학적으로 일관된 고해상도 지형을 만듦. 경사와 유역 면적에 상한(s_max, a_max)을 둔 수정 stream power를 GLSL compute shader로 구현했고, 코드(H-Schott/MultiScaleErosion)가 공개되어 있음.",
+     "overlapping_chapters": [
+      "4",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "고해상도 디테일 증폭이 목적이고 평면 heightfield만 다룸. 정상상태 직접 해법이나 판, 구면은 없음. 경사 상한 아이디어는 S_crit와 비슷함.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Cortial, Peytavie, Galin, Guérin — Procedural Tectonic Planets (CGF 38(2), Eurographics 2019)",
+     "kind": "paper",
+     "year": "2019",
+     "url": "https://perso.liris.cnrs.fr/eric.galin/Articles/2019-planets.pdf",
+     "what_it_does": "Fibonacci 샘플과 구면 Delaunay 삼각망으로 행성 지각을 표현함. 판은 무작위 중심점의 구면 보로노이 셀이고, 측지 거리를 노이즈로 왜곡해 경계를 불규칙하게 만듦. 판 운동은 회전축 w 기준 강체 회전 s(p)=ω w×p로 정의함. 섭입, 충돌, 리프팅, 해양 지각 침강, 단순 대륙 침식을 2 My 스텝으로 진행하고, 결과를 procedural 또는 실데이터로 증폭함. 논문은 대륙 위 배수망을 생성하지 않는다고 명시하고, DGGK11 하천망이나 CBC16 stream power와 '결합 가능하다'고만 적음.",
+     "overlapping_chapters": [
+      "1",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg 5장의 판 배치(노이즈 왜곡 구면 보로노이)와 오일러 극 강체 회전 속도는 이 논문의 단순화 버전임. Cortial은 시간에 따라 판을 진화시키고 충돌·섭입을 다루는 반면, b-pcg는 정적 판에서 경계 유형만 판정하고 측지 거리 기반 가우스 uplift를 씀. 반면 b-pcg는 판에서 나온 uplift/k_s를 stream-power 정상상태 솔버에 연결하는데, 이 논문은 바로 그 단계를 미해결로 남김.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no (배수망 없음을 명시)"
+    },
+    {
+     "name": "Cortial, Peytavie, Galin, Guérin — Real-time hyper-amplification of planets (The Visual Computer 36, 2020)",
+     "kind": "paper",
+     "year": "2020",
+     "url": "https://hal.science/hal-02967067",
+     "what_it_does": "저해상도 행성 제어 맵(고도, 수역, 지형 유형)에서 출발함. 정팔면체/정이십면체로 초기화한 Poisson 샘플 구면 Delaunay 삼각망 위에 대규모 하천망을 먼저 만들고, 의미 있는 세분화 규칙(River/Terrain/Lake/Gully/Sea 정점 유형)으로 지류, 호수, 산맥, 계곡을 GPU에서 실시간 증폭함. 이렇게 '수문학적으로 일관된 행성'을 만들고, 입력으로 Procedural Tectonic Planets 결과를 받을 수 있음.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "하천과 지형을 문법(세분화 규칙)으로 생성할 뿐 stream power, 정상상태, 실측 파라미터 같은 물리 기반은 없음. 그래도 '판 구조 행성 → 수문 일관 행성' 파이프라인 자체는 학계에 이미 존재하므로, b-pcg는 '최초의 수문 일관 행성'을 주장할 수 없음. 볼륨/동굴은 없음.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (구성적으로 강이 바다/호수로 연결됨)"
+    },
+    {
+     "name": "Derzapf, Ganster, Guthe, Klein — River Networks for Instant Procedural Planets (CGF 30(7), 2011)",
+     "kind": "paper",
+     "year": "2011",
+     "url": "https://www.researchgate.net/publication/230363605_River_Networks_for_Instant_Procedural_Planets",
+     "what_it_does": "정이십면체 기반 구에서 수정된 midpoint displacement로 대륙과 하천망을 1초 이내에 생성하고 LOD로 실시간 렌더링함. 강은 대륙에서 바다로 하강하는 경로로 만들고 주변에 계곡을 깎음.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "프랙털/절차적 방식이라 지질 일관성이 약하다고 Cortial 2019와 Galin 2019가 평가함. stream power, 판, 정상상태가 없음. 다만 '행성 규모 하천망'의 원조로 반드시 인용해야 함.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Génevaux, Galin, Guérin, Peytavie, Beneš — Terrain Generation Using Procedural Models Based on Hydrology (ACM TOG 32(4), SIGGRAPH 2013)",
+     "kind": "paper",
+     "year": "2013",
+     "url": "https://perso.liris.cnrs.fr/eric.galin/Articles/2013-river-networks.pdf",
+     "what_it_does": "스케치한 영역 위에 Horton–Strahler 규칙으로 계층적 하천망 그래프를 먼저 만들고, 유역(보로노이)을 계산하고, Rosgen 분류로 하천 유형을 정함. 이어 지형·하천 패치를 construction tree로 블렌딩/카빙해 연속적인 해석적 지형을 생성함.",
+     "overlapping_chapters": [
+      "2",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'강 먼저, 지형 나중'인 문법 기반 방식이고 평면이며 stream power나 판은 없음. b-pcg 6장의 하천 분류와 폭은 다른 접근(Leopold–Maddock)임. 정상상태 솔버와는 철학이 다름.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (구성적)"
+    },
+    {
+     "name": "Galin, Guérin, Peytavie, Cordonnier, Cani, Benes, Gain — A Review of Digital Terrain Modeling (CGF 38(2), Eurographics 2019 STAR)",
+     "kind": "talk/blog",
+     "year": "2019",
+     "url": "https://www.cs.purdue.edu/cgvlab/www/resources/papers/Galin-Computer_Graphics_Forum-2019-A_Review_of_Digital_Terrain_Modeling.pdf",
+     "what_it_does": "지형 모델링 분야 서베이로, 결론에서 미해결 문제를 정리함. (1) 일관성을 유지하면서 다양한 지형형태를 갖춘 대규모 지형, (2) 동굴·아치·오버행 같은 볼륨 지형(이산 복셀은 메모리 때문에 수백 m로 제한되니 implicit 표현이 유망함), (3) 행성 전체를 생성하면서 지형형태의 위치·크기·모양을 제어하는 문제(기존 행성 방법 Vos91, EMP98, DGGK11은 노이즈에 과의존), (4) 계산 효율.",
+     "overlapping_chapters": [
+      "5",
+      "7"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "방법 논문이 아니라 문제 정의의 근거임. '행성 규모 + 사실성 + 제어'와 '볼륨 지형'을 열린 문제로 명시하므로 b-pcg의 '왜 필요한가'를 뒷받침할 수 있음. 단 2019년 기준이라 그 후 Cortial 2020, Schott 2023, Tzathas 2024, Borg 2026이 일부를 메웠다는 점도 함께 밝혀야 함.",
+     "evidence": "verified",
+     "spherical": "unknown",
+     "volumetric_3d": "unknown",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "fastscapelib HealpixGrid + Planetary example (fastscape-lem/fastscapelib v0.3.0, 2025-06-25)",
+     "kind": "oss-repo",
+     "year": "2025",
+     "url": "https://fastscapelib.readthedocs.io/en/latest/guide_grids.html",
+     "what_it_does": "b-pcg가 기준 비교 대상으로 지목한 fastscapelib이 v0.3.0에서 HEALPix 구면 격자를 추가함('Planetary scale simulations'). 공식 Planetary 예제는 지구 반지름 HEALPix(nside=100) 위에서 SingleFlowRouter와 MSTSinkResolver로 흐름을 라우팅하고, SPLEroder(area_exp=0.45, n=1)와 균일 uplift로 행성 전체의 하천 침식을 시뮬레이션함. MultiFlowRouter도 라이브러리에 있음. conda-forge Linux/macOS 빌드에서만 쓸 수 있음.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "시간 스텝 방식(정상상태 직접 적분 아님)이고 HEALPix(등면적, 12면)를 씀. 판, 강수, DEM 학습, 3D는 없음. '구면 위 stream power + 흐름 라우팅 + 웅덩이 처리'는 공개 라이브러리 기능으로 이미 존재함. 반대로 b-pcg는 평면 비교에 그치지 말고 이 HealpixGrid로 구면 기준 비교를 할 수 있고, 그렇게 해야 함.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (sink resolver)"
+    },
+    {
+     "name": "goSPL — Global Scalable Paleo Landscape Evolution (Salles et al., JOSS 2020; Science 379, 2023) / 선행 eSCAPE (GMD 2019)",
+     "kind": "oss-repo",
+     "year": "2020–2023",
+     "url": "https://joss.theoj.org/papers/10.21105/joss.02804",
+     "what_it_does": "Python과 PETSc로 만든 전지구 지형 진화 모델임. 비정형 구면 메시 위에서 MFD 기반 stream power 하천 침식, 암시적 병렬 유역 면적 계산, priority-flood 기반 웅덩이 퇴적을 다루고, 판의 수평·수직 변위와 시공간 강수 강제력을 받음. 1억 년 지구 재구성(Science 2023)에 쓰였음. 선행 eSCAPE도 전지구 비정형 메시, SFD/MFD, priority-flood+ε, PETSc 암시적 솔버를 가짐.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "지구과학용 정방향 시간 적분(수백 CPU)이고 실제 판 재구성과 기후 모델을 입력으로 받음. 정상상태 직접 해법, 절차적 판 생성, 게임/3D 출력이 없음. 그래도 '구면 + MFD + priority-flood + stream power + 판 이동 + 강수'라는 조합 자체는 이미 구현되어 있음.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "World Orogen (raguilar011095/planet_heightmap_generation, orogen.studio), 2026-02 생성, GPL-3.0",
+     "kind": "oss-repo",
+     "year": "2026",
+     "url": "https://github.com/raguilar011095/planet_heightmap_generation",
+     "what_it_does": "브라우저(JavaScript)에서 도는 절차적 행성 생성기임. Fibonacci 구 + Delaunay 메시, 보로노이 판, 충돌 판정으로 수렴/발산/변환 경계를 분류하고, 거리장과 응력 기반 uplift, 해령, 해구, 핫스폿을 만듦. priority-flood로 모든 육지를 바다로 배수하고, 반복 암시적 stream power(Braun–Willett 방식)와 퇴적, thermal, 빙하, soil creep 침식을 적용함. 기후는 바람 수분 이류와 위도 휴리스틱을 섞어 계산함. 2026-09까지 활발히 커밋 중이며 별 105개.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "학술 논문은 아니지만 b-pcg 2·4·5장의 '구면 판 구조 → uplift → stream power 하천' 통합 파이프라인을 이미 공개적으로 구현함. 차이는 시간 반복 침식(정상상태 직접 적분 아님), DEM 학습 파라미터 없음, MFD 적응 지수 없음, 회전 불변성 검증 없음, 3D 볼륨/복셀과 엔진 통합이 없다는 점(heightmap 디스플레이스먼트만 있음). 동료 학생 평가에서 '이미 있는 것'으로 비칠 위험이 큼.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (priority-flood로 바다까지 배수)"
+    },
+    {
+     "name": "Borg, Gain, Guérin, Peytavie, Cani, Galin, Cordonnier — Authoring Terrestrial Planets with Diffusion Models (CGF 45(2), Eurographics 2026)",
+     "kind": "paper",
+     "year": "2026",
+     "url": "https://github.com/Oliver-Borg/PlanetDiffusion",
+     "what_it_does": "지구·화성 위성 데이터로 학습한 확산 모델로, 사용자가 그린 대략적 스케치에서 지구 크기 행성 전체를 생성함. 코드상 큐브 6면 연결 테이블과 'surface-to-center' 투영으로 구면 타일을 샘플링하고, 하천 upslope-area 채널(river_upa_mode=channel)을 조건으로 씀.",
+     "overlapping_chapters": [
+      "1",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "데이터 기반 생성이라 stream power나 정상상태 같은 물리 일관성 보장이 없고, 하천은 조건 입력일 뿐임. 그래도 2026년 학계의 '행성 규모 지형 저작' 최신 기준선이고, 큐브스피어 면 연결표 같은 1장 구성요소가 흔한 기법임을 보여 줌.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "Perron & Royden 2013 — An integral approach to bedrock river profile analysis (ESPL 38) / Royden & Perron 2013 (JGR-ES) 해석해",
+     "kind": "paper",
+     "year": "2013",
+     "url": "https://onlinelibrary.wiley.com/doi/abs/10.1002/esp.3302",
+     "what_it_does": "정상상태 stream power 식을 적분해 χ=∫(A0/A)^θ dx 좌표에서 정상상태 하천 종단면이 직선이 되게 함. 기울기는 (U/K)^(1/n)과 관련됨. 잡음이 큰 slope–area 분석보다 χ 적분 방식이 더 견고하다고 주장함. Royden & Perron 2013은 특성곡선 해석해를 제시했고 Tzathas와 Steer가 이를 이어받음.",
+     "overlapping_chapters": [
+      "3",
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg 4장의 적분 z_c=z_r+d·k_s Q^-θ는 이산화한 χ 정상상태(z=z_b+k_s·χ_Q)와 같음. 3장의 구간 중앙값 slope–area 회귀는 이 논문이 단점을 지적한 바로 그 방식이므로, χ 기반 θ 추정(LSDTopoTools, TopoToolbox)과 비교하거나 대체하는 편이 방어에 유리함.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "n/a (분석 이론)"
+    },
+    {
+     "name": "Giachetta & Willett — A global dataset of river network geometry (Scientific Data, 2018)",
+     "kind": "paper",
+     "year": "2018",
+     "url": "https://www.nature.com/articles/sdata2018127",
+     "what_it_does": "전 세계 하천망에 대해 χ를 계산하고, 강수 분포가 유량에 미치는 영향을 반영한 수정 χ'(닫힌 유역 기준면 보정 포함)를 지도화함. 검색 요약에 따르면 기준 θ≈0.45를 씀.",
+     "overlapping_chapters": [
+      "3"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "3장의 '면적 기준을 강수 가중 유량 기준으로 바꾸기(k_s^Q=k_sn·P̄^θ)'와 θ_ref=0.45 고정은 이 연구와 지형학 표준 관행에 이미 있음. b-pcg의 기여는 이를 생성기 보정에 '적용'한 것이지 방법론 자체는 아님.",
+     "evidence": "verified",
+     "spherical": "yes (전지구 분석)",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "n/a (분석)"
+    },
+    {
+     "name": "Harel, Mudd, Attal — Global analysis of the stream power law parameters based on worldwide 10Be denudation rates (Geomorphology 268, 2016)",
+     "kind": "paper",
+     "year": "2016",
+     "url": "https://www.research.ed.ac.uk/en/publications/global-analysis-of-the-stream-power-law-parameters-based-on-world/",
+     "what_it_does": "전 세계 1,457개 10Be 유역 침식률을 모아 59개 지역에서 χ(integral) 방법으로 m/n(오목도), n, K를 추정함.",
+     "overlapping_chapters": [
+      "3"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "'실제 지형에서 stream power 파라미터를 학습한다'는 것은 지형학에서 이미 전지구 규모로 이루어짐. 이 연구는 침식률 자료까지 써서 n과 K를 분리하는데, b-pcg는 k_s만 추정해 U/K를 분리하지 못함. b-pcg는 이런 공개 결과를 인용하거나 재사용하는 편이 학습 단계를 직접 만드는 것보다 효율적일 수 있음.",
+     "evidence": "secondary",
+     "spherical": "n/a",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "n/a"
+    },
+    {
+     "name": "Anand, Hooshyar, Porporato — Linear layout of multiple flow-direction networks for landscape-evolution simulations (arXiv 1909.03176, 2019/2020)",
+     "kind": "paper",
+     "year": "2020",
+     "url": "https://arxiv.org/abs/1909.03176",
+     "what_it_does": "MFD 흐름망(DAG)의 선형 배치를 찾아 지형 진화 모델의 침식항을 O(N) 암시적으로 계산함. 높은 침식률에서도 정확한 정상상태 해를 얻고, D8이나 D∞와 달리 매끈한 상태에서 하도화된 상태로의 전이를 올바르게 포착한다고 주장함.",
+     "overlapping_chapters": [
+      "2",
+      "4"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "시간 스텝 암시적 해법이고 평면임. 'MFD + stream power + 정상상태'를 다룬 선행 연구라서, 4장 MFD 2단계 방식(감쇠 반복 후 가중치를 고정하고 직접 적분)의 새로움을 주장하려면 이 논문과 차이를 밝혀야 함.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Cordonnier, Cani, Benes, Braun, Galin — Sculpting Mountains: Interactive Terrain Modeling Based on Subsurface Geology (IEEE TVCG 24(5), 2018)",
+     "kind": "paper",
+     "year": "2018",
+     "url": "https://team.inria.fr/imagine/sculpting-mountains-interactive-terrain-modeling-based-on-subsurface-geology/",
+     "what_it_does": "판 압축과 습곡을 반영한 볼륨 uplift 맵(지층별 성장률)과 침식을 함께 시뮬레이션해, 침식된 절벽에 습곡 지층이 노출되도록 렌더링함.",
+     "overlapping_chapters": [
+      "5",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 산맥 규모이고 시간 시뮬레이션임. b-pcg의 '지층이 골짜기 벽에 순서대로 드러남'과 습곡·단층 아이디어의 그래픽스 선행 연구이고, 판 → uplift → 지층 연결도 이미 다룸.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "partial (지층 볼륨 표현)",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "McDonald & Cordonnier — Stochastic geomorphological transport for terrain erosion simulation (ACM TOG 45(4), SIGGRAPH 2026)",
+     "kind": "paper",
+     "year": "2026",
+     "url": "https://dl.acm.org/doi/10.1145/3811336",
+     "what_it_does": "병렬 확률적 입자 기반 수송으로 지질 시간 규모의 침식을 시뮬레이션함. Stream Power Law의 속도 가정을 완화한 더 일반적인 운동량 보존 기반 모델로 유역 구조, 망류 하천, 곡류, 삼각주를 재현함. 코드가 공개되어 있음(erosiv).",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 시간 시뮬레이션이고 정상상태와 구면은 없음. 2026년 그래픽스 최전선이 'stream power 너머'로 가고 있다는 신호이므로, b-pcg는 stream power 정상상태를 연구 기여가 아니라 공학적 선택으로 포지셔닝해야 함.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "unknown",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Braun & Willett — A very efficient O(n), implicit and parallel method to solve the stream power equation (Geomorphology 180–181, 2013; FastScape)",
+     "kind": "paper",
+     "year": "2013",
+     "url": "https://gfzpublic.gfz.de/pubman/faces/ViewItemFullPage.jsp?itemId=item_1945954_2",
+     "what_it_does": "수신 셀과 스택 순서를 이용해 n=1 stream power를 O(N) 암시적으로 푸는 FastScape 알고리즘임. Cordonnier 2016, Tzathas 2024, Steer 2021, fastscapelib이 모두 이 구조(하구에서 상류로 순서 처리)를 씀.",
+     "overlapping_chapters": [
+      "2",
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "4장의 'σ 순서로 하류 먼저 높이 결정'은 FastScape의 스택 순회 그대로임. 시간 적분 대신 정상상태를 쓴다는 차이는 Steer 2021에서 이미 메워짐.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Jain, Kerbl, Gain, Finley, Cordonnier — FastFlow: GPU Acceleration of Flow and Depression Routing for Landscape Simulation (CGF, Pacific Graphics 2024)",
+     "kind": "paper",
+     "year": "2024",
+     "url": "https://onlinelibrary.wiley.com/doi/10.1111/cgf.15243",
+     "what_it_does": "웅덩이(depression)를 고려한 흐름 라우팅과 유량 누적을 GPU로 가속해 침식, 하천 형성, 생태계 시뮬레이션의 전처리 병목을 줄임.",
+     "overlapping_chapters": [
+      "2"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 격자임. b-pcg가 Warp(GPU)로 priority-flood나 누적을 구현한다면 선행 GPU 기법으로 인용해야 함.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    }
+   ],
+   "closest_competitors": [
+    "Tzathas et al. 2024 (Physically-based analytical erosion, CGF/EG) + Steer 2021 (Salève, ESurf): 4장 D8 정상상태 솔버의 수식, 즉 하구에서 상류로 U/(kA^m)를 적분하는 것과 '흐름 ↔ 고도' 고정점 반복, 진동 감쇠, 지터, 임계경사가 사실상 동일함. 차이는 평면/단일 흐름이라는 점뿐임.",
+    "Cortial et al. 2019 (Procedural Tectonic Planets) + Cortial et al. 2020 (Real-time hyper-amplification of planets): 5장의 노이즈 왜곡 구면 보로노이 판과 ω×p 강체 회전 속도가 그대로 있고, 2020년 후속작은 판 구조 행성을 수문학적으로 일관된 행성으로 증폭하는 파이프라인까지 갖춤. 차이는 stream power나 정상상태 물리가 없다는 점임.",
+    "fastscapelib HealpixGrid (2025) / goSPL·eSCAPE / World Orogen (2026 OSS): '구면 위 stream power + 흐름 라우팅 + 웅덩이 처리(+판·강수)'가 이미 공개 라이브러리와 도구로 존재함. 모두 시간 스텝 방식이고 정상상태를 직접 풀지 않으며, 3D 볼륨 출력이 없음."
+   ],
+   "apparent_gaps": "조사 범위(CG 학술 논문과 주요 지형학 오픈소스) 안에서 확인되지 않은 것을 조심스럽게 적는다. '없다'가 아니라 '찾지 못했다'는 뜻이다. (1) 정상상태를 직접 적분하는 솔버(Steer/Tzathas 계열)를 구면 전체(큐브스피어, 면 경계에서 격자선이 꺾이는 그래프)에서 돌린 사례는 찾지 못함. 구면 stream power는 fastscapelib HEALPix, goSPL, World Orogen처럼 모두 시간 스텝 방식이었음. (2) MFD 분배로 높이를 가중 평균해 정상상태를 직접 적분하는 방식(감쇠 반복 후 가중치를 고정하고 한 번 적분)은 Tzathas/Steer(단일 흐름), Schott 2023(MFD지만 explicit 시간 스텝), Anand 2020(MFD 암시적 시간 스텝) 어디에서도 같은 형태를 보지 못함. 다만 작은 변형이므로 자기 일관성 지표와 함께 실험으로 보여 줘야 주장할 수 있음. (3) 큐브 면 이음새가 수계 통계에 흔적을 남기지 않는지를 입력 회전 불변성 테스트나 격자 정렬 지수로 정량 검증한 그래픽스 연구는 찾지 못함. (4) Cortial 2019는 '배수망 미생성, CBC16 stream power와 결합 가능'을, Cordonnier 2016은 '판 구조로 uplift 자동 계산'과 '파라미터 실측'을 향후 과제로 남김. 절차적 판 → uplift/k_s 필드 → DEM 보정 stream power 정상상태 → 행성 전체를 학술적으로 한 번에 묶은 사례는 찾지 못함. 다만 비학술 World Orogen(2026)이 시간 스텝 방식으로 상당 부분을 이미 함. (5) 생성기 파라미터(θ, k_s 범위, S_crit)를 실제 DEM과 WorldClim에서 보정해 그래픽스 생성기에 연결한 사례는 CG 논문에서 보지 못함(대부분 문헌값을 쓰고, Schott 2023은 uplift 역추정). 다만 분석 방법 자체는 지형학 표준이므로 '적용과 통합' 수준의 기여임. (6) 이 결과를 3D SDF/복셀 행성(동굴, 지층, 지하수)과 게임 엔진 걷기까지 잇는 것은 Galin 2019가 열린 문제로 꼽은 '행성 규모'와 '볼륨 지형'의 교차점인데, 이 각도(3–5장)에서는 경쟁작을 찾지 못함. 이 부분은 다른 각도의 조사로 확인해야 함.",
+   "novelty_threats": "다음은 새롭다고 주장하면 안 되고 선행 연구를 명시해야 한다. 4장: '시간 시뮬레이션 대신 평형 지형을 직접 계산'한다는 핵심 아이디어는 새롭지 않음. Steer 2021 식 (5) z=z_R+U(τ−τ_R)와 Tzathas 2024 식 (9)가 정확히 하구→상류 적분이고 χ 정상상태(Perron & Royden 2013)의 이산화임. '흐름 재계산 ↔ 고도 적분' 고정점 반복(Steer 2021), 진동 시 이전 반복과의 이동평균 감쇠(Tzathas 2024), 노드 지터(Tzathas의 업샘플링 지터, Cordonnier 2016의 Poisson+Delaunay 무작위 그래프), 임계경사 상한(Cordonnier 2016의 30° thermal, Tzathas의 sc), '수신 셀/위상이 안 바뀌면 수렴' 판정(Cordonnier 2016), 하류 우선 스택 순회(Braun & Willett 2013)도 모두 선행 연구에 있음. 수신 셀 히스테리시스 η는 사소한 공학적 개선 수준임. 3장: slope–area 구간 회귀, θ_ref 고정 후 k_sn, 강수 가중 유량 변환(Giachetta & Willett 2018의 χ'), 전지구 파라미터 추정(Harel et al. 2016)은 지형학 표준이고, Perron & Royden 2013은 slope–area보다 χ 적분이 견고하다고 지적함. 따라서 학습이라는 표현은 과장일 수 있고 회귀 기반 보정이 정확함. 또 n=1과 U/K 분리 불가는 한계로 적어야 함. 5장: 노이즈 왜곡 구면 보로노이 판, 회전축 기반 강체 회전 속도는 Cortial 2019에 그대로 있음. 수렴/발산/변환 경계 판정과 경계 거리 기반 uplift는 World Orogen 등 공개 도구에도 있음. 위도대 강수, 면적 가중 해양 비율, 3D 해시 노이즈는 표준 기법임. 구면 stream power 자체: fastscapelib v0.3.0(2025) HealpixGrid 예제, goSPL·eSCAPE, World Orogen이 이미 구현했으므로 '최초의 구면 하천 침식' 주장은 불가함. 수문 일관 행성: Derzapf 2011, Cortial 2020이 이미 있음. 2장 관련: Schott 2023이 stream power에 MFD(p=4)를 이미 결합했고, 적응형 지수 MFD도 Qin et al. 2007 계열의 기존 기법임(이번 세션 미확인, 기억 기반). priority-flood+ε는 Barnes 2014.",
+   "summary": "결론: 3–5장(판 → uplift/k_s → DEM 보정 stream power → 정상상태 지형)은 구성요소마다 강한 선행 연구가 있고, 특히 4장 D8 정상상태 솔버는 Steer 2021(ESurf)과 Tzathas et al. 2024(Eurographics/CGF)의 정상상태 경우와 사실상 같다(near-duplicate). Tzathas 논문은 하구에서 상류로 ∫u/(kA^m)ds를 적분하는 식 (9), 흐름망과 고도의 고정점 반복, 진동 시 이동평균 감쇠, 지터, 임계경사(thermal)까지 포함하며, 이 적분은 Perron & Royden 2013의 χ 정상상태와 같다. 5장의 판 생성(노이즈 왜곡 구면 보로노이, ω×p 강체 회전)은 Cortial 2019의 단순화판이다. 3장의 파라미터 추출은 지형학 표준 분석이며, 강수 가중 χ'(Giachetta & Willett 2018)과 전지구 파라미터 추정(Harel 2016)이 이미 있다. '구면 위 stream power'도 새롭지 않다. b-pcg가 기준선으로 쓰려는 fastscapelib이 2025년 HEALPix 행성 예제를 추가했고, goSPL·eSCAPE(지구과학)와 World Orogen(2026 공개 도구, 판 + priority-flood + Braun–Willett, 구면)이 있다. '수문 일관 행성'도 Derzapf 2011과 Cortial 2020이 있다. 반면 문헌이 남긴 빈칸도 확인된다. Cortial 2019는 배수망을 만들지 않고 stream power와의 결합을 과제로 남겼고, Cordonnier 2016은 판 기반 uplift와 실측 파라미터를 향후 과제로 적었으며, Galin 2019는 행성 규모 제어·사실성과 볼륨 지형을 열린 문제로 꼽았다. 이번 조사에서는 정상상태 직접 솔버를 구면 전체에 적용한 사례, MFD 가중 높이로 정상상태를 직접 적분한 사례, 큐브 면 이음새의 통계적 무흔적 검증, 그 결과를 3D SDF 행성과 엔진으로 잇는 사례를 찾지 못했다. 캡스톤으로서의 타당성 판단: 3–5장을 '새 알고리즘'으로 내세우면 심사에서 바로 반박될 위험이 크다(교수·조교가 Tzathas나 Cortial을 알 가능성이 높고, World Orogen은 학생들도 찾을 수 있다). 대신 '기존 정상상태 해법(Steer/Tzathas)과 절차적 판(Cortial)을 구면 큐브스피어로 확장해 통합하고, MFD 정상상태 변형과 이음새·회전 불변성 검증, DEM 보정, 3D 복셀 행성 출력을 더한 시스템'으로 포지셔닝하면 문제 정의와 기술 깊이 모두 방어 가능하다. 이를 위해 (a) Steer 2021, Tzathas 2024, Cortial 2019/2020, fastscapelib HEALPix, goSPL, World Orogen을 명시적으로 인용하고, (b) 기준 비교에 fastscapelib HealpixGrid(구면 시간 스텝 결과)를 추가하며, (c) 3장은 slope–area 외에 χ 기반 θ 추정과 교차검증하기를 권한다."
+  }
+ },
+ {
+  "key": "volumetric-features",
+  "result": {
+   "findings": [
+    {
+     "name": "Paris, Galin, Peytavie, Guérin, Gain — Terrain Amplification with Implicit 3D Features (ACM TOG 38(5), SIGGRAPH Asia 2019)",
+     "kind": "paper",
+     "year": "2019",
+     "url": "https://aparis69.github.io/public_html/phd/axel-paris-phd-thesis.pdf",
+     "what_it_does": "2D 하이트필드를 implicit(SDF) 지형으로 변환한 뒤, 지질 construction tree(난류 기반 수평 지층 ρ(p)=t(p_z/λ0), warp로 습곡, 저항 함수의 불연속으로 단층)로 암석 저항을 정의하고, 응력과 저항으로 정한 위치에서 구(sphere) primitive를 smooth difference/union해 해식 절벽, 아치, 오버행, 하천 협곡 오버행, 후두(hoodoo), 카르스트(invasion percolation)를 만든다. 하천 오버행의 응력은 depression filling(Barnes 2014)과 Freeman MFD 유량누적으로 구한 stream power σ=A^{1/2}·s를 쓴다 (학위논문 6장에서 확인).",
+     "overlapping_chapters": [
+      "2",
+      "6",
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "평면 국소 지형이며 구면이 아니다. 지층은 절대 고도의 함수이고 기준면(datum)을 쓰지 않는다. 지질은 사용자가 저작하고, 지하수면도 물 재질 규칙도 없다. 형상은 primitive 수천 개로 된 construction tree다. 반면 b-pcg는 2D 맵을 읽는 닫힌 형식의 점별 함수다. '수문 계산 결과(유량, 경사)로 3D 지형 특징을 배치한다'는 아이디어는 이미 이 논문에 있다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Minecraft Java Edition 1.18 'Caves & Cliffs' noise router (noodle / spaghetti_3d / spaghetti_2d caves, aquifers, ore veins)",
+     "kind": "game",
+     "year": "2021",
+     "url": "https://raw.githubusercontent.com/misode/mcmeta/data/data/minecraft/worldgen/density_function/overworld/caves/noodle.json",
+     "what_it_does": "바닐라 density function JSON을 직접 풀어 확인했다. noodle = max(|N_ridge_a|, |N_ridge_b|)·1.5 + 두께항이고, spaghetti_3d(entrances 안) = max(|weird(N_3d_1)|, |weird(N_3d_2)|) + 두께항이다. 즉 두 노이즈 영점집합의 교선 주변을 터널로 만든다. spaghetti_2d = max(|ridge 노이즈| + t, cube(|2D 고도노이즈·8 + y기울기| + t))로, 수직 ridge 시트와 2D 노이즈가 정한 고도 띠의 교집합이다(고도 띠에 갇힌 수평 터널). 노이즈마다 xz_scale과 y_scale을 달리 줘 비등방으로 늘인다. Aquifer는 16×12×16 셀마다 유체 상태를 두고, preliminary surface level 위에서는 전역 해수면 규칙, 아래에서는 국지 수위(fluid_level_spread 노이즈)를 쓰며, 수위가 다른 수체 사이에 barrier를 세운다(minecraft.wiki). 광맥은 vein_toggle/ridged/gap 노이즈로 만든다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "near-duplicate",
+     "key_difference_vs_bpcg": "b-pcg 7장의 d_cave = max(|ν1|,|ν2|) − τ는 Minecraft noodle/spaghetti_3d와 수식이 같다. '고도 띠 안에만 동굴'은 spaghetti_2d와 같은 구조인데, b-pcg는 고도 띠의 중심을 노이즈가 아니라 수문에서 유도한 z_gw로 바꿨다는 점만 다르다. 물 규칙도 '지상은 지표수위, 지하는 국지 수위'라는 이원 구조가 Minecraft aquifer와 같다. 차이는 Minecraft의 수위와 강이 노이즈 기반이라 수문 일관성이 없고, 석회암이나 지층 조건이 없으며, 평면이라는 점이다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Paris, Guérin, Peytavie, Collon, Galin — Synthesizing Geologically Coherent Cave Networks (CGF 40(7), Pacific Graphics 2021)",
+     "kind": "paper",
+     "year": "2021",
+     "url": "https://github.com/aparis69/Karst-Synthesis",
+     "what_it_does": "지형 H와 지질 파라미터(지하수면 W, inception horizon L, 투수성 π, 균열 방향 F), 그리고 sink(유입), spring(유출), waypoint를 입력받는다. 기반암을 off-lattice로 적응 샘플링하고(horizon과 지하수면 고도에 Poisson disk 샘플을 조밀하게), 비용 c = w_L·c_L + w_F·c_F + w_π·c_π의 비등방 최단경로(A*)로 카르스트 골격을 만든다. 골격은 γ-skeleton으로 단순화하고 vadose/phreatic 위치에 따라 통로 유형(canyon, keyhole, tube, phreatic bed)을 분류한 뒤, sweep primitive를 써서 SDF로 만들어 지형에서 뺀다. 학위논문 7장에서 확인했고, 지하수면과 horizon은 '고도의 함수'로 모델링된다.",
+     "overlapping_chapters": [
+      "6",
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "석회암 동굴이 지하수면과 층리면 근처에 발달한다는 지질 지식을 b-pcg보다 훨씬 엄밀하게 쓴다. 유입부에서 용천까지 연결이 보장되고 통로 유형도 분류한다. 반면 지하수면과 horizon은 사용자가 주는 평면(고도 상수)이며, 지표 수문에서 유도되지 않는다. b-pcg는 지하수면이 지표 수문(호수, 하천 수면, 강수)에서 공간적으로 변하며 유도되지만, 동굴은 노이즈 영점집합이라 연결성과 sink/spring 정합이 보장되지 않는다. 지질 정합성만 보면 b-pcg가 이 논문보다 약하다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Peytavie, Dupont, Guérin, Cortial, Benes, Gain, Galin — Procedural Riverscapes (CGF 38(7), Pacific Graphics 2019)",
+     "kind": "paper",
+     "year": "2019",
+     "url": "https://www.cs.purdue.edu/homes/bbenes/papers/Peytavie19CGF.pdf",
+     "what_it_does": "하이트필드에서 depression filling(Barnes 2014) 후 배수면적을 계산하고, 기여 셀이 2개 이상인 셀을 노드로 삼아 구간을 나눈 뒤 piecewise cubic spline으로 하천 궤적을 매끈하게 만든다. 유량은 경험식 φ=0.42A^0.69, stream power는 A^{1/2}S로 구하고 Rosgen 유형을 분류한다. 하천 높이가 하류로 단조 감소하는지 검사해 어긋나면 하류로 전파하고, 유량/유속으로 단면 템플릿을 스케일해 하상을 새긴다. 수면은 blend-flow tree로 만든다.",
+     "overlapping_chapters": [
+      "6",
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg 6장의 하천 폴리라인(합류점에서 분할, 스플라인 평활, 유량으로 폭과 깊이 결정, 하류 단조 수면 강제)이 거의 그대로 이 논문에 있다. 차이는 b-pcg가 Leopold-Maddock 수리기하와 centripetal Catmull-Rom을 쓰고, 구면에 재투영하며, 3D SDF 반타원 하도를 smax로 깎는다는 점이다. Riverscapes는 하이트필드 고도 수정자와 애니메이션 수면이 목적이다.",
+     "evidence": "verified",
+     "hydrology_consistent": "yes",
+     "spherical": "no",
+     "volumetric_3d": "no"
+    },
+    {
+     "name": "Montgomery & Greenberg 2000 'Local relief and the height of Mount Olympus' (ESPL) / Small & Anderson 1998 'geophysical relief'",
+     "kind": "paper",
+     "year": "1998/2000",
+     "url": "https://gis.ess.washington.edu/grg/publications/pdfs/61_ftp.pdf",
+     "what_it_does": "탐색 반경(1~15 km) 안의 최고 봉우리들이 이루는 envelope에 매끈한 기준면을 맞추고, DEM과의 차이로 '골짜기 형성으로 차별 침식된 물질의 두께와 부피'를 계산한다(M&G 2000 본문에서 확인). Small & Anderson 1998은 이 차이를 geophysical relief로 정의했다(검색 스니펫).",
+     "overlapping_chapters": [
+      "6",
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg의 '퇴적 기준면'(반경 ρ max filter + Gaussian blur, z_datum − z' = 깎여 나간 두께)은 지형계측학의 summit envelope / geophysical relief와 같은 구성이다. 다른 점은 b-pcg가 이 면을 분석이 아니라 지층 깊이의 기준으로 쓴다는 것뿐이다. 새 개념으로 주장하면 안 되고 이 문헌을 인용해야 한다.",
+     "evidence": "verified",
+     "hydrology_consistent": "unknown",
+     "spherical": "no",
+     "volumetric_3d": "no"
+    },
+    {
+     "name": "Peytavie, Galin, Grosjean, Merillou — Arches: a Framework for Modeling Complex Terrains (CGF 28(2), Eurographics 2009)",
+     "kind": "paper",
+     "year": "2009",
+     "url": "https://perso.liris.cnrs.fr/eric.galin/Articles/2009-arches.pdf",
+     "what_it_does": "지형을 2D 격자의 material stack(air, water, sand, bedrock, rocks 층과 두께)으로 표현하고, 두 bedrock 층 사이에 air 층을 끼워 오버행, 아치, 동굴을 만든다. 표면은 convolution 기반 implicit surface로 재구성하고, 안식각에 따른 층 안정화 시뮬레이션과 암석 더미 생성을 제공한다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "다재질 층 스택과 implicit 표면으로 3D 지형 특징을 만드는 원조 격이다. 다만 인터랙티브 저작 도구이고, 지층 순서나 지질 기준면, 수문, 지하수, 구면이 없다. b-pcg는 층을 저장하지 않고 깊이 s에서 누적 두께 표를 조회해 재질을 계산한다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Dwarf Fortress world generation (geology layers, aquifers, caverns, fake-river erosion)",
+     "kind": "game",
+     "year": "2006–2026",
+     "url": "https://dwarffortresswiki.org/index.php/Aquifer",
+     "what_it_does": "월드젠에서 고도, 강수, 온도를 만든 뒤 산비탈에서 '가짜 강'을 흘려 바다로 가는 길을 못 찾으면 고도장에 수로를 새기고 극단적 절벽을 평활한다. 지역(바이옴)마다 soil, sedimentary, igneous extrusive, metamorphic, igneous intrusive 층 순서를 정한다. aquifer는 특정 토양/퇴적층에만 생기며, 저지대, 특히 강과 바다 근처일수록 잘 생기고 Drainage 값으로 heavy/light가 정해진다. 동굴층(cavern)은 보통 3개이고 깊이와 물의 양은 파라미터로 정한다(DF wiki).",
+     "overlapping_chapters": [
+      "2",
+      "5",
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "지역별 지층 스택, 지표 수계와 상관된 지하수(대수층), 침수된 동굴층을 이미 한 게임 안에서 결합했다. 다만 타일과 z-level 기반이고 연속 SDF가 아니다. 대수층은 '존재 여부와 종류'일 뿐 연속 지하수면이 아니며, 동굴층은 지질 조건과 무관한 고정 깊이다. 침식은 정상상태 해가 아니라 휴리스틱이고, 구면도 아니다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "TerraFirmaCraft (Minecraft mod, 1.18+ 'TNG') / Vintage Story rock strata",
+     "kind": "game",
+     "year": "2021–2026",
+     "url": "https://gist.github.com/alcatrazEscapee/8bd54572c8d3fe070d1ed92704dd6aed",
+     "what_it_does": "TFC: 판 경계를 따라 세계를 유역(watershed)으로 나누고 하구에서 상류로 거슬러 가는(drain-to-source) 방식으로 강을 만든다(개발자 gist). 지역마다 2~3개 암석층이 있고, 대륙 최상층은 화산암 또는 퇴적암이며 그 아래는 변성암이다(TFC Field Guide). Vintage Story: geologic province 노이즈로 지역마다 sedimentary/metamorphic/igneous 층 그룹의 순서와 최대 두께를 정한다(VS wiki).",
+     "overlapping_chapters": [
+      "5",
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "복셀 게임에서 '판 구조 기반 지역별 지층 스택'과 '바다로 빠지는 일관된 강'은 이미 구현된 아이디어다. 다만 지층은 절대 높이나 지표 기준이고 침식 전 기준면 개념이 없다. 지하수면에서 유도한 동굴이나 석회암 조건도 확인되지 않았고, 구면도 아니다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Becher, Krone, Reina, Ertl — Feature-based volumetric terrain generation (I3D 2017) / ...and Decoration (IEEE TVCG 25(2), 2019)",
+     "kind": "paper",
+     "year": "2017/2019",
+     "url": "https://ieeexplore.ieee.org/document/8066313/",
+     "what_it_does": "3D 곡선 기반 feature primitive로 희소하게 지정한 형상을 diffusion으로 확장해 복셀 볼륨 지형(아치, 오버행, 떠 있는 섬)을 생성하고 장식한다. Paris 학위논문에서 '복셀 + 3D feature curve로 아치와 floating island 생성'이라고 기술했고, diffusion 부분은 검색 스니펫 초록에서 확인했다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "저작 중심의 복셀 볼륨 지형이다. 지질 층서, 수문, 지하수, 구면이 없다. '하이트필드를 넘는 볼륨 지형'이라는 일반 주장은 이 논문과 Arches, Paris 2019로 이미 충분히 선행되어 있다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Gouy, Collon, Bailly-Comte, Galin et al. — KarstNSim (Journal of Hydrology 2024)",
+     "kind": "oss-repo",
+     "year": "2024",
+     "url": "https://github.com/ring-team/KarstNSim_Public",
+     "what_it_does": "Paris 2021을 지질학적으로 확장한 C++ 카르스트 네트워크 시뮬레이터다. 지하수면과 phreatic/vadose 구분, inception surface, 지형, 대수층 기하, sink/spring, 균열, 카르스트화 잠재도를 입력으로 받아 그래프 골격을 만들고, 선택적으로 통로 반경을 시뮬레이션한다(README).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "지구과학용이며 실제 지하 자료와의 통합이 목적이다. 출력은 그래프이고, 지하수면은 외부 입력이다. 실시간 복셀 SDF도, 지표 수문에서 지하수면을 유도하는 기능도 없다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Chen & Li — ExoCubed: A Riemann-Solver based Cubed-Sphere Dynamic Core for Planetary Atmospheres (arXiv 2403.06844, 2024)",
+     "kind": "paper",
+     "year": "2024",
+     "url": "https://arxiv.org/pdf/2403.06844",
+     "what_it_does": "equiangular 큐브스피어 패널 경계를 넘는 ghost cell이 이웃 패널의 내부 셀과 정렬되지 않는다는 점을 지적한다. 각 좌표선이 대원(great circle)이므로 이웃 패널의 격자선을 따라 '1차원 보간'만으로 ghost 값을 채울 수 있다고 보이고, 각위치 공식(식 80)을 제시한다. 같은 문제를 FV3에서는 'kinked grid'와 'duo-grid'로 부른다(검색 스니펫).",
+     "overlapping_chapters": [
+      "1",
+      "7"
+     ],
+     "overlap_level": "near-duplicate",
+     "key_difference_vs_bpcg": "b-pcg 7장의 '고스트 셀을 인접 면 첫 줄을 따라 정확한 위치에서 1D 보간' 해법과 그 근거(equiangular 격자선이 대원이라 ghost 줄이 이웃 면 중심선 위에 정확히 놓임)가 큐브스피어 대기역학 코어의 표준 기법과 같다. 수치해석에서는 이미 알려진 결과이므로 새 기여가 아니라 '인용하고 재현한 공학'으로 서술해야 한다.",
+     "evidence": "verified",
+     "hydrology_consistent": "unknown",
+     "spherical": "yes",
+     "volumetric_3d": "no"
+    },
+    {
+     "name": "Raistrick et al. — Infinigen: Infinite Photorealistic Worlds using Procedural Generation (CVPR 2023)",
+     "kind": "paper",
+     "year": "2023",
+     "url": "https://openaccess.thecvf.com/content/CVPR2023/papers/Raistrick_Infinite_Photorealistic_Worlds_Using_Procedural_Generation_CVPR_2023_paper.pdf",
+     "what_it_does": "프랙탈 노이즈와 시뮬레이터에서 얻은 SDF 요소를 조합해 동굴, 협곡, 해안, 수중, 떠 있는 섬 등의 지형을 만들고, 구면 좌표의 SDF 점에 marching cubes를 적용해 메시화한다(카메라 중심 구면 메셔). 오픈소스다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "SDF 조합 지형과 동굴은 오픈소스 수준으로 이미 흔하다. 구면 좌표는 카메라 기준 메싱 용도일 뿐 행성이 아니다. 수문 일관성, 지층 기준면, 지하수면이 없다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Zylann — Godot Voxel Tools (godot_voxel) smooth terrain / VoxelGeneratorGraph",
+     "kind": "oss-repo",
+     "year": "2019–2026",
+     "url": "https://voxel-tools.readthedocs.io/en/latest/smooth_terrain/",
+     "what_it_does": "SDF를 8비트 또는 16비트 고정소수점 정수로 저장한다(8비트는 ±10, 16비트는 ±500 범위). 표면에서 먼 값은 clamp(절단)하고 Transvoxel LOD를 쓴다. 절차 생성 문서에는 2D 노이즈 '웜'과 y 포물선 임계로 동굴을 만들고 SdfSmoothSubtract로 지형에서 빼는 예가 있다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "b-pcg의 int8 truncated SDF 저장, smooth subtract 동굴, Godot 통합은 기존 Godot 생태계의 표준 기능과 겹친다. 문서에 행성/구면 지원은 명시되어 있지 않고, 수문과 지질도 없다. 오히려 b-pcg가 이 플러그인을 엔진 단계에서 재사용할지 검토할 만하다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "No Man's Sky (Hello Games) — Continuous World Generation (GDC 2017, Innes McKendrick)",
+     "kind": "game",
+     "year": "2016–2017",
+     "url": "https://www.gdcvault.com/play/1024265/Continuous_World_Generation_in__No_Man_s_Sky_",
+     "what_it_does": "구형 행성 전체를 복셀 기반으로 생성하고 폴리곤화한다. 복셀 영역은 큐브 면 위 옥트리로 저장해 구로 투영하고(검색 스니펫), 여러 노이즈 층을 겹쳐 동굴과 오버행이 있는 지형을 만든다.",
+     "overlapping_chapters": [
+      "1",
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'구형 복셀 행성 + 동굴/오버행 + 우주에서 지표까지 연속 이동'은 상용 게임에서 이미 실현되었다. 다만 노이즈 위주라 강과 호수의 수문 일관성, 지층, 지하수면이 없다(공개 자료 기준).",
+     "evidence": "secondary",
+     "hydrology_consistent": "no",
+     "spherical": "yes",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Borg, Gain, Guérin, Peytavie, Cani, Galin, Cordonnier — Authoring Terrestrial Planets with Diffusion Models (CGF 45(2), Eurographics 2026)",
+     "kind": "paper",
+     "year": "2026",
+     "url": "https://github.com/Oliver-Borg/PlanetDiffusion",
+     "what_it_does": "지구와 화성 위성 자료로 학습한 diffusion 모델로 지구형 행성 전체를 생성한다. 사용자가 구 위에 고도, 피복, 기온, 강수를 스케치하며, '일관된 외해 유출(exorheic) 전 지구 하천망'으로 지형학적 타당성을 확보한다고 주장한다(검색 스니펫). 지구 반경급 행성 크기를 지원하는 코드가 공개되어 있다(README).",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "내 조사 범위(6~7장) 밖이지만 '행성 전체 + 일관된 하천망'이라는 상위 주장에 대한 가장 최근의 직접 위협이다. 하이트필드 기반이라 3D 복셀, 지층, 동굴, 지하수가 없고, 물리 정상상태 해가 아니라 학습 기반이다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "yes",
+     "spherical": "yes",
+     "volumetric_3d": "no"
+    },
+    {
+     "name": "Galin, Hubert-Brierre, Schott, Cani, Peytavie, Guérin — The PhaseTree: Multiphase Signed Distance Fields (ACM TOG 45(4), SIGGRAPH 2026)",
+     "kind": "paper",
+     "year": "2026",
+     "url": "https://github.com/Arches-Team/PhaseTree",
+     "what_it_does": "여러 phase(재질)를 하나의 construction tree로 결합한 다상(multiphase) SDF 표현이다. 다상 sphere tracing을 지원하며(README와 검색 스니펫), 논문 노트에 따르면 실험에 'Geology' 모델이 포함된다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "b-pcg의 sample(x)→(d, material, water) 삼중 출력은 다재질 SDF의 임시방편적 형태다. 최신 그래픽스는 이를 일반 표현으로 정식화했다. 지형과 수문 적용은 확인하지 못했다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "unknown",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Santamaría-Ibirika et al. — Procedural approach to volumetric terrain generation (The Visual Computer 30(9), 2014)",
+     "kind": "paper",
+     "year": "2014",
+     "url": "https://link.springer.com/article/10.1007/s00371-013-0909-y",
+     "what_it_does": "적층 재질 구조(stacked material structures)로 메모리를 줄이면서 층상 재질, 광맥, 지하 동굴, 재질 혼합, 지하 재질 흐름을 갖춘 볼륨 지형을 절차적으로 생성한다(초록 스니펫).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "층상 재질, 광맥, 동굴을 함께 다루는 볼륨 지형 선행 연구다. 수문 일관성, 지층 기준면, 구면은 확인되지 않는다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "unknown",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Franke & Müller — Procedural generation of 3D karst caves with speleothems (Computers & Graphics 102, 2022)",
+     "kind": "paper",
+     "year": "2022",
+     "url": "https://www.sciencedirect.com/science/article/abs/pii/S0097849321002132",
+     "what_it_does": "현상학적 모델로 실제 카르스트 동굴 유형별 통로 네트워크, 국소 단면, 벽면, 종유석 같은 동굴 생성물(speleothem)을 생성하고 인터랙티브로 탐험할 수 있게 한다(초록 스니펫).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "동굴 자체의 사실성은 b-pcg보다 훨씬 높다. 다만 지표 행성 수문과의 연동은 확인되지 않는다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "unknown",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Hartley, Mellado, Fiorio, Faraj — Flexible terrain erosion (The Visual Computer 2024)",
+     "kind": "paper",
+     "year": "2024",
+     "url": "https://www.lirmm.fr/~nfaraj/publications/flexible_erosion/2024_Flexible_Terrain_Erosion.pdf",
+     "what_it_does": "입자 기반 침식을 하이트필드, 복셀 격자, 재질 층, implicit 지형 같은 여러 표현에 공통으로 적용해, 2.5D와 3D 지형 모두에서 오버행과 공동을 만든다(초록에서 확인).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "3D 침식 시뮬레이션으로 볼륨 특징을 만드는 최근 연구다. b-pcg는 3D 침식을 시뮬레이션하지 않고 노이즈와 마스크로 근사하므로 접근이 반대다. 구면도, 지하수도 없다.",
+     "evidence": "verified",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Dey, Doig, Gatzidis — Procedural feature generation for volumetric terrains using voxel grammars (Entertainment Computing 2018)",
+     "kind": "paper",
+     "year": "2018",
+     "url": "https://eprints.bournemouth.ac.uk/31174/1/1-s2.0-S1875952117301349-main.pdf",
+     "what_it_does": "복셀 부분집합을 문법 기호로 삼는 규칙 기반 시스템으로 오버행과 동굴을 만든다. 동굴 형성은 지하수 침식을 흉내 낸다(본문에서 확인).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "반자동 저작 도구다. 지하수는 개념적 흉내일 뿐 지표 수문에서 유도한 지하수면이 아니다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Fan, Li, Miguez-Macho 2013 'Global Patterns of Groundwater Table Depth' (Science) / Haitjema & Mitchell-Bruker 2005 'Are water tables a subdued replica of the topography?' (Groundwater)",
+     "kind": "paper",
+     "year": "2005/2013",
+     "url": "https://science.sciencemag.org/content/339/6122/940",
+     "what_it_does": "Fan 2013은 기후, 지형, 해수면으로 구동한 지하수 모델과 관측을 결합해 전 지구 지하수면 깊이 지도를 만들었다. Haitjema 2005는 지하수면이 지형을 따르는지(topography-controlled), 함양량이 지배하는지(recharge-controlled)를 가르는 무차원 'water-table ratio' 기준을 제시했다(검색 스니펫).",
+     "overlapping_chapters": [
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "b-pcg의 지하수면 식(물까지 거리 × P_ref/P, 최대 깊이 제한, 라플라시안 평활)은 이 문헌들의 매우 단순화된 휴리스틱이다. 물리 모델이라고 주장하면 안 되며, 근거로 인용하고 water-table ratio 같은 기준으로 매개변수를 정당화하는 편이 좋다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "yes",
+     "spherical": "yes",
+     "volumetric_3d": "no"
+    },
+    {
+     "name": "draquel/VoxelWorlds (Unreal Engine 5 GPU voxel terrain)",
+     "kind": "hobby-tool",
+     "year": "2025–2026",
+     "url": "https://github.com/draquel/VoxelWorlds",
+     "what_it_does": "world mode로 무한 평면, 구형 행성, 섬을 지원하고, CPU/GPU 노이즈 라이브러리, 동굴, 광맥, 물 전용 메셔, 바이옴, LOD 이음매 봉합을 갖춘 밀도 기반 복셀 지형 시스템이다(README).",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'구형 복셀 행성 + 동굴 + 광맥 + 물'은 개인 오픈소스 수준에서도 구현되어 있다. 수문 일관성과 지층 기준면은 언급되지 않는다.",
+     "evidence": "verified",
+     "hydrology_consistent": "no",
+     "spherical": "yes",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Yang, Jain, Cordonnier, Cani, Wang, Benes — Arenite: A Physics-based Sandstone Simulator (ACM TOG 44(4), SIGGRAPH 2025)",
+     "kind": "paper",
+     "year": "2025",
+     "url": "https://jango6324.github.io/arenite/",
+     "what_it_does": "응력, 바람과 하천 침식, 퇴적을 입자/격자로 결합해 사암 아치, 알코브, 후두, 뷰트 같은 3D 구조를 물리 기반으로 생성한다(검색 스니펫).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "국소 규모의 물리 시뮬레이션이다. 2025년 기준 볼륨 지형의 최전선은 '물리 기반 3D 형상'이라는 점을 보여 준다.",
+     "evidence": "secondary",
+     "hydrology_consistent": "partial",
+     "spherical": "no",
+     "volumetric_3d": "yes"
+    },
+    {
+     "name": "Garcia, Richard, Olivares-Mendez — PLUME: Procedural Layer Underground Modeling Engine (arXiv 2508.20926, 2025)",
+     "kind": "paper",
+     "year": "2025",
+     "url": "https://arxiv.org/abs/2508.20926",
+     "what_it_does": "행성 탐사 로봇과 AI 학습용 3D 지하 환경을 절차적으로 생성하는 오픈소스 프레임워크다(초록).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "용도가 다르다(로보틱스 시험장). 초록만으로는 지층, 수문, 구면 여부를 확인할 수 없다.",
+     "evidence": "verified",
+     "hydrology_consistent": "unknown",
+     "spherical": "unknown",
+     "volumetric_3d": "yes"
+    }
+   ],
+   "closest_competitors": [
+    "Paris et al. 2019 'Terrain Amplification with Implicit 3D Features' (ACM TOG): 하이트필드를 SDF로 바꾸고 지층·습곡·단층 지질 트리를 두며, depression fill과 MFD 유량누적으로 구한 stream power로 하천 오버행을 배치하고 카르스트를 만든다. b-pcg 7장의 학술적 최근접 선행으로, 차이는 구면, 기준면(datum), 지하수면, 물 규칙 정도다.",
+    "Minecraft Java 1.18 noise router: 동굴 SDF 수식이 b-pcg와 같고(noodle/spaghetti_3d = max(|n1|,|n2|) − t), spaghetti_2d는 노이즈 고도 띠에 터널을 가두며, aquifer는 '지상 해수면 + 지하 국지 수위 + barrier'의 이원 물 규칙을 쓴다. b-pcg 7장의 산업계 최근접 선행으로, 차이는 수위와 고도 띠의 출처가 노이즈냐 수문 유도냐, 그리고 석회암/지층 조건이다.",
+    "Paris et al. 2021 'Synthesizing Geologically Coherent Cave Networks' (CGF) + KarstNSim (2024): 석회암, 지하수면(vadose/phreatic), inception horizon을 조건으로 유입부에서 용천까지 연결된 카르스트 SDF를 만든다. b-pcg의 '석회암 × 지하수면 근처' 동굴 마스크보다 지질학적으로 엄밀하다. 다만 지하수면은 사용자가 주는 평면이다. (6장 하천 폴리라인만 보면 Peytavie et al. 2019 'Procedural Riverscapes'가 거의 동일한 선행이다.)"
+   ],
+   "apparent_gaps": "조사한 범위(학술 CG, 지형학, 게임과 오픈소스)에서 다음 결합은 찾지 못했다. 검색이 완전하지 않으므로 '없다'가 아니라 '발견하지 못했다'로 표현해야 한다. (1) 지하수면, 동굴 발생 띠, 침수 동굴의 수위를 지표 수문 계산 결과(재충전으로 생긴 호수 수면, 하류 단조 하천 수면, 물까지의 측지거리, 강수)에서 유도해, 지표수와 지하수가 한 규칙으로 일관되는 3D 볼륨 지형. Paris 2019는 수문을 지표 침식 배치에만 쓰고, Paris 2021과 KarstNSim은 지하수면을 사용자 입력 평면으로 받는다. Minecraft는 노이즈 수위를 쓰고, Dwarf Fortress는 대수층 존재 여부만 배수/고도/물 근접성과 상관시킨다. (2) 지형계측학의 summit envelope(geophysical relief) 면을 PCG에서 지층 깊이 기준(datum)으로 써, 융기 후 침식된 지층이 계곡 벽에 순서대로 드러나게 하는 방식. 단, 절대 고도(반경) 기준 지층도 계곡에서 층을 순서대로 드러내므로, datum의 추가 가치(산체 아래 지층이 위로 휘는 효과, 판 구조 융기와의 정합)를 비교 실험으로 입증해야 한다. (3) 위 둘을 구 전체에서 하나의 닫힌 형식 점별 SDF 함수로 평가하고, Python 참조 구현과 엔진 사이의 golden test(1만 점, 1e-4 m), 회전 불변성, 고스트 보간 수렴 차수 검사로 검증하는 '검증 문화'. 게임 PCG에서는 드물지만 수치해석에서는 표준이다. 한편 구형 복셀 행성 자체(No Man's Sky, VoxelWorlds), 행성 규모의 일관된 하천망(Authoring Terrestrial Planets with Diffusion Models, EG 2026), 지역별 지층 스택(DF, TFC, Vintage Story)은 각각 이미 존재한다. 따라서 차별점은 개별 요소가 아니라 '수문적으로 일관된 지표–지하 결합을 구 전체 SDF로' 만든다는 통합에 한정해 주장하는 것이 안전하다.",
+   "novelty_threats": "다음은 새롭다고 주장하면 안 되며 반드시 인용해야 한다. (a) 동굴 수식 d_cave = max(|ν1|,|ν2|) − τ: Minecraft 1.18 noodle/spaghetti_3d와 같다. '고도 띠 안에 가두기'는 spaghetti_2d가 이미 하고, 수직 비등방 스케일도 Minecraft의 y_scale로 이미 쓰인다. (b) 하이트필드 + 3D 노이즈로 만든 오버행, smooth min/max 합성, SDF 동굴 빼기: Paris 2019, Infinigen, godot_voxel(SdfSmoothSubtract 노이즈 웜), No Man's Sky 등에서 보편적이다. (c) 3D 절차 지층과 습곡(warp), 단층(계단 불연속): Paris 2019 지질 construction tree와 사실상 같고, 다재질 층은 Arches 2009, Santamaría-Ibirika 2014, 게임의 지역별 지층 스택(DF, TFC, Vintage Story)이 선행한다. (d) 퇴적 기준면(max filter + blur, 기준면 − 지표 = 침식 두께): Small & Anderson 1998의 geophysical relief, Montgomery & Greenberg 2000의 봉우리 envelope 기준면과 같은 구성이다. (e) 6장 하천 폴리라인(합류점 분할, 스플라인, 유량 기반 폭/깊이, 하류 단조 수면 전파): Peytavie et al. 2019 Procedural Riverscapes와 거의 같다. Leopold-Maddock은 교과서 경험식이다. (f) 하천 stream power로 3D 하도와 오버행을 배치하는 것: Paris 2019. (g) '석회암 + 지하수면 근처 + 층리면을 따라 수평 확장'하는 동굴 논리: Paris 2021과 KarstNSim이 더 엄밀하게 한다(연결성, 유입부/용천, 통로 유형). b-pcg의 노이즈 동굴은 연결성이 없어 오히려 열위다. (h) 지상/지하 이원 물 규칙: Minecraft aquifer(전역 해수면 규칙 + 국지 수위 + barrier)와 구조가 같다. (i) int8 절단 SDF 저장: godot_voxel의 8/16비트 고정소수점 clamp SDF와 같은 표준 기법이다. (j) 큐브스피어 면 경계 고스트 셀을 이웃 면 격자선(대원)을 따라 1D 보간하는 해법과, 단순 복사(kinked grid)가 1차 오차를 낸다는 진단: ExoCubed(2024)와 FV3 duo-grid 등 큐브스피어 대기 코어의 표준 결과다. (k) 지하수면 휴리스틱: Fan 2013, Haitjema 2005 같은 수문지질 모델의 단순화일 뿐이다. 결론적으로 7장은 '알려진 부품의 재조합'이고, 주장 가능한 기여는 부품들의 입력을 지표 수문 정상해에서 일관되게 유도한다는 통합 설계와 그 검증뿐이다.",
+   "summary": "6~7장(파생 맵, 볼륨 SDF 샘플 함수)을 선행 연구와 대조한 결과, 개별 구성요소는 거의 전부 선행이 있다. 학술 쪽에서는 Paris et al. 2019(TOG)가 하이트필드→SDF 변환, 지층·습곡·단층 지질 트리, MFD 유량누적 기반 stream power로 정한 하천 오버행, 카르스트까지 다뤄 7장의 최근접 선행이다. Paris et al. 2021과 KarstNSim은 석회암, 지하수면, inception horizon 조건의 동굴을 b-pcg보다 엄밀하게(연결된 sink→spring 네트워크로) 만든다. Peytavie et al. 2019 'Procedural Riverscapes'는 6장의 하천 폴리라인(합류점 분할, 스플라인, 유량 기반 단면, 하류 단조 수면)과 거의 같다. 산업 쪽에서는 Minecraft 1.18 바닐라 데이터를 직접 풀어 본 결과 noodle/spaghetti_3d가 b-pcg의 동굴 수식 max(|ν1|,|ν2|) − τ와 같고, spaghetti_2d는 '노이즈 고도 띠 안의 터널', aquifer는 '지상 해수면 + 지하 국지 수위'라는 같은 구조의 물 규칙이다. 퇴적 기준면은 지형계측학의 summit envelope / geophysical relief(Small & Anderson 1998, Montgomery & Greenberg 2000)와 같은 구성이다. 고스트 셀 1D 보간은 큐브스피어 대기 코어(ExoCubed 2024, FV3 duo-grid)의 표준 해법이고, int8 절단 SDF는 godot_voxel의 표준 기능이다. Dwarf Fortress, TerraFirmaCraft, Vintage Story는 지역별 지층 스택과 수계 상관 대수층을, No Man's Sky와 VoxelWorlds는 구형 복셀 행성을, EG 2026 'Authoring Terrestrial Planets with Diffusion Models'는 행성 규모의 일관된 하천망을 이미 보여 준다. 남는 차별점은 '지표 수문 정상해에서 지하수면, 동굴 띠, 침수 동굴 수위, 지층 기준면을 일관되게 유도해 구 전체에서 하나의 점별 SDF로 평가하고 정량 검증한다'는 통합뿐이며, 이 결합은 조사 범위에서 발견하지 못했다(검색이 완전하지 않으므로 신중하게 주장해야 함). 캡스톤 피치에서는 위 선행들을 명시적으로 인용하고, 다음을 측정 가능한 지표로 제시하는 것이 타당하다. 첫째, 지표–지하 물 일관성: 침수 동굴 수위와 z_gw의 일치, 용천 위치와 지하수면–지표 교선의 일치. 둘째, datum 기반과 절대 반경 기반 지층의 비교. 셋째, 동굴 연결성. 노이즈 동굴의 연결성 부재는 Paris 2021 대비 약점이므로, 지하수면과 지표가 만나는 곳에 입구나 용천을 보장하는 보완이 필요하다."
+  }
+ },
+ {
+  "key": "games-and-tools",
+  "result": {
+   "findings": [
+    {
+     "name": "Veloren (world crate: sim/erosion.rs)",
+     "kind": "game / oss-repo",
+     "year": "2018~현재 (침식 시스템 v0.5.0, 2020)",
+     "url": "https://gitlab.com/veloren/veloren/-/raw/master/world/src/sim/erosion.rs",
+     "what_it_does": "Rust 오픈소스 복셀 RPG. 시작할 때 세계 전체를 저해상도로 미리 생성하고(dh/dt = uplift − k·A^m·S^n, m=0.4, n=1) Cordonnier 2016 / Braun-Willett 방식의 암시적 하천력(stream power) 침식과 융기를 RMSE 수렴까지 최대 99회 반복한다. 다중 수신 셀(mrec) 흐름, Planchon-Darboux 채움과 호수 연결, fastscapelib에서 가져온 사면 확산·퇴적물 수송, 3D 노이즈 기반 암석 강도로 정한 최대 경사(15~60°, 임계경사 역할), 토양 생성(기반암 'basement'과 지표 분리), Manning식 기반 하천 폭·깊이·유속을 쓴다. 이후 청크를 보간과 노이즈로 채워 복셀 세계를 만들고, 동굴은 'way' 시스템으로 낸다.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "5",
+      "6",
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "평면 직사각 지도라 구·큐브면 이음새 문제가 없다. 정상상태를 직접 풀지 않고 시간 적분으로 접근한다. 파라미터는 손으로 조정했고 DEM에서 학습하지 않는다. 강수는 상수 유량(습도 대용)이다(코드 FIXME). 기준면(datum) 기반 지층, 지하수면, 석회암 동굴 마스크는 없다. 그래도 '전역 2D 물리 침식 지도에서 3D 복셀 세계로'라는 B-PCG의 핵심 구조를 이미 출시된 게임에서 구현하고 있다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "yes (강이 늘 하류로 흘러 바다/호수에 닿음, 호수 있음, 물리 기반 침식)"
+    },
+    {
+     "name": "Tzathas, Gailleton, Steer, Cordonnier — Physically-based analytical erosion for fast terrain generation (Eurographics 2024, CGF 43(2)) + Steer 2021",
+     "kind": "paper",
+     "year": "2024 (Steer 2021 인용)",
+     "url": "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf",
+     "what_it_does": "하천력 법칙의 해석해로 시간 적분 없이 임의 시각 t의 지형과 융기-침식 정상상태를 바로 계산한다. 셀을 경계(출구)에서 시작해 하천망을 따라 상류 방향으로 정렬한 뒤 고도를 계산한다. 하천망이 고도에 의존하므로 '하천망 계산과 고도 계산을 번갈아 하는 고정점 반복'(Steer 2021)을 쓰고, multigrid로 수렴을 가속한다. 능선 근처의 무한 경사 특이점은 산사태·사면 과정(임계경사류 근사)으로 처리한다.",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "near-duplicate",
+     "key_difference_vs_bpcg": "B-PCG 4장의 핵심(바다에서 상류로 z_c = z_r + d·min(k_s Q^-θ, S_crit)를 적분하고 수신 셀이 수렴할 때까지 흐름 경로 재계산을 반복)은 이 논문과 Steer 2021의 고정점 알고리즘과 사실상 같은 아이디어다. 차이는 큐브스피어 그래프에 이식한 점, MFD 변형(감쇠 반복 후 고정 가중치 적분), 수신 셀 히스테리시스, DEM 학습 k_s 정도다. 이 논문은 평면 높이맵만 다룬다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (하천망 기반)"
+    },
+    {
+     "name": "World Orogen (raguilar011095/planet_heightmap_generation, orogen.studio)",
+     "kind": "oss-repo / hobby-tool",
+     "year": "2026 (2026-02 생성, 2026-09 활발히 업데이트, GPL-3.0, 별 105개)",
+     "url": "https://github.com/raguilar011095/planet_heightmap_generation",
+     "what_it_does": "브라우저(JS)에서 도는 구형 행성 생성기. 피보나치 구와 Voronoi 셀 위에 판을 만들고, 수렴·발산·변환 경계를 분류하고 섭입 모델과 super-plate를 둔다. Barnes priority-flood로 모든 육지가 바다로 배수되게 하고(협곡 깎기 포함), 암시적 하천력 침식(Braun-Willett 방식, 퇴적 포함), 열침식, 빙하침식(피오르드, U자곡)을 적용한다. ITCZ, 전선, 지형성 강수, 비그늘 등 6가지 메커니즘을 쓰는 강수·바람 모델과 Köppen 기후를 갖추고, 최대 65536px 등장방형 맵으로 내보낸다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "B-PCG의 '2D 지도 공장'(1·2·5장)과 겹치는 부분이 가장 많다. 차이는 불규칙 피보나치-Voronoi 격자라 큐브면 이음새 문제가 처음부터 없다는 점, 정상상태 직접 풀이가 아닌 시간 적분 침식, DEM 파라미터 학습 없음이다. 3D 복셀/SDF, 지층, 동굴, 지하수, 엔진 통합도 전혀 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (priority-flood로 모든 육지가 바다로 배수됨)"
+    },
+    {
+     "name": "Cordonnier et al. — Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion (Eurographics 2016)",
+     "kind": "paper",
+     "year": "2016",
+     "url": "https://onlinelibrary.wiley.com/doi/10.1111/cgf.12820",
+     "what_it_does": "융기 지도와 하천력 침식으로 대규모 산맥 지형을 생성한다. Veloren 코드가 직접 인용하는 원 논문이다.",
+     "overlapping_chapters": [
+      "4",
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "'융기 지도 입력에서 하천력으로 지형 생성'이라는 5→4장 구조의 원형이다. 평면이고 시간 적분 방식이다. B-PCG는 이를 구 위로 옮기고 정상상태를 직접 푼다.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Undiscovered Worlds (Jonathan Hill)",
+     "kind": "hobby-tool / oss-repo",
+     "year": "2019~2025 (구형 버전 2023~, GPL-3.0)",
+     "url": "https://undiscoveredworlds.blogspot.com/2023/09/another-decision-point.html",
+     "what_it_does": "지구형 행성의 지형, 기후, 강, 호수를 생성하는 C++ 도구. 신버전은 행성을 큐브스피어 6면(면당 16×16 영역)으로 표현한다. 2025년에는 월별 유량 추적, 샘(spring) 배치, 호수와 하천의 구면 이식이 진행됐다. 산지는 diamond-square 등 휴리스틱으로 만들고, 2025-12 기준으로 수력 침식은 아직 '검토 중'이다. 저자는 큐브 모서리에 2D 지역 지도를 붙이면 산과 강이 부자연스럽게 늘어난다고 직접 적었다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "큐브스피어 위에서 강과 호수를 만든다는 점은 같지만 휴리스틱이고 물리 기반 침식이 없다. 면 이음새 왜곡을 문제로 인식하지만 정량 검증은 없다. 3D/복셀이 없다. 다만 'cube-sphere의 모서리 왜곡이 강·산에 보인다'는 B-PCG 문제 정의를 뒷받침하는 1차 증언으로 쓸 수 있다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (강·호수·유량은 있으나 침식이 지형을 만들지 않음)"
+    },
+    {
+     "name": "Experilous Planet Generator (Andy Gainey)",
+     "kind": "hobby-tool / oss-repo",
+     "year": "2014",
+     "url": "https://github.com/againey/planet-generator",
+     "what_it_does": "세분한 정이십면체의 쌍대(육각 타일) 위에서 판을 무작위 flood-fill로 만들고, 판마다 행성 중심을 지나는 회전축과 각속도(오일러 극 회전), 자전, 해양/대륙 속성을 준다. 경계의 상대 운동을 수직(압력)과 평행(전단) 성분으로 나눠 충돌, 섭입 등을 분류하고, 경계에서 판 중심까지 거리 기반으로 고도를 보간한다. 강과 침식은 없다.",
+     "overlapping_chapters": [
+      "5"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "5장의 '오일러 극 강체 회전 속도, 수렴·발산·변환 분류, 경계까지 거리 기반 융기'는 이미 2014년 취미 도구에서 구현됐다. B-PCG는 이를 침식 입력(융기 U, k_s)으로 쓴다는 점만 다르다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no (강 없음)"
+    },
+    {
+     "name": "Red Blob Games — Procedural map generation on a sphere (1843-planet-generation)",
+     "kind": "talk/blog / oss-repo",
+     "year": "2018",
+     "url": "https://www.redblobgames.com/x/1843-planet-generation/",
+     "what_it_does": "구면 위 점에 지터를 준 Delaunay/Voronoi, 무작위 확장 방식의 판 생성, 판 운동 벡터로 경계 분류(가까워지면 산맥), 세 개의 거리장 보간으로 고도를 만들고, 그래프 기반 하천 코드를 그대로 써서 하강 방향 강을 만든다. 저자 스스로 결과에 불만이 있고 코드에 버그가 있다고 밝혔다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "구 위 판, 경계, 하강 하천의 기본 골격은 같지만 침식, 물리 파라미터, 3D가 없다. 교육용 실험이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (하강 하천은 있으나 지형 형성과 연동되지 않음)"
+    },
+    {
+     "name": "Red Blob Games — mapgen4",
+     "kind": "hobby-tool",
+     "year": "2018~",
+     "url": "https://www.redblobgames.com/maps/mapgen4/",
+     "what_it_does": "사용자가 산, 계곡, 바다를 칠하면 증발, 바람, 강수를 시뮬레이션해 바이옴과 강을 만드는 평면 지도 생성기.",
+     "overlapping_chapters": [
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면이고 침식 시뮬레이션이 명시되어 있지 않으며 2D 지도용이다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "WorldEngine (Mindwerks) + plate-tectonics(platec)",
+     "kind": "oss-repo",
+     "year": "2015~ (v0.20.0, 현재도 유지보수)",
+     "url": "https://github.com/Mindwerks/worldengine",
+     "what_it_does": "Python 세계 생성기. platec 판 시뮬레이션으로 산맥을 만들고, 위도와 비그늘을 반영한 강수, 침식, 습도, 투수성, Holdridge 생명대 바이옴을 계산해 지도 이미지로 출력한다.",
+     "overlapping_chapters": [
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 지도(구 아님)이고 침식은 단순 모델이다. 정상상태 솔버, 3D, DEM 학습이 없다. 'Python으로 판, 침식, 기후 세계 생성'이라는 포지셔닝은 이미 있다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Azgaar Fantasy Map Generator",
+     "kind": "hobby-tool / oss-repo",
+     "year": "2017~",
+     "url": "https://azgaar.wordpress.com/2017/05/08/river-systems/",
+     "what_it_does": "평면 Voronoi 지도에서 바람 기반 강수와 비그늘을 만들고, 웅덩이를 메운 뒤 강수를 가장 낮은 이웃으로 흘려 플럭스를 누적한다. 임계값을 넘는 셀을 강으로 정하고, 유량에 따라 폭을 늘리며, 호수 증발(Penman 근사)도 계산한다.",
+     "overlapping_chapters": [
+      "2",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 판타지 지도이고 지형 형성(침식)과 하천이 분리되어 있다. 3D가 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (바다로 흐르지만 지형은 휴리스틱)"
+    },
+    {
+     "name": "Dwarf Fortress (world generation)",
+     "kind": "game",
+     "year": "2006~",
+     "url": "https://dwarffortresswiki.org/index.php/World_generation",
+     "what_it_does": "고도, 강수, 배수, 화산성 필드를 프랙탈로 채운다. 산 가장자리에서 '테스트 강'을 흘려 바다에 닿지 못하면 고도장에 수로를 깎고, 강을 따라 호수를 키우며, 비그늘과 지형성 강수를 조정한다. 지하는 토양, 퇴적암, 변성암, 관입 화성암 순의 지층과 토양·퇴적층 대수층(aquifer), 동굴층(cavern), 마그마 바다를 생성한다.",
+     "overlapping_chapters": [
+      "2",
+      "5",
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 세계이고 침식은 휴리스틱(경로 탐색 강이 깎음)이다. 지층은 깊이 순 배치일 뿐 지형 기준면을 따라 계곡 벽에 노출되는 방식이 아니다. 그래도 '강, 호수, 지층, 대수층, 동굴이 함께 있는 3D 세계'라는 개념은 오래전부터 게임에 있었다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes (z-level 3D 지하)",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Minecraft Java 1.18+ (noise caves, aquifers, rivers)",
+     "kind": "game",
+     "year": "2021~",
+     "url": "https://raw.githubusercontent.com/misode/mcmeta/data/data/minecraft/worldgen/density_function/overworld/caves/noodle.json",
+     "what_it_does": "noodle 동굴의 밀도 함수는 max(|noodle_ridge_a|, |noodle_ridge_b|)×1.5 + 두께 항이다. 즉 두 3D 노이즈의 영점 집합 교선을 터널로 쓴다(spaghetti 동굴도 유사). 대수층(aquifer)은 16×12×16 셀마다 노이즈로 국소 수위와 유체 종류(물/용암)를 정해 동굴을 채운다. 강은 PV(peaks-valleys) 값이 가장 낮은 곳에 놓는 바이옴이고, 해수면 높이의 정지 수면이며 흐름이나 수원이 없다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "7장의 '두 노이즈 영점 집합의 교선으로 만드는 동굴'은 Minecraft noodle 동굴과 같은 수학이다. B-PCG가 더한 것은 지층 정렬과 수직 신장 좌표, 석회암과 지하수면 근처 마스크뿐이다. '하나의 물 규칙'은 aquifer와 개념적으로 겹치지만, Minecraft는 노이즈 수위를 쓰고 B-PCG는 물리적 지하수면을 쓴다. 강은 수문학적으로 일관되지 않다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no (강은 노이즈 바이옴, 정지수)"
+    },
+    {
+     "name": "Vintage Story (rock strata / geologic provinces)",
+     "kind": "game",
+     "year": "2016~ (1.22.x)",
+     "url": "https://wiki.vintagestory.at/Rock",
+     "what_it_does": "지질 구역(Shield, Platform, Orogen, Basin, LIP, Extended Crust)마다 화산암, 퇴적암, 변성암, 화성암 층의 최대 두께를 정하고, 보통 3~4개 암석층을 퇴적암, 변성암, 화성암 순으로 쌓는다. 왜곡 때문에 순서가 뒤집히기도 한다. 바닐라 강은 '연기'됐다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "지층이 절대 깊이 기준이라 계곡 벽에 순서대로 노출되는 '기준면(datum) 인덱싱'이 아니다. 수문과 연동되지 않는다. 바닐라에는 강이 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no (바닐라 강 없음)"
+    },
+    {
+     "name": "Algernon's Watersheds (Vintage Story 모드)",
+     "kind": "hobby-tool (game mod)",
+     "year": "2026 (2026-02 첫 릴리스, v7.0.4 2026-08, 다운로드 18만 이상)",
+     "url": "https://mods.vintagestory.at/algernonswatersheds",
+     "what_it_does": "세계 위에 흩어진 점을 샘플링해 지형을 싸게 추상화하고, 실제 지형 경사를 따르는 강우 흐름 경로를 시뮬레이션해 높이를 반영한 하천계(사행, 망상, 직류)를 만든다. 침식 필터로 해안 사면과 능선·골짜기를 깎고, 누적 유량 기반 지하수 용출(seepage)을 만든다. 폭포, 우각호, 여울, 포인트바, 분기 선상지를 생성하고 하천은 바다에 닿는다.",
+     "overlapping_chapters": [
+      "2",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 무한 세계의 국소 근사이고 하천력, 융기, 정상상태가 없다. 그래도 '복셀 게임에 지형을 인식하는 하천과 지하수를 넣는다'는 목표는 2026년 커뮤니티 모드에서 이미 인기를 얻고 있다. 수요의 증거이자 경쟁작이다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "yes (하천이 바다에 도달, 지하수 포함, 단 국소 근사)"
+    },
+    {
+     "name": "TerraFirmaCraft (TFC-TNG) + alcatrazEscapee 'Why Are Rivers So Complicated?'",
+     "kind": "game mod / talk/blog",
+     "year": "2021~",
+     "url": "https://gist.github.com/alcatrazEscapee/8bd54572c8d3fe070d1ed92704dd6aed",
+     "what_it_does": "Minecraft처럼 청크 단위로 무한 생성하는 세계에서는 하류(바다)를 알려면 무한한 맥락이 필요해서 사실적인 강을 만들 수 없다는 문제를 설명한다. TFC는 세계를 유역(watershed)으로 분할하고 유역마다 하구에서 수원 방향으로 강을 만든 뒤 중점 이분 프랙탈로 곡선을 낸다. 대신 큰 스케일에서는 높이를 반영하지 못한다. 판 구조와 암석층도 갖고 있다.",
+     "overlapping_chapters": [
+      "2",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "국소성 제약 아래의 근사다. B-PCG는 전역 2D 사전 계산으로 이 제약을 피한다(Veloren, Voxel Farm과 같은 해법). '왜 필요한가'의 기술적 근거 자료로 쓸 수 있다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "partial (바다로 흐르지만 높이 미반영)"
+    },
+    {
+     "name": "No Man's Sky (Hello Games) — GDC 2017 'Continuous World Generation' (Innes McKendrick), 'Building Worlds Using Math(s)' (Sean Murray)",
+     "kind": "game / talk",
+     "year": "2016~2025 (Worlds Part I 2024, Part II 2025)",
+     "url": "https://steamcommunity.com/app/275850/discussions/0/4423184558849920168/",
+     "what_it_does": "복셀 기반 생성, 다각형화, 텍스처링, 배치로 이어지는 파이프라인이다. 복셀 영역은 큐브 위 옥트리로 저장해 구로 투영한다. 지형은 'Uber noise'(도메인 워핑, 경사 침식 근사, 진폭 감쇠 등)로 만든다. 2024년 Steam 토론에 따르면 강이 없고, 수면은 행성 중심에서 약간 어긋난 하나의 구면 수위다. Worlds Part II(2025)는 지형 다양성과 수 km 깊이의 바다를 추가했지만 패치 노트에 강은 언급되지 않는다.",
+     "overlapping_chapters": [
+      "1",
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "구형 복셀 행성, 동굴, 오버행, 우주에서 지면까지 이어지는 렌더링(1·7·8장)은 이미 대규모로 출시됐다. 반면 지형은 노이즈 기반이고 흐르는 강, 유역, 지층 일관성이 없다. B-PCG가 메우려는 공백이 바로 이 부분이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no (강 없음, 단일 구면 수위)"
+    },
+    {
+     "name": "Light No Fire (Hello Games)",
+     "kind": "game (미출시)",
+     "year": "2023 발표, 출시일 미정",
+     "url": "https://en.wikipedia.org/wiki/Light_No_Fire",
+     "what_it_does": "지구 크기의 단일 절차적 행성을 모든 플레이어가 공유한다. 홍보 문구에 거대한 산, 강, 협곡, 대륙, 바다가 언급된다.",
+     "overlapping_chapters": [
+      "1",
+      "5",
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "기술 세부(강이 물리적으로 일관된지)는 공개되지 않았다. 출시되면 '구형 행성 + 강'이라는 점에서 가장 직접적인 상용 경쟁작이 될 수 있어 지켜볼 필요가 있다.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "unknown",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "Space Engineers 2 (VRAGE3, Keen Software House)",
+     "kind": "game",
+     "year": "2025~2026 (VS2 행성 2025-12, VS3 물 2026 예정)",
+     "url": "https://blog.marekrosa.org/2025/12/space-engineers-2-alpha-vs2-planets-survival-foundations-live-now/",
+     "what_it_does": "행성 높이맵 위에 오버행과 바위를 작은 복셀 저장소로 배치해 2.5D를 넘는 '완전 3D' 지표를 만든다. 동굴은 Houdini 19로 제작한 메시를 복셀화해 지형에서 빼는 방식이고, 5가지 유형이 있다. 바다, 강, 호수 같은 체적 물은 VS3(2026)에 추가될 예정이다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "작가가 저작한 높이맵과 Houdini 동굴에 기반하므로 물리 기반 절차 생성이 아니다. 강은 아직 없다. 상용 대작도 행성의 강과 물을 뒤로 미루고 있다는 근거가 된다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "unknown (물 미구현)"
+    },
+    {
+     "name": "Space Engineers (1)",
+     "kind": "game",
+     "year": "2013~",
+     "url": "https://steamcommunity.com/app/244850/discussions/6/1483235412201125852/",
+     "what_it_does": "큐브맵 6면 높이맵과 바이옴/재질 맵으로 정의한 복셀 행성이다. 모딩 커뮤니티에 따르면 강을 높이맵에 그리려면 2048px 이상 해상도가 필요하다. 재질은 지표 아래 깊이 규칙으로 배치한다(기억).",
+     "overlapping_chapters": [
+      "1",
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "행성은 수작업 또는 외부 도구로 만든 높이맵이고 수문 시뮬레이션이 없다.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Astroneer (System Era)",
+     "kind": "game",
+     "year": "2016~",
+     "url": "https://www.gamedeveloper.com/design/what-i-astroneer-i-s-devs-learned-while-leaving-early-access",
+     "what_it_does": "밀도 복셀과 마칭 큐브로 만드는 변형 가능한 행성이다. 2세대 지형 시스템은 핵까지 내용을 채우고 이색적인 형태와 바이옴을 만든다. 초기 버전은 지표와 동굴층 하나 정도만 가능했다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "노이즈/디자인 기반 SDF 행성이고 수문이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no (확인된 강 없음)"
+    },
+    {
+     "name": "Planet Nomads (Sandy engine)",
+     "kind": "game",
+     "year": "2015~2019",
+     "url": "https://www.gamedeveloper.com/programming/bending-unity-to-carry-spherical-voxel-planets-in-planet-nomads",
+     "what_it_does": "지름 120 km의 구형 복셀 행성이다. 변형 마칭 큐브, 구면에서 보간한 3D 노이즈, 옥트리 청크(16 m~128 km)를 쓰고, R*-tree와 SQLite로 변경분을 저장한다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "순수 노이즈 기반이고 수문, 지층, 침식이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Dual Universe (Novaquark)",
+     "kind": "game",
+     "year": "2016~",
+     "url": "https://dualuniverse.fandom.com/wiki/Procedural_Generation",
+     "what_it_does": "행성의 복셀을 접근할 때 알고리즘으로 실시간 생성하고 변경분만 서버에 저장한다. Dual Contouring으로 매끄러운 지형을 만든다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "노이즈 기반이고 강이 없다(위키는 '기껏해야 국소 복셀 흐름'이라고 언급).",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Starbase (Frozenbyte)",
+     "kind": "game",
+     "year": "2019 발표 / 2021 EA",
+     "url": "https://www.frozenbyte.com/2019/05/starbase-a-new-sci-fi-mmo-game-by-frozenbyte-revealed/",
+     "what_it_does": "자체 엔진으로 복셀과 버텍스를 혼합한 파괴 가능 환경이다. 행성과 위성이 있다.",
+     "overlapping_chapters": [
+      "8"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "지형 생성 기법은 공개된 정보가 거의 없고 수문 관련 기능도 확인되지 않는다.",
+     "evidence": "secondary",
+     "spherical": "unknown",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "Empyrion – Galactic Survival",
+     "kind": "game",
+     "year": "2015~",
+     "url": "https://www.moddb.com/games/empyrion-galactic-survival/news/alpha-80-out-now",
+     "what_it_does": "복셀 지형 playfield, 최대 7개 지하층, 자체 Solar System Generator와 Terrain/Biome Generator를 갖췄다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "행성은 진짜 구가 아닌 감싼(wrap) playfield로 알려져 있고(기억), 수문 시뮬레이션이 없다.",
+     "evidence": "secondary",
+     "spherical": "no (기억: wrap playfield)",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Seed of Andromeda (Regrowth Studios, SoACode-Public)",
+     "kind": "game / oss-repo",
+     "year": "2014~2016 (MIT 공개)",
+     "url": "https://voxel.wiki/wiki/round-planets/",
+     "what_it_does": "'부풀린 큐브'(면마다 독립된 복셀 격자 6개를 정규화) 방식의 구형 복셀 행성이다. 모서리 왜곡을 감수한 근사이며, 절차적 지형과 셀룰러 오토마타 물리를 쓴다.",
+     "overlapping_chapters": [
+      "1",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "큐브스피어 복셀 행성은 이미 2010년대 중반 오픈소스로 있었다. voxel.wiki는 왜곡 없는 구형 격자가 수학적으로 불가능하다고 정리한다. 수문은 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Zylann godot_voxel + solar_system_demo / Godot Large World Coordinates",
+     "kind": "oss-repo",
+     "year": "2021~2025 (데모 마지막 푸시 2025-11)",
+     "url": "https://github.com/Zylann/solar_system_demo",
+     "what_it_does": "Godot 4와 Voxel Tools로 만든 우주 게임 데모. 절차 생성한 복셀 행성(반지름 1~2 km, 대형 모드 10~20 km)에 협곡과 지하 동굴계가 있고, 편집 가능하며, 원점 이동(origin shifting)과 우주-지면 비행을 지원한다. Godot 자체도 precision=double 빌드와 단정밀도로 배정밀도를 흉내 내는 렌더링을 제공한다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "Godot에서 SDF 복셀 행성, 동굴, 대좌표계를 쓰는 8장의 엔진 측면은 이미 공개 데모와 엔진 기능으로 존재한다. 강과 수문은 없다. B-PCG의 차별점은 엔진이 아니라 맵 번들의 내용(수문 일관성)에 있다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "SpaceEngine (Vladimir Romanyuk)",
+     "kind": "commercial-tool / game",
+     "year": "2010~ (지형 엔진 업그레이드 블로그 2017)",
+     "url": "https://spaceengine.org/news/blog171120/",
+     "what_it_does": "우주 전체 규모의 절차적 행성 렌더러. 2017년 블로그에 따르면 사막 행성에 강과 열곡(rift)을 추가했다(커뮤니티 모드 기반을 개조). 생성 방식(흐름 기반인지)은 공개하지 않았다.",
+     "overlapping_chapters": [
+      "1",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "셰이더와 노이즈 기반 지형으로 보이며, 강이 유역과 배수 일관성을 가진다는 근거가 없다. 3D 복셀이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown (노이즈형 강으로 추정)"
+    },
+    {
+     "name": "Outerra",
+     "kind": "commercial-tool",
+     "year": "2008~",
+     "url": "https://outerra.blogspot.com/2008/07/intro.html",
+     "what_it_does": "실제 지구 DEM(약 150 m)을 GPU 프랙탈로 cm 단위까지 정밀화하는 행성 렌더링 엔진이다. 2008년 기준으로 강과 수역 렌더링은 향후 과제였다.",
+     "overlapping_chapters": [
+      "8"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "실측 데이터를 정밀화해 렌더링하는 엔진이고 가상 행성의 수문을 생성하지 않는다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "n/a (실측 데이터)"
+    },
+    {
+     "name": "Proland (Bruneton, Neyret, INRIA) + Yu et al. 2009 강 애니메이션",
+     "kind": "oss-repo / paper",
+     "year": "2009~ (BSD-3)",
+     "url": "https://proland.inrialpes.fr/",
+     "what_it_does": "행성 규모까지 다해상도 지형을 실시간 렌더링하는 C++/OpenGL 라이브러리. 지형은 디스크 데이터, 절차 생성, 또는 혼합이다. 강과 도로는 벡터 데이터로 지형에 통합하고, 강 흐름장은 경계 조건으로 계산해 애니메이션한다.",
+     "overlapping_chapters": [
+      "6",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "강 경로는 입력(벡터)이지 생성하지 않는다. 6장 하천 폴리라인과 수면 렌더링에 참고할 만하다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "n/a (입력 기반)"
+    },
+    {
+     "name": "Kerbal Space Program 1/2 (PQS, CBT)",
+     "kind": "game",
+     "year": "2011~2024",
+     "url": "https://kopernicus.github.io/wiki/content/PQSMods/PQSMods.html",
+     "what_it_does": "Procedural Quad Sphere에 높이맵과 노이즈 PQSMod(VertexSimplexHeight 등)를 순서대로 적용해 행성을 만든다. KSP2는 CBT(Concurrent Binary Tree) 지형을 계획했지만 스튜디오가 2024년 해체됐다.",
+     "overlapping_chapters": [
+      "1",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "쿼드스피어 위 높이맵과 노이즈이고 강, 수문, 3D가 없다.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Star Citizen Planet Tech v4/v5 (CIG)",
+     "kind": "game",
+     "year": "v5 공개 CitizenCon 2023, 첫 적용 Nyx I / Alpha 4.11(2026)",
+     "url": "https://starcitizen.tools/Planet_Tech_v5",
+     "what_it_does": "Genesis 데이터 풀(v4의 온도·습도에 지질, 토양 종류·깊이, 영양분을 더함)로 텍스처, 식생, 암석 배치를 정한다. 암석과 잔해 배치는 침식 시뮬레이션에서 파생한다. 강은 초기 v5 릴리스에 포함되지 않는다는 보도가 있고, 커뮤니티에 'Planet Tech V5에서도 제대로 된 강과 수계가 핵심 기술로 빠져 있다'는 비판 스레드가 있다.",
+     "overlapping_chapters": [
+      "5",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "지질과 토양 데이터를 쓰지만 아티스트 워크플로 중심이고 강이 없다. 대형 상용 프로젝트도 행성 강을 구현하지 못했다는 'why' 근거가 된다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "unknown",
+     "hydrology_consistent": "no (강 미구현)"
+    },
+    {
+     "name": "Starfield (Bethesda)",
+     "kind": "game",
+     "year": "2023",
+     "url": "https://screenrant.com/starfield-glitch-no-rivers-lakes/",
+     "what_it_does": "약 1 km 크기의 절차적 타일을 행성에 감싸 착륙 지점 맵을 만든다. 탐사 가능한 행성 대부분에 수역이 매우 드물고, 생성 실패로 '공중에 뜬 강' 글리치가 보고됐다(2024).",
+     "overlapping_chapters": [
+      "5"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "타일 조합 방식이라 전역 수문 일관성이 없다. 노이즈/타일 생성의 한계를 보여 주는 비판 사례다.",
+     "evidence": "verified",
+     "spherical": "partial (타일을 구에 감쌈)",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Gaea 2 (QuadSpinner)",
+     "kind": "commercial-tool",
+     "year": "2024~2025 (2.0, 2.2)",
+     "url": "https://docs.quadspinner.com/Reference/Water/Rivers.html",
+     "what_it_does": "노드 기반 높이장 지형 툴. Erosion_2(수력, 열, 중력)를 제공하고, 2.2에서 선택적 강수(마스크, 경사·고도·비그늘 제어)가 추가됐다. Rivers 노드는 지형을 미세하게 변형해 하천이 끊기지 않고 하강하도록 경로를 만들며 headwater 마스크와 downcutting을 지원한다.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 타일 높이장이고 구를 지원하지 않는다(문서상 언급 없음). 아티스트용 시각 품질 중심이며 물리 파라미터 검증은 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (Rivers 노드는 하강 경로 보장)"
+    },
+    {
+     "name": "World Machine (Dragontail Peak 2026)",
+     "kind": "commercial-tool",
+     "year": "2026 최신",
+     "url": "https://www.world-machine.com/",
+     "what_it_does": "침식 필터, River 툴과 'Create Water'(하상을 깎고 지질상 필요한 곳에 호수 형성), flow/wear/talus 마스크를 제공한다. 2026 Dragontail Peak에서 3D VDM 지형(절벽, 언더행, 동굴)과 대륙 규모 타일 빌드를 지원한다.",
+     "overlapping_chapters": [
+      "2",
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 높이장(+VDM)이고 구를 지원하지 않는다. 상용 툴도 이제 3D 오버행과 동굴로 확장 중이라 '3D 지형' 자체는 차별점이 아니다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "partial (VDM)",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "World Creator 2025.x (BiteTheBytes)",
+     "kind": "commercial-tool",
+     "year": "2025",
+     "url": "https://www.cgchannel.com/2025/11/bitethebytes-releases-world-creator-2025-3/",
+     "what_it_does": "GPU 실시간 지형 툴. 침식과 퇴적 필터, 벡터 경로를 따라 산맥·강·도로를 생성하는 기능이 있다. 2025.3에서 동굴과 터널 입구 구멍 칠하기, Godot 브리지 플러그인이 추가됐다.",
+     "overlapping_chapters": [
+      "6",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면이고 강은 사용자가 그리는 경로다. Godot 연동이 이미 상용 툴에 있다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "partial (구멍 마스크)",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Terragen (Planetside)",
+     "kind": "commercial-tool",
+     "year": "1998~ (4.x)",
+     "url": "https://docs.planetside.co.uk/wiki/Heightfield_and_Procedural_Terrain",
+     "what_it_does": "절차적 프랙탈 지형(Power/Alpine Fractal)이 행성 전체를 덮고, 높이장에는 Erode v3(유동 거리, 퇴적, 확산)를 적용할 수 있다. 렌더링 중심이다.",
+     "overlapping_chapters": [
+      "1",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "행성 전체가 노이즈 지형이고 배수망 생성이 없다(문서에 강 언급 없음). 침식은 국소 높이장에만 적용된다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "partial (변위 셰이더 오버행)",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Houdini Heightfields (SideFX, Houdini 21)",
+     "kind": "commercial-tool",
+     "year": "2025 (H21 새 HeightField Erode)",
+     "url": "https://www.sidefx.com/docs/houdini/heightfields/erosion.html",
+     "what_it_does": "HeightField Erode, Erode Hydro, Erode Thermal, Precipitation 노드를 제공한다. 결과로 debris, sediment, flow, flowdir 레이어를 만들고, 깃털처럼 분기하는 침식 수로가 생긴다(H21 새 알고리즘).",
+     "overlapping_chapters": [
+      "2",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 높이장이고 구, 행성 규모, 정상상태 해법이 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Sebastian Lague — Coding Adventure (Procedural Moons and Planets 2020, Hydraulic Erosion 2019, Terraforming/Marching Cubes)",
+     "kind": "talk/blog / oss-repo",
+     "year": "2019~2025",
+     "url": "https://github.com/SebLague?tab=repositories",
+     "what_it_does": "구 위 노이즈와 크레이터로 만드는 행성(Outer Wilds에서 영감), 평면 높이맵의 물방울(droplet) 기반 수력 침식, 마칭 큐브 밀도 행성과 테라포밍 도구(동굴, 터널)를 다룬다. 저장소: Hydraulic-Erosion, Solar-System, Geographical-Adventures, Fluid-Planet.",
+     "overlapping_chapters": [
+      "1",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "교육용 데모다. 구형 행성은 노이즈이고, 침식은 평면 입자 방식이며, 둘이 결합되지 않았다. 학생 평가자에게는 'Lague 영상과 무엇이 다른가'라는 질문이 나올 가능성이 높으니 대비해야 한다.",
+     "evidence": "secondary",
+     "spherical": "yes (행성 데모)",
+     "volumetric_3d": "yes (Terraforming)",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Infinigen (Princeton, CVPR 2023)",
+     "kind": "oss-repo / paper",
+     "year": "2023~",
+     "url": "https://ar5iv.labs.arxiv.org/html/2306.09310",
+     "what_it_does": "프랙탈 노이즈와 시뮬레이터에서 얻은 SDF 지형 요소를 마칭 큐브로 메시화한다. 동굴은 L-system 거북이 경로로 만들어 SDF에서 빼고, 침식은 LandLab과 SoilMachine 시뮬레이터, 물은 FLIP으로 처리한다. 구형 행성은 아니다(카메라 중심 구면 마칭 큐브만 있음).",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'SDF + 노이즈 + 시뮬레이션 기반 동굴과 오버행'은 이미 연구용 오픈소스로 있다. 행성 규모나 수문 일관성은 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "SoilMachine / soillib (Nick McDonald, weigert)",
+     "kind": "oss-repo / hobby-tool",
+     "year": "2022~",
+     "url": "https://github.com/weigert/SoilMachine",
+     "what_it_does": "그리드 위에 run-length로 인코딩한 퇴적 구간(층) 연결 리스트를 두어 여러 토양층을 표현하고, 입자 기반 수력·풍력 침식과 모듈식 토양 종류·침식 체인을 지원한다. 다공성 기반 침수와 다중 지하수면은 계획 단계다.",
+     "overlapping_chapters": [
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면이고 입자 침식 방식이다. 층상 퇴적 표현은 6장 퇴적 두께와 7장 지층에 참고할 만한 선행 사례다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "partial (층상 높이장)",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Voxel Farm / Procedural World (Miguel Cepero)",
+     "kind": "commercial-tool / talk/blog",
+     "year": "2010~2016",
+     "url": "http://procworld.blogspot.com/2016/04/geography-is-destiny.html",
+     "what_it_does": "판 구조 시뮬레이션과 습도 전달 시스템으로 2 km/픽셀 대륙 '청사진'을 만든 뒤, 다음 단계에서 고도, 침식, 강, 호수를 생성해 복셀 엔진에 넣는다. 강과 호수는 최종 고도가 필요해서 뒤 단계에 둔다. 이전 글(2013)에서는 고지대 수원에서 A*로 낮은 곳까지 경로를 찾아 강을 만들었다.",
+     "overlapping_chapters": [
+      "2",
+      "5",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'2D 대륙·기후 청사진에서 복셀 세계로'라는 단계 구조가 B-PCG의 '지도 공장에서 맵 번들, 복셀'과 같다. 평면이고 강은 경로 탐색 기반이다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "Plate-Local River Generation (Davismk3)",
+     "kind": "oss-repo / paper(preprint)",
+     "year": "2026 (2026-06 생성, 2026-09 업데이트)",
+     "url": "https://github.com/Davismk3/plate-local-river-generation",
+     "what_it_does": "대형 복셀 세계용 결정론적 하천·대륙 생성이다. 판 씨앗이 연속 지형 필드와 판별 유한 영역을 함께 정의하고, 판 내부 저해상도 격자에서 하강 방향으로 강을 추적해 판마다 캐시한 뒤 고해상도 지형에 블렌딩한다. 전역 사전 계산 없이 하강을 보장한다. 평면 무한, 유한 큐브 행성, 유한 구 행성 세 가지 예제(C++17)가 있다.",
+     "overlapping_chapters": [
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "침식과 지형 형성 물리 없이 하천 경로만 보장하는 국소 기법이다. 구형 복셀 행성에 강을 넣는다는 목표는 2026년에 이미 다른 사람도 시도하고 있다.",
+     "evidence": "verified",
+     "spherical": "yes (예제)",
+     "volumetric_3d": "yes (복셀 세계 대상)",
+     "hydrology_consistent": "partial (하강 보장, 침식 없음)"
+    },
+    {
+     "name": "2026년 소규모 OSS 구형 수문 생성기들: geoGen (nrbrt10), Planet-Engine (Zetic), PlanetCreator",
+     "kind": "oss-repo",
+     "year": "2026",
+     "url": "https://github.com/nrbrt10/geoGen",
+     "what_it_does": "geoGen(Python, 2026-05)은 scipy SphericalVoronoi 위에서 판 경계, 위도 순환대 바람, 지형성 강수, Priority-Flood 배수, 유량 누적, 내륙 분지 해소를 포함한 하천망을 계산한다. Planet-Engine(Rust/WASM, 2026-09, https://github.com/Zetic/Planet-Engine)은 계층 측지 구, 강체 판 운동학, 연간 유출, 평형 호수, 유량·경사·하폭 기반 '제한된 하천 침식', 계절 수문, 퇴적 보존을 다룬다. PlanetCreator(2026-09)는 큐브스피어 규약, priority-flood, D8 유량 누적을 쓴다고 알려졌다(검색 스니펫).",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "5",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "모두 2D 지도 단계에서 멈추고 3D/복셀이 없다. 별이 0개인 초기 프로젝트들이지만 '구 위 priority-flood와 하천망'이 이미 흔한 구성 요소라는 점을 보여 준다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (priority-flood 배수)"
+    },
+    {
+     "name": "Tectonics.js (Carl Davidson)",
+     "kind": "oss-repo",
+     "year": "2013~2020",
+     "url": "https://github.com/davidson16807/tectonics.js/",
+     "what_it_does": "브라우저에서 시간에 따라 판 구조(리프팅, 섭입, 충돌)를 시뮬레이션하는 3D 행성 시뮬레이터. 침식은 라플라시안 확산 형태다.",
+     "overlapping_chapters": [
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "판 이력을 시뮬레이션하지만 하천과 수문이 없다. B-PCG 5장은 이보다 단순한 정적 판 모델이다.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "nixis (MightyBOBcnc)",
+     "kind": "oss-repo",
+     "year": "2021~2024 (정체)",
+     "url": "https://github.com/MightyBOBcnc/nixis",
+     "what_it_does": "Python으로 지구형 구형 행성 지도를 만드는 프로젝트. 현재는 노이즈 지형, 일사량, 해양 마스크까지 구현됐고, 수력 침식은 개발 중이며 판, 강수, 하천, 유역은 계획 단계다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "Python 구형 행성 + 침식 + 하천이라는 같은 목표를 시도했지만 2024년 이후 정체됐다. 범위 리스크를 보여 주는 반면교사다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown (미구현)"
+    },
+    {
+     "name": "Hytale World Generation V2",
+     "kind": "game",
+     "year": "2026 (EA 2026-01)",
+     "url": "https://hytale.com/news/2026/1/the-future-of-world-generation",
+     "what_it_does": "바이옴별 높이, 침식, 절벽, 강 제어를 갖춘 새 세계 생성기. 절차적 강과 길은 향후 계획으로 명시되어 있다.",
+     "overlapping_chapters": [
+      "2"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "평면이고 바이옴 퍼즐 방식이다. 2026년 대형 복셀 게임에서도 연결된 절차적 강은 '미래 과제'라는 근거가 된다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no (계획 단계)"
+    },
+    {
+     "name": "Schott et al. — Large-scale Terrain Authoring through Interactive Erosion Simulation (ACM TOG 2023)",
+     "kind": "paper",
+     "year": "2023",
+     "url": "https://dl.acm.org/doi/10.1145/3592787",
+     "what_it_does": "GPU 하천력 침식으로 대규모 지형을 대화형으로 저작한다. 검색 스니펫에 따르면 1024² 이하 격자에서 수 초 안에 정상상태 고도로 수렴한다.",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "평면이다. '정상상태 하천력 지형을 빠르게 얻는다'는 목표는 이미 그래픽스 학계의 최신 주제다.",
+     "evidence": "secondary",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    }
+   ],
+   "closest_competitors": [
+    "Veloren: 이미 출시된 오픈소스 복셀 게임이다. 전역 저해상도 지도에 융기와 하천력(Cordonnier 2016/Braun-Willett) 침식, 다중 수신 셀 흐름, 암석 강도 기반 임계경사, 토양/기반암 분리, Manning식 하폭을 적용한 뒤 복셀 청크로 채운다. B-PCG의 '2D 물리 지도에서 3D 복셀' 구조와 같고, 차이는 평면이라는 점과 시간 적분 방식이라는 점이다.",
+    "World Orogen (2026, GPL): 구(피보나치-Voronoi) 위에서 판 경계 분류, Barnes priority-flood, 암시적 Braun-Willett 하천력 침식, 지형성 강수 기후를 모두 갖췄다. B-PCG의 2D 지도 공장(1·2·5장 + 4장 일부)과 가장 많이 겹치며, 3D/복셀만 없다.",
+    "Tzathas, Gailleton, Steer, Cordonnier 2024 (+Steer 2021 고정점 알고리즘): 출구에서 상류로 고도를 정하고 하천망과 고도를 번갈아 고정점 반복하며 사면 한계를 처리해 정상상태를 직접 얻는다. B-PCG 4장 솔버의 핵심 아이디어와 사실상 같다."
+   ],
+   "apparent_gaps": "조사 범위(게임, 엔진, 상용·취미 도구, 2023~2026 OSS) 안에서는 다음 네 가지를 한 시스템에서 함께 하는 사례를 찾지 못했다. (1) 행성 전체 구 위에서 물리 기반(하천력·융기) 하천 지형을 만들고, (2) 그 결과에서 3D 복셀/SDF 세계의 지층 노출(기준면 인덱싱), 동굴(지하수면·석회암 마스크), 지하수, 바다·호수·강·침수 동굴을 일관되게 파생하며, (3) 큐브스피어 면 이음새가 통계적으로 남지 않음을 회전 불변성 테스트로 정량 검증하고, (4) 하천력 파라미터(θ, k_s, S_crit)를 실측 DEM 경사-면적 회귀와 WorldClim으로 보정한다. 구체적으로 보면 이렇다. 구형 복셀 행성 게임(No Man's Sky, Space Engineers 1/2, Astroneer, Dual Universe, Planet Nomads, Seed of Andromeda, KSP, Starfield)은 노이즈·저작 기반이고 흐르는 강이 없다. NMS는 단일 구면 수위, SE2는 물을 2026 VS3로 연기, Star Citizen v5는 초기 릴리스에서 강 제외, Starfield는 수역이 희소하다. 물리 기반 하천을 가진 복셀 세계(Veloren, Voxel Farm, Dwarf Fortress, Algernon's Watersheds, TFC)는 모두 평면이다. 구형 물리 기반 지도 생성기(World Orogen, Undiscovered Worlds, geoGen, Planet-Engine)는 모두 2D에서 멈춘다. 상용 지형 툴(Gaea, World Machine, World Creator, Houdini)은 평면 높이장이고, Terragen은 행성 전체를 덮지만 노이즈 지형이다. 게임과 도구 중 DEM으로 보정한 하천력 파라미터나 면 이음새 회전 불변성 검증을 하는 사례도 찾지 못했다. 다만 이것은 '조합'의 공백일 뿐 개별 기법의 공백은 아니다. 탐색이 망라적이지 않고, 미공개 상용 기술(Light No Fire, NMS 내부, Star Citizen)은 확인할 수 없다는 점도 감안해야 한다.",
+   "novelty_threats": "다음 항목은 B-PCG의 새로운 기여로 주장하면 안 된다. (a) 4장 정상상태 솔버: 출구에서 상류로 z = z_r + d·S(Q)를 적분하고 수신 셀이 수렴할 때까지 흐름 경로를 다시 계산하는 고정점 반복, 그리고 임계경사 상한은 Steer 2021과 Tzathas et al. 2024(Eurographics)에 이미 있다. Braun-Willett 2013, Cordonnier 2016, fastscapelib, Schott et al. 2023도 같은 계열이다. B-PCG의 몫은 큐브스피어 이식, MFD 변형, 수신 셀 히스테리시스 같은 공학적 적응이다. (b) 2장 수문: priority-flood(Barnes), D8, Quinn MFD, 유량 의존 지수 MFD는 표준 기법이다. 구 위 priority-flood 배수는 World Orogen, geoGen, Planet-Engine이 이미 한다. 다중 수신 셀 흐름은 Veloren에도 있다. (c) 5장 판 모델: Voronoi 판, 오일러 극 회전, 수렴·발산·변환 분류, 경계 거리 기반 고도는 Experilous(2014), Red Blob(2018), World Orogen(2026)에 이미 있다. (d) 7장 동굴: 두 노이즈 영점 집합의 교선은 Minecraft 1.18 noodle 동굴(max(|ridge_a|,|ridge_b|))과 같은 수학이다. '하나의 물 규칙'은 Minecraft aquifer와 개념적으로 겹친다. SDF + 3D 노이즈 오버행은 Astroneer, Planet Nomads, Zylann, Infinigen에서 표준이다. 깊이 순 지층은 Dwarf Fortress, Vintage Story, TFC에 있고, 층상 퇴적 표현은 SoilMachine에 있으며, 3D 암석 강도와 기반암/토양 분리는 Veloren에 있다. (e) 6장: 유량 기반 하폭·깊이 계산은 Veloren(Manning식)에 있다. 지하수 용출은 Algernon's Watersheds(2026)에 있다. (f) 1·8장: 큐브스피어 복셀 행성(Seed of Andromeda, NMS의 큐브 옥트리를 구로 투영), Godot 배정밀도와 원점 이동(Godot Large World Coordinates, Zylann solar_system_demo), 방사형 중력은 모두 기존 기술이다. (g) 구조 측면: '전역 2D 물리 지도를 미리 계산한 뒤 3D 복셀 세계를 채운다'는 구조 자체도 Veloren과 Voxel Farm이 이미 썼다. 따라서 '최초의 물리 기반 복셀 세계'나 '최초의 정상상태 지형 솔버'라고 주장하면 반박당한다. 방어 가능한 주장은 다음 정도다. '구 전체 + 정상상태 하천력 + 3D 지층·동굴·지하수 일관 파생 + 이음새 정량 검증 + DEM 보정'의 통합을 출시 게임·도구에서 찾지 못했다.",
+   "summary": "게임, 엔진, 상용·취미 도구 관점에서 보면 B-PCG의 개별 구성 요소는 거의 전부 선행 사례가 있다. 가장 가까운 것은 세 가지다. Veloren은 2020년부터 융기와 하천력 침식으로 만든 전역 지도에서 복셀 세계를 채워 왔다(평면). World Orogen(2026)은 구 위에서 판, priority-flood, 암시적 하천력 침식, 기후를 모두 한다(2D만). Tzathas et al. 2024와 Steer 2021은 4장의 '출구에서 상류로 적분하며 수신 셀을 고정점 반복'하는 정상상태 해법과 사실상 같다. 동굴 기법(두 노이즈 영점 교선)은 Minecraft noodle 동굴과 같고, 큐브스피어 복셀 행성과 Godot 대좌표계도 기존 기술이다. 반면 '왜 필요한가'를 뒷받침하는 1차 근거는 많다. NMS는 수위가 단일 구면이라 강이 없다(2024 Steam). Space Engineers 2는 강과 바다를 2026 VS3로 미뤘다. Star Citizen Planet Tech v5는 초기 릴리스에서 강을 제외해 커뮤니티 비판을 받았다. Starfield는 수역이 희소하고 강 글리치가 보고됐다. Vintage Story는 바닐라 강을 연기해 2026년 Algernon's Watersheds 같은 모드가 인기를 얻었고, Hytale V2도 연결된 강을 미래 과제로 두었다. TFC 개발자는 청크 국소 생성으로는 강이 왜 어려운지 정리했고, Undiscovered Worlds 저자는 큐브 모서리에서 강과 산이 늘어난다고 직접 적었다. 결론적으로 B-PCG의 차별점은 새 알고리즘이 아니라 통합에 있다. 즉 '구 전체 위 정상상태 물리 지형 + 그 결과에서 일관되게 파생한 3D 지층·동굴·지하수·수역 + 면 이음새와 회전 불변성 정량 검증 + DEM 보정 파라미터'라는 조합이다. 이 조합을 하는 출시 게임이나 도구는 찾지 못했다(단, 탐색이 망라적이지 않고 Light No Fire 같은 미공개 상용 기술은 알 수 없다). 캡스톤 피치에서는 '최초', '새 솔버'라는 표현을 피해야 한다. 대신 Veloren, World Orogen, Tzathas 2024를 명시적 선행 연구로 인용하고, '평면 기법을 구로 옮길 때 생기는 문제(면 이음새, 격자 정렬 하천)와 2D 수문을 3D로 일관되게 연결하는 문제'를 해결하고 검증하는 것으로 기여를 좁히는 편이 동료 학생과 교수의 '기존에 없었나?' 질문에 방어하기 좋다. 범위 면에서는, 비슷한 Python 구형 행성 프로젝트(nixis)가 침식과 하천 단계에서 정체됐다는 점을 참고할 만하다. 8장 전체를 2026-12 데모까지 완성하는 일정은 위험하다."
+  }
+ },
+ {
+  "key": "open-source",
+  "result": {
+   "findings": [
+    {
+     "name": "dollspace-gay/Wildforge",
+     "kind": "oss-repo",
+     "url": "https://github.com/dollspace-gay/Wildforge",
+     "year": "2026 (생성 2026-07-18, 마지막 push 2026-09-06, ★14)",
+     "what_it_does": "Rust 자체 엔진으로 만든 마인크래프트풍 블록 복셀 게임. 세계 전체가 닫힌 큐브스피어 하나(6×8192² 블록 면)이고, 플레이 전에 6×256² 전역 아틀라스를 만든다. 아틀라스에서는 면 경계를 인식하는 priority-flood, 모든 셀에 종착 수신 셀 할당, 계절별 유출 누적, 상한이 있는 침식·퇴적 반복을 돌리고 유량에 따른 bankfull 하폭, 담수호·염호·삼각주·하구·습지를 만든다. 지질 쪽으로는 판 지도, 사암/석회암/셰일 퇴적층 스택(절벽에 노출), 판 경계의 주향을 따라 습곡된 지층, 지하수 제약 예정인 density 동굴, 염분이 있는 유한 물 복셀이 있다. 12개 큐브 면 이음매와 큐브 꼭짓점(7-이웃) 특이점 테스트도 갖췄다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6",
+      "7",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "구형 수계에서 파생 맵을 거쳐 복셀 지층·동굴·물로 이어지는 개념 사슬은 거의 같다. 차이: 블록(정수) 복셀이고 연속 SDF·int8 TSDF가 아니다. 단일 수신(8-이웃 D8형)이고 MFD로 면 이음매 결을 지우는 처리가 없다. 시간 반복 침식이며 정상상태 직접 해법이 아니다. 실측 DEM으로 학습한 파라미터가 없고 아틀라스 해상도가 낮다(256²/면). 지층은 '기준면 아래 깊이'가 아니라 지질 지역 스택으로 정한다. Godot이 아니라 자체 엔진이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes (블록 복셀, 동굴, 습곡 지층)",
+     "hydrology_consistent": "yes (면 경계 인식 priority-flood, 사이클·종착 테스트)"
+    },
+    {
+     "name": "dualmindblade/triangulum",
+     "kind": "oss-repo",
+     "url": "https://github.com/dualmindblade/triangulum",
+     "year": "2026 (생성 2026-07-07, push 2026-07-27, ★0)",
+     "what_it_does": "Python planetgen이 Fibonacci-Delaunay 구면 격자(셀 4만~65만 개)에서 판구조, 기후, 수계·침식, 생물군계를 만든다. 수계 단계는 약 120회 반복하며 매 회 Barnes priority-flood, valley capture·meander 가중 수신 셀, 유량 누적, stream-power 침식(E ∝ K·Q^0.5·S), 퇴적물 운반, 사면 확산, 융기·침강을 수행하고 증발 균형으로 담수호·염호를 정한다. 결과는 gnomonic 큐브 면 래스터와 하천 경로로 bake되고, Rust/wgpu 뷰어가 f64 카메라로 궤도에서 지면까지 렌더링한다. 지면 근처에서는 실제 복셀로 바꾸고 하천을 협곡으로 새기며, 흙 지층과 동굴 튜브가 있다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6",
+      "7",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "'2D 지도 공장 → 큐브 면 번들 → 3D 복셀 세계' 구조가 b-pcg와 사실상 같다. 차이: 시뮬레이션 격자가 비구조 Fibonacci 격자라 큐브 면 이음매 문제를 아예 피한다(b-pcg의 MFD 이음매 해법과 정면으로 대비되는 설계 선택). 시간 반복 방식이고 정상상태 해가 아니다. 스스로 'stylized simulation, not physics'라고 밝힌다. DEM 학습이 없다. 블록 복셀이며 SDF·습곡·단층·석회암·지하수면 동굴이 없다. Rust 엔진이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes (블록 복셀, 동굴 튜브, 흙 지층)",
+     "hydrology_consistent": "yes (priority-flood, 호수 증발 균형, 수신 그래프 전체 저장)"
+    },
+    {
+     "name": "Gkrumbach07/procedural-generation (Globe Terrain Generation)",
+     "kind": "oss-repo",
+     "url": "https://github.com/Gkrumbach07/procedural-generation",
+     "year": "2026 (생성 2026-09-07, push 2026-09-11, ★0)",
+     "what_it_does": "Python(numpy+numba) bake 도구. 등각(equi-angular) 큐브스피어 6면에 halo 셀을 두고, 면 사이 접선 벡터를 정확히 회전시키며, D8 이웃은 grid.owner로 인접 면 셀에 매핑한다. 단계는 판구조, 지형성 강수 이류, 융기가 있는 입자 기반 수력 침식(약 800회), Barnes priority-flood 호수, D8 흐름 방향·유량 누적, 유역 분할, 유역별 정밀화, tile pyramid 순이다. manifest.json에 단계별 파라미터와 해시를 기록하고 cell_area로 체적을 보정한다. Godot 4 프로젝트로 export할 수 있지만 엔진 쪽 스트리밍 GDExtension은 제거되어 지금은 텍스처 지구본 뷰어만 남았다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg 2D 쪽의 구조(Python/Numba, 등각 큐브스피어, 면 경계 이웃 테이블, manifest + 배열 번들, Godot)를 거의 그대로 갖고 있다. 차이: 침식이 시간 반복 입자 방식이고 정상상태 해법·MFD·DEM 학습이 없다. 3D 볼륨(SDF, 지층, 동굴, 물 규칙)이 전혀 없고 Godot 쪽은 지구본 보기뿐이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (모든 육지 셀이 출구에 도달하는지 assert, 사이클 없음)"
+    },
+    {
+     "name": "noahdemar/web_planet (world_sim)",
+     "kind": "oss-repo",
+     "url": "https://github.com/noahdemar/web_planet",
+     "year": "2026 (생성 2026-08-13, push 2026-08-26, ★0)",
+     "what_it_does": "TypeScript와 three.js WebGPU로 만든 행성. tangent-warp(등각) 큐브스피어를 쓰고 '유량 누적이 물리적이려면 셀 면적이 비슷해야 한다'는 이유로 HEALPix를 배제했다. 면 이음매를 넘는 이웃 테이블이 있고, 꼭짓점 3-valent 셀은 따로 처리한다. 구면 Voronoi 판을 수렴·발산·변환 경계로 분류해 융기율, 암상, 지각 나이를 만들고, 전 지구 단일 도메인에서 Braun–Willett 암시적 stream-power를 약 200 step 돌린다. 하천은 벡터 수계 그래프로 뽑아 노드마다 Q, 폭(w≈a·Q^0.5), 깊이를 저장한다(곡선으로 bake하지만 아직 그리지 않음). CDLOD, 카메라 상대 정밀도, 24개 지점 realism 회귀 테스트가 있다. 복셀·동굴·오버행은 v1 범위 밖이라고 명시했다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "6",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "5장(판, 융기, 암상)과 6장(수리기하 폭, 하천 곡선) 설계가 b-pcg와 매우 비슷하다. 차이: 시간 적분이고 정상상태 직접 해법이 아니다. D8/D∞이고 적응형 MFD가 없다. DEM 학습이 없다. 높이장뿐이라 3D가 없다. 브라우저용이고 Godot이 아니다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes (depression carving 포함 전역 LEM)"
+    },
+    {
+     "name": "owenyuwono/demiurge",
+     "kind": "oss-repo",
+     "url": "https://github.com/owenyuwono/demiurge",
+     "year": "2026 (생성 2026-06-18, push 2026-08-20, ★34)",
+     "what_it_does": "반지름 500 km 행성을 three.js WebGPU로 렌더링하는 프로토타입. 큐브스피어 쿼드트리 높이장을 쓴다. 판구조가 융기를 정하고, 6×256² 큐브 격자에서 Barnes priority-flood, MFD(지수 6), Davy–Lague 침식·퇴적, 융기와 침식을 번갈아 약 30 step 반복(B-path)한다. 암석 경도로 침식도를 바꾸고 기후·바람 장을 bake한다. 동굴은 별도 3D SDF(worm noise)와 메셔로 만든다. golden-vector 결정성 하네스가 있다. 2026-08에 하천을 통째로 제거했는데, bake 격자가 셀당 약 3 km라 폭 100 m인 하천을 표현할 수 없었기 때문이라고 문서에 적혀 있다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4",
+      "5",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "큐브스피어 + priority-flood + MFD + 융기·침식 + SDF 동굴 조합이 겹친다. 차이: 시간 반복이고 MFD 지수가 고정이다. 동굴이 지질(석회암·지하수면)과 연결되지 않는다. 지층·물 규칙이 없다. 하천이 없다. Godot이 아니다. 하천 제거 사유는 '전역 격자 해상도와 복셀 스케일의 간극'을 그대로 보여 주는 반례라서, b-pcg의 6장(하천 폴리라인)과 7장(채널 carving)이 왜 필요한지 설명하는 근거로 쓸 수 있다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "partial (높이장 + 별도 SDF 동굴)",
+     "hydrology_consistent": "partial (호수는 있으나 하천 제거됨)"
+    },
+    {
+     "name": "owenyuwono/minos",
+     "kind": "oss-repo",
+     "url": "https://github.com/owenyuwono/minos",
+     "year": "2026 (생성 2026-08-12, push 2026-08-20, ★6)",
+     "what_it_does": "Rust와 Vulkan으로 만든 약 50 km 큐브스피어 행성 렌더러. 전작 ki(TypeScript)의 판구조·수력 침식·기후 생성기를 golden vector로 바이트 단위까지 맞춰 이식했다. 기본 지형은 bake된 높이장의 SDF 위에 on-demand transvoxel 등치면을 만들고, 파고 채우기가 되며 선택적으로 동굴을 새긴다. 렌더링은 카메라 상대 f64→f32이다.",
+     "overlapping_chapters": [
+      "1",
+      "5",
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'2D bake → SDF 복셀 행성' 구조는 같다. 다만 수계는 간단한 수력 침식이고 정상상태·MFD 이음매 처리·DEM 학습이 없다. SDF는 높이장 오프셋 수준이라 지층·습곡·카르스트·물 규칙이 없다. 자체 엔진이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes (높이장 기반 SDF + 동굴 carving)",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "Andonigt04/haruka-cpp (HarukaEngine)",
+     "kind": "oss-repo",
+     "url": "https://github.com/Andonigt04/haruka-cpp",
+     "year": "2026 (생성 2026-04-11, push 2026-09-25, ★1, source-available·비상업)",
+     "what_it_does": "C++17/OpenGL 행성 엔진. 6×R² 큐브스피어 장에서 Voronoi 판(노이즈로 휜 경계, 수렴 시 조산), priority-flood 호수, D8 유량 누적(면 밖 이웃은 3D 재투영으로 찾음), E=K·A^0.5·S 명시적 반복 침식(하류에 25% 퇴적), 열침식을 돌린 뒤 기후(위도, 감률, 지형성 비그늘)를 계산한다. 렌더링은 카메라 상대 double 정밀도이고, 물리·렌더 '단일 기준면'의 CPU↔GPU 일치를 0.3 mm 수준으로 검사한다. 동굴은 보류(parked) 상태다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "판, 수계, 큐브스피어, double 카메라, 엔진 일치 테스트까지 b-pcg 8장의 golden test와 개념이 같다. 차이: gnomonic(비등각) 매핑이고 셀 면적 보정이 없다. D8 단일 방향에 융기 없는 시간 반복 침식이다. 높이장 메시뿐이라 복셀·SDF·지층·동굴이 없다. 라이선스가 비상업이다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (filled DEM 위 D8, 면 경계 이웃은 clamp 근사)"
+    },
+    {
+     "name": "Veloren (world/src/sim/erosion.rs)",
+     "kind": "game",
+     "url": "https://github.com/veloren/veloren",
+     "year": "2018~현재 (GitHub 미러 ★7.6k, push 2026-10-01, 원본 gitlab.com/veloren/veloren)",
+     "what_it_does": "오픈소스 복셀 RPG의 세계 생성기. dh/dt = U − k·A^m·S^n을 Braun–Willett/Cordonnier 2016 방식의 암시적 O(n) 해법으로 풀고, 다중 수신(mrec) 유량, 호수·pass 연결, 퇴적물 운반, fastscapelib-fortran 방식 ADI 사면 확산을 적용한다. 하천 폭과 깊이는 Manning 공식으로 유량에서 계산하고, 하천 스플라인과 호수를 거쳐 3D 복셀 세계(cave 레이어 포함)로 이어진다.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "6",
+      "7",
+      "8"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "'융기·침식 지형 → 하천·호수 파생 데이터 → 복셀 세계'의 전체 사슬을 가장 성숙하게 구현한 오픈소스다. 다만 평면(유한 2^n 지도)이고 구면이 아니다. 시간 적분이고 정상상태 직접 해가 아니다. 블록 복셀이며 SDF나 기준면 기반 지층이 없다. DEM 학습이 없다. Godot이 아닌 자체 엔진이다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes (블록 복셀, 동굴)",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "fastscapelib v0.3.0 (HealpixGrid, planetary 예제)",
+     "kind": "oss-repo",
+     "url": "https://github.com/fastscape-lem/fastscapelib",
+     "year": "v0.3.0 2025-06-25 (★46, push 2026-09-07)",
+     "what_it_does": "지형 진화 모델(LEM)용 C++/Python 라이브러리. v0.3.0에서 HEALPix 전 지구 격자가 들어갔고, 공식 예제 planetary_py.ipynb는 지구 반지름 HEALPix 격자에서 균일 융기와 SPLEroder(SingleFlowRouter + MSTSinkResolver)로 행성을 진화시킨다. SFD/MFD 흐름 라우터, priority-flood와 basin graph 기반 함몰 처리, Numba 기반 flow kernel API를 제공한다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "'구면 격자 위 흐름 라우팅 + stream-power'의 과학적 핵심은 이미 검증된 라이브러리로 공개되어 있다. 차이: 격자가 HEALPix이고 큐브스피어가 아니다. 시간 적분이고 정상상태 직접 해법이 없다. 파생 맵, 3D, 엔진이 없다. b-pcg는 fastscapelib을 비교 기준으로 삼을 계획인데, 이 HEALPix 경로까지 비교에 넣어야 한다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "LSDTopoTools2 / MuddPILE (LSDRasterModel의 steady-state snap)",
+     "kind": "oss-repo",
+     "url": "https://github.com/LSDtopotools/LSDTopoTools2",
+     "year": "2017~2022 함수 (LSDTopoTools2 ★37, push 2023-06; MuddPILE ★2, push 2022-02)",
+     "what_it_does": "LSDRasterModel의 fluvial_snap_to_steady_state(U)는 Mudd et al. 2014 식 4a로 chi에서 정상상태 지형 z=(U/K)^(1/n)·χ를 한 번에 만든다. fluvial_snap_to_steady_variable_K_variable_U는 공간적으로 변하는 K·U 래스터에서 정상상태로 맞춘다. hillslope_snap_to_steady_variable_Sc는 fill 후 stack을 하류부터 돌며 z_node = z_receiver + dx·S_c(기여 픽셀이 임계값 미만인 사면 셀)로 계산한다. basic_valley_fill_critical_slope도 있다.",
+     "overlapping_chapters": [
+      "3",
+      "4"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg 4장의 핵심 점화식 z_c = z_r + d·min(k_s Q^-θ, S_crit)을 기저 수준부터 위로 적분하는 방식은 이 함수들(하천 정상상태 + 임계경사 사면)을 합친 것과 사실상 같다. 차이: 평면 래스터, D8, 한 번만 적용한다. b-pcg가 더하는 것은 수신 셀이 수렴할 때까지 반복(수신 셀 히스테리시스), 감쇠 MFD 반복 후 고정 가중 최종 적분, 구면 격자 적용이다. 설계문서에 이 선행 구현과 Mudd 2014 인용이 없으므로 반드시 넣어야 한다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "TopoToolbox (slopearea.m, TopoToolbox3 / pytopotoolbox / libtopotoolbox 2024+)",
+     "kind": "oss-repo",
+     "url": "https://github.com/wschwanghart/topotoolbox/blob/master/@STREAMobj/slopearea.m",
+     "year": "MATLAB 장기 유지; TopoToolbox3·pytopotoolbox 2024 (pytopotoolbox ★26, push 2026-07)",
+     "what_it_does": "STREAMobj/slopearea는 하천 셀의 경사를 유역면적 구간(기본 100개, 구간 중심은 median)으로 묶어 S = k·A^(-θ)를 비선형 최소제곱, LAD, 로그 선형 회귀로 적합하고 ks와 θ를 반환한다. ksn과 chi 도구도 있다. pytopotoolbox는 libtopotoolbox C 코어를 감싼 Python 인터페이스로 GridObject, FlowObject, StreamObject를 제공한다.",
+     "overlapping_chapters": [
+      "3"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "3장의 '실측 DEM에서 binned-median slope-area 회귀로 θ와 k_s 추정'은 이 함수의 표준 기능 그대로다. b-pcg 쪽 차이는 WorldClim 강수로 면적을 유량 단위로 바꾸는 것과 S_crit 추정 정도다. 3장은 새 방법이 아니라 '표준 도구로 얻은 파라미터를 생성기에 넣는다'는 엔지니어링 기여로 서술해야 한다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Landlab IcosphereGlobalGrid (v2.8.0)",
+     "kind": "oss-repo",
+     "url": "https://landlab.readthedocs.io/en/latest/tutorials/grids/icosphere_example_models.html",
+     "year": "2024-05-12 (v2.8.0); landlab ★445, push 2026-10-01",
+     "what_it_does": "Landlab 2.8.0에 icosphere/Goldberg 다면체 전 지구 격자가 추가되었다. 공식 튜토리얼은 ETOPO2022 고도로 FlowAccumulator를 써서 구면 위 흐름 라우팅(남미 배수 패턴)을 시연한다(DepressionFinderAndRouter는 대규모에서 느리다고 명시). StreamPowerEroder, FastscapeEroder 등 침식 컴포넌트도 있다.",
+     "overlapping_chapters": [
+      "1",
+      "2"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "구면 격자 흐름 라우팅 자체는 2024년부터 표준 라이브러리에 있다. 차이: icosphere이고 큐브스피어가 아니다. 저해상도이고 정상상태·파생 맵·3D가 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "WhiteboxTools QuinnFlowAccumulation / QinFlowAccumulation",
+     "kind": "oss-repo",
+     "url": "https://github.com/jblindsay/whitebox-tools",
+     "year": "(★1.2k, push 2026-05)",
+     "what_it_does": "Quinn et al. 1995 MFD는 F_i ∝ L_i(tanβ)^p, p=(A/threshold+1)^h로 유량이 커질수록 지수가 커져 D8에 가까워진다. Qin et al. 2007 MFD-md는 f(e)=min(e,e_U)/e_U·(p_U−1.1)+1.1로 지수가 1.1에서 p_U 사이에서 경사에 따라 변한다. 둘 다 Quinn 윤곽 길이 가중(0.5/0.354×셀크기)을 쓴다.",
+     "overlapping_chapters": [
+      "2"
+     ],
+     "overlap_level": "strong",
+     "key_difference_vs_bpcg": "b-pcg의 'Quinn 윤곽 가중 + 유량 의존 지수 p 1.1~8'은 이 두 방법을 섞은 것으로 공식 자체는 기존 기법이다. 차이는 평면 래스터 대신 큐브스피어 면 경계(격자선 최대 약 60° 꺾임)의 결(grid-alignment) 아티팩트를 지우는 용도로 쓰고 회전 불변성으로 검증한다는 점뿐이다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "RichDEM",
+     "kind": "oss-repo",
+     "url": "https://richdem.readthedocs.io/en/latest/flow_metrics.html",
+     "year": "(★326, push 2024-06)",
+     "what_it_does": "Barnes Priority-Flood 계열 함몰 채움과 D8, D4, Rho8, Dinf, Quinn, Holmgren(지수 조절), Freeman(p≈1.1 권장) 흐름 지표, 유량 누적을 제공하는 고성능 DEM 수문 라이브러리.",
+     "overlapping_chapters": [
+      "2"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "2장의 채움, 흐름 방향, 누적 알고리즘 요소는 모두 여기에 있다. 평면 전용이고 구면 이웃이나 셀 면적 처리가 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "pysheds",
+     "kind": "oss-repo",
+     "url": "https://github.com/pysheds/pysheds",
+     "year": "(★906, push 2026-10-01)",
+     "what_it_does": "Python 유역 분석 라이브러리. pit·depression fill, flat 해소, D8 흐름 방향, 유량 누적, 유역 추출을 제공한다.",
+     "overlapping_chapters": [
+      "2"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "평면 DEM 분석 도구다. 구면, 정상상태, 생성 기능이 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Zylann/godot_voxel (Voxel Tools)",
+     "kind": "oss-repo",
+     "url": "https://github.com/Zylann/godot_voxel",
+     "year": "2016~ (★3.9k, push 2026-09-23)",
+     "what_it_does": "Godot 4용 C++ 볼륨 지형 모듈. VoxelLodTerrain(LOD 스트리밍)과 Transvoxel 메싱을 제공하고, SDF를 기본 16-bit(선택 8-bit) 고정소수점으로 양자화하며 먼 곳은 clamp(절단)한다. VoxelGeneratorGraph에 SdfSphere, SdfSphereHeightmap(파노라마 투영 높이맵으로 구형 SDF), Image, Noise3D, SdfSmoothUnion/Subtract, Expression 노드가 있고 GDScript/C++ 커스텀 생성기를 지원한다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "Godot에서 SDF 복셀 행성과 양자화 TSDF를 다루는 기반은 이미 있다(b-pcg의 int8 TSDF는 새 요소가 아니다). 수계, 지층, 기준면, 물 규칙이 없고, 구형 높이맵이 큐브스피어가 아닌 등장방형 파노라마라서 b-pcg의 ghost-cell 큐브 면 리샘플링과 다르다.",
+     "evidence": "verified",
+     "spherical": "yes (SdfSphere, SdfSphereHeightmap)",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Zylann/solar_system_demo",
+     "kind": "oss-repo",
+     "url": "https://github.com/Zylann/solar_system_demo",
+     "year": "2021~ (★300, push 2025-11-26)",
+     "what_it_does": "Godot 4와 Voxel Tools로 만든 우주 게임 데모. 반지름 1~2 km(대형 모드 10~20 km)의 절차적 복셀 행성과 위성, 협곡(ravine), 지하 깊은 동굴계, 편집 가능 지형, origin shifting, 우주선과 지상 이동을 갖췄다.",
+     "overlapping_chapters": [
+      "7",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "Godot 구형 복셀 행성과 동굴의 레퍼런스 구현이다. 수계, 지질, 침식은 전혀 없다. double 정밀도가 아니라 origin shifting으로 처리하며 README는 대형 스케일에서 물리가 불안정하다고 적고 있다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "H-Schott/StreamPowerErosion (Schott et al. 2023 TOG)",
+     "kind": "oss-repo",
+     "url": "https://github.com/H-Schott/StreamPowerErosion",
+     "year": "2023 (★52, push 2026-09-17)",
+     "what_it_does": "사용자가 융기 지도를 칠하면 stream-power 침식을 계속 돌려 융기와 침식이 평형을 이루는 수지상 산악 지형을 대화형으로 만든다. 병렬 근사 유역면적으로 빠르게 수렴한다. 공식 릴리스 코드다.",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'융기 = 침식 평형 지형을 생성기로 쓴다'는 그래픽스 쪽 선행 공개 코드다. 평면이고 반복 수렴 방식이다(직접 적분 아님).",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Tzathas et al. 2024, Physically-based analytical erosion for fast terrain generation (CGF/EG 2024)",
+     "kind": "paper",
+     "url": "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/",
+     "year": "2024",
+     "what_it_does": "stream power law의 해석해를 써서 수천 번의 침식 반복 없이 시간을 함수의 파라미터로 두고 지형을 생성한다. 산사태와 사면 과정도 포함한다. 페이지에는 PDF, 영상, 예제 데이터만 있고 코드 저장소 링크는 없다.",
+     "overlapping_chapters": [
+      "4"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'시뮬레이션 대신 해석적·직접 해로 지형 생성'이라는 4장의 핵심 동기에 대한 최신 그래픽스 선행 연구다. 평면이고 코드는 공개되지 않았다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Davismk3/plate-local-river-generation (PLRGA)",
+     "kind": "oss-repo",
+     "url": "https://github.com/Davismk3/plate-local-river-generation",
+     "year": "2026 (★53, push 2026-09-27, 논문 PDF 동봉)",
+     "what_it_does": "'대형 복셀 세계용' 결정적 하천 생성 알고리즘. 판 시드가 지형장과 판별 도메인을 정하고, 판마다 저해상도 격자에서 하천을 하류로 추적해 캐시한 뒤 지형에 섞는다(하향 보장). 평면 무한, 큐브 행성, 구 행성 예제가 있다. README에 흐름 라우팅, 침식, stream power는 구현하지 않는다고 적혀 있다.",
+     "overlapping_chapters": [
+      "5",
+      "6"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "전역 사전계산 없이 지역적으로 지연 생성하는 반대 철학이다. 물리 기반 수계와 정상상태가 없고 엔진 통합도 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "partial (하향만 보장)"
+    },
+    {
+     "name": "raguilar011095/planet_heightmap_generation (World Orogen)",
+     "kind": "oss-repo",
+     "url": "https://github.com/raguilar011095/planet_heightmap_generation",
+     "year": "2026 (★105, push 2026-09-20, GPL-3.0)",
+     "what_it_does": "브라우저 행성 생성기. Fibonacci 구 Delaunay 메시, 판 생성과 수렴·발산·변환 분류, Barnes priority-flood, iterative-implicit stream power, 열·빙하 침식, 계절 바람·해류·강수, Köppen 분류를 하고 등장방형 PNG로 내보낸다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "구면 판·수계·침식의 2D 부분은 겹친다. 큐브스피어가 아니고 정상상태도 아니다. 3D·엔진 출력이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "gaelysam/mapgen_rivers (Luanti/Minetest)",
+     "kind": "oss-repo",
+     "url": "https://gitlab.com/gaelysam/mapgen_rivers",
+     "year": "v1.1.x 2026 (GitLab ★5, 활동 2026-04)",
+     "what_it_does": "Fastscape에서 영감을 받은 흐름 라우팅(Cordonnier, Bovy & Braun 2019)과 하천 침식으로 격자를 먼저 생성하고, 이를 읽어 복셀 게임 Luanti의 지형을 만드는 맵 생성기. 하천 합류와 호수 유입·유출을 지원한다.",
+     "overlapping_chapters": [
+      "2",
+      "4",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'2D LEM 사전계산 → 복셀 게임' 패턴의 오래된 사례다. 평면이고 지층·동굴·SDF가 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "yes (블록)",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "Nylem-Labs/nova-worldforge (WorldForge)",
+     "kind": "oss-repo",
+     "url": "https://github.com/Nylem-Labs/nova-worldforge",
+     "year": "2026 (★9, push 2026-08-25)",
+     "what_it_does": "문헌에 인용된 지형 과정 법칙들(Braun–Willett 암시적 stream power, Barnes priority-flood, 빙하 shallow-ice, 해안 후퇴)을 6.2 Myr 동안 적분해 26 km 타일을 만든다. Copernicus GLO-30 실측 DEM에서 13개 형태계측 목표 범위를 생성 전에 고정하고 매 bake를 채점한다(현재 7/13 통과). 행성 데이터시트에 층서를 넣고, 결정성과 199개 테스트를 갖췄다.",
+     "overlapping_chapters": [
+      "3",
+      "4"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'실측 DEM 기반 검증' 문화는 b-pcg 3장과 검증 철학과 가깝다. 단일 평면 타일이고 시간 적분이며 3D·구면이 없다. DEM을 파라미터 학습이 아니라 합격 기준으로 쓴다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "yes"
+    },
+    {
+     "name": "weigert/SoilMachine",
+     "kind": "oss-repo",
+     "url": "https://github.com/weigert/SoilMachine",
+     "year": "2021~2023 (★324)",
+     "what_it_does": "격자 위에 run-length 인코딩한 퇴적 구간 연결 리스트로 다층(지표·지하, 여러 토양 종류) 지형을 표현하고 입자 기반 수력·풍식을 시뮬레이션한다.",
+     "overlapping_chapters": [
+      "6",
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "층 구조 지형 자료구조의 선례다. 평면이고 수계 정상상태나 SDF가 없다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "partial (층 구조)",
+     "hydrology_consistent": "partial"
+    },
+    {
+     "name": "ArndRosemeier/World",
+     "kind": "oss-repo",
+     "url": "https://github.com/ArndRosemeier/World",
+     "year": "2026 (생성·push 2026-09-30, ★0)",
+     "what_it_does": "three.js 절차적 외계 세계. 단일 density(SDF) 함수가 렌더링, 물리, 레이캐스트를 모두 담당한다. 동굴은 noise-intersection 터널과 cheese 공동이고, 물은 질량 기반 셀룰러 오토마타이며, 파낸 곳이 해수면 아래면 침수된다.",
+     "overlapping_chapters": [
+      "7"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'두 노이즈 영점 집합의 교차로 만든 동굴'과 '단일 SDF 진리원천'은 이미 흔한 기법이다. 구면 행성이 아니고 수계 시뮬레이션이 없다.",
+     "evidence": "verified",
+     "spherical": "no (무한 지형 + 위성)",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "Hoimar/Planet-Generator",
+     "kind": "oss-repo",
+     "url": "https://github.com/Hoimar/Planet-Generator",
+     "year": "2020~2023 (★264, Godot 3)",
+     "what_it_does": "Godot용 GDScript 행성 생성 애드온. 층 노이즈와 청크 LOD를 쓴다. README의 할 일 목록에 erosion과 rivers가 미완료로 남아 있다.",
+     "overlapping_chapters": [
+      "8"
+     ],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "Godot 행성 LOD 예시일 뿐이다. 수계, 복셀, 지질이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "no"
+    },
+    {
+     "name": "lmf-git/StreamlinedPlanetaryTerrainGodot",
+     "kind": "oss-repo",
+     "url": "https://github.com/lmf-git/StreamlinedPlanetaryTerrainGodot",
+     "year": "2026-06 (★0)",
+     "what_it_does": "Godot 4.7 멀티플레이 파괴형 LOD 복셀 행성. Rust GDExtension transvoxel 메셔를 쓰고, 원거리는 큐브스피어 쿼드트리 높이장, 근거리는 복셀로 넘기며 동굴이 있다.",
+     "overlapping_chapters": [
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "Godot 복셀 행성의 엔진 측면만 겹친다. 수계와 지질 생성이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "yes",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "MightyBOBcnc/nixis",
+     "kind": "oss-repo",
+     "url": "https://github.com/MightyBOBcnc/nixis",
+     "year": "2021~2024 (★9, push 2024-02)",
+     "what_it_does": "구형 행성용 Python 맵 생성기. 수력 침식, 판구조, 기후를 다루며 README는 평면 도구가 구면 왜곡을 보정하지 못한다는 점을 동기로 든다. 궤도 거리에서 볼 텍스처를 만드는 것이 목표이고 지상 플레이용이 아니라고 명시한다.",
+     "overlapping_chapters": [
+      "1",
+      "2",
+      "5"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "'구면 왜곡 보정 침식'이라는 동기는 같다. 개발 중이고 정상상태·3D·엔진이 없다.",
+     "evidence": "verified",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "Proland (INRIA, 미러 LarsFlaeten/Proland_dev)",
+     "kind": "oss-repo",
+     "url": "https://github.com/LarsFlaeten/Proland_dev",
+     "year": "2010년대 (INRIA 공개, 미러)",
+     "what_it_does": "행성 전체까지 다해상도 지형을 실시간 렌더링하는 C++/OpenGL 라이브러리. 하천 등 벡터 데이터를 다루는 river 플러그인(LazyHydroGraph)이 있다.",
+     "overlapping_chapters": [
+      "6",
+      "8"
+     ],
+     "overlap_level": "partial",
+     "key_difference_vs_bpcg": "하천을 벡터 그래프로 다뤄 행성 렌더링에 합치는 선례다. 수계 생성이나 침식은 하지 않는다.",
+     "evidence": "secondary",
+     "spherical": "yes",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown"
+    },
+    {
+     "name": "이름 충돌: BPCG (Blended Pairwise Conditional Gradients) 등",
+     "kind": "oss-repo",
+     "url": "https://github.com/KazuTsuji/bpcg_algorithm",
+     "year": "2022~",
+     "what_it_does": "'BPCG'는 Frank-Wolfe 계열 최적화 알고리즘(Blended Pairwise Conditional Gradients)의 약어로 쓰인다. KazuTsuji/bpcg_algorithm은 논문 보충 자료이고, ZIB-IOL/FrankWolfe.jl에 blended_pairwise_conditional_gradient 함수가 있다. jpanikulam/vslam-bpcg도 있다. PyPI에서 bpcg, b-pcg, b_pcg는 모두 404(미등록)였고, GitHub에 'b-pcg'라는 이름의 의미 있는 프로젝트는 없었다. 'PCG'는 PCG 난수 생성기(imneme/pcg-c-basic)와 Unreal Engine의 PCG 프레임워크와도 겹친다.",
+     "overlapping_chapters": [],
+     "overlap_level": "none",
+     "key_difference_vs_bpcg": "기능 중복은 없고 검색 혼동 정도의 위험만 있다. Python 패키지명 bpcg는 현재 비어 있다.",
+     "evidence": "verified",
+     "spherical": "no",
+     "volumetric_3d": "no",
+     "hydrology_consistent": "unknown"
+    }
+   ],
+   "closest_competitors": [
+    "dollspace-gay/Wildforge (2026, ★14): 큐브스피어 전역 배수 아틀라스(면 경계 인식 priority-flood, 유량, 하폭, 호수)에서 판·퇴적층·습곡 지층·동굴·유한 물 복셀로 이어지는 '구형 수계 → 복셀 지층/동굴/물' 사슬을 실제로 돌린다. 다만 블록 복셀, D8 시간 반복 침식이고 SDF, 정상상태, DEM 학습, Godot이 없다.",
+    "dualmindblade/triangulum (2026, ★0): Python 구면 planetgen(priority-flood, stream power, 융기, 호수)을 큐브 면 래스터와 하천 경로로 bake하고 Rust 복셀 뷰어(f64 카메라, 협곡 하천, 흙 지층, 동굴)로 보낸다. b-pcg의 '2D 지도 공장 → 번들 → 3D' 구조와 거의 같다.",
+    "LSDTopoTools2/MuddPILE의 LSDRasterModel steady-state snap(2017~2021): fluvial_snap_to_steady_variable_K_variable_U와 hillslope_snap_to_steady_variable_Sc가 stack 순서로 z = z_receiver + dx·(stream-power 경사 또는 S_c)를 계산한다. b-pcg 4장 정상상태 솔버의 핵심 점화식이 평면 D8로 이미 구현되어 있다."
+   ],
+   "apparent_gaps": "찾은 범위(GitHub REST 검색과 README·소스 확인, GitLab·Codeberg API 검색, 웹 검색) 안에서는 다음 조합을 한 저장소에서 구현한 사례를 찾지 못했다. 다만 2026년에 비슷한 소형 저장소가 빠르게 늘고 있어 '없다'고 단정할 수는 없다. (1) 구면(큐브스피어) 위에서 시간 적분이 아니라 정상상태를 직접 적분하는 해법. 수신 셀 고정점 반복, 감쇠 MFD 반복 후 고정 가중 최종 적분, S_crit 상한을 포함한다. LSDTopoTools의 snap은 평면 D8 1회 적용이고, fastscapelib HEALPix와 Veloren, web_planet, triangulum, Wildforge는 모두 시간 반복이다. (2) 큐브 면 경계의 격자 결 아티팩트를 적응형 MFD로 없애고 회전 불변성 테스트와 grid-alignment 지수로 정량 검증하는 것. Wildforge에는 면 이음매 위상 테스트가 있지만 통계적 흔적 테스트는 보지 못했고, triangulum은 비구조 격자로 문제를 회피한다. (3) 실측 DEM의 slope-area 회귀와 WorldClim으로 θ, k_s, S_crit를 유량 단위로 보정해 행성 생성기 입력으로 쓰는 것. WorldForge는 DEM을 합격 기준으로만 쓴다. (4) 연속 SDF 볼륨에서 '능선 포락선 기준면 아래 깊이'로 지층을 인덱싱해 계곡벽에 지층이 순서대로 드러나게 하고, 습곡·단층, 지하수면 근처 석회암으로 마스크한 카르스트 동굴, 바다·호수·강·침수 동굴을 하나로 묶는 물 규칙, int8 TSDF, 큐브 면 ghost-cell 이중선형 보간을 함께 쓰는 것. Wildforge는 블록 복셀 지층과 습곡이 있고 동굴의 지하수 제약은 계획 단계다. (5) 이 모두를 Godot에 넣고 Python 참조 구현과 1e-4 m 일치 golden test로 묶는 것. 정리하면 개별 요소는 거의 다 존재하고, b-pcg의 차별점은 '정상상태 + 구면 + 이음매 없는 MFD + DEM 보정'을 '지질적으로 일관된 SDF 볼륨'까지 이어 붙이고 정량 검증한다는 통합과 검증 쪽에 있다.",
+   "novelty_threats": "다음은 b-pcg가 새로운 것이라고 주장하면 안 되는 부분이다(모두 이번 세션에서 공개 코드나 문서를 확인함). 1장: 등각 큐브스피어, 면 경계 이웃 테이블, 셀 면적 보정. Gkrumbach07/procedural-generation과 web_planet에 같은 설계가 있고, haruka-cpp·demiurge·Wildforge에도 큐브스피어 격자가 있다. 구면 흐름 라우팅 자체는 fastscapelib HEALPix(2025)와 Landlab IcosphereGlobalGrid(2024)에 이미 있다. 2장: priority-flood, D8, 위상 순서, 유량 누적은 표준 기법이다(RichDEM, pysheds, fastscapelib, landlab). Quinn 윤곽 가중과 유량·경사 의존 MFD 지수(1.1 하한)는 Quinn 1995와 Qin 2007 그대로이며 WhiteboxTools에 구현되어 있다. 3장: binned slope-area 회귀로 θ와 k_s를 얻는 것은 TopoToolbox slopearea의 표준 기능이다(LSDTopoTools chi 분석도 같은 계열). 4장: '융기 = 침식' 평형을 하류부터 z_r + d·경사로 적분하는 방식은 LSDTopoTools/MuddPILE의 steady-state snap(Mudd et al. 2014 식 4a, 가변 K·U, 가변 S_c 사면 snap)과 사실상 같다. 평형 지형을 생성기로 쓰는 것도 Cordonnier 2016, Schott 2023(코드 공개), Tzathas 2024(해석해), Veloren에 선례가 있다. 설계문서에 LSDTopoTools와 Mudd 2014 인용이 없으므로 반드시 추가하고, 새로운 부분을 '구면 + 수신 셀 반복 수렴 + MFD 고정 가중 최종 적분'으로 좁혀야 한다. 5장: 노이즈로 휜 Voronoi 판, 수렴·발산·변환 분류, 융기와 암상에서 침식도 만들기, 위도대 강수는 haruka-cpp, web_planet, demiurge, World Orogen, triangulum, Wildforge에 모두 있다. 6장: 유량 기반 하폭(Leopold–Maddock 또는 Manning)과 하천 벡터 곡선은 web_planet(w≈a·Q^0.5), Veloren(Manning), Wildforge(bankfull 폭)에 있고, priority-flood 수면으로 호수를 만드는 것도 흔하다. 7장: 구형 SDF와 노이즈 오버행 동굴은 godot_voxel/solar_system_demo에, 노이즈 영점 교차 동굴은 ArndRosemeier/World와 마인크래프트식 spaghetti 동굴에, 8/16-bit 양자화·절단 SDF는 godot_voxel 기본 동작에, 절벽에 드러나는 퇴적층과 판 경계를 따르는 습곡 지층은 Wildforge에 있다. 8장: 카메라 상대 double 정밀도, 결정성 golden·parity 테스트, 구형 중력은 haruka-cpp, minos, triangulum, web_planet, demiurge에 흔하다. 그리고 'Python 2D 사전계산 → 큐브 면 번들 → 복셀 세계'라는 전체 구조도 triangulum과 Gkrumbach07(Godot export), 평면이지만 Veloren과 mapgen_rivers에 이미 있다. 따라서 '구형 복셀 행성에 물리 기반 수계를 처음 넣었다'고 주장하면 안 된다.",
+   "summary": "결론: 질문한 전체 사슬(구형 정상상태 수계 → 파생 맵 → 지층·동굴·물을 갖춘 3D 복셀 SDF → 엔진)을 b-pcg 사양 그대로 구현한 오픈소스는 찾지 못했다. 하지만 2026년 들어 거친 버전의 사슬을 구현한 소형 저장소들이 등장했다(대부분 별 0~34개이고 AI 보조 개발로 보인다). 그래서 '이런 시도 자체가 없었다'는 주장은 성립하지 않는다.\n\n가장 가까운 것은 다음 세 저장소다.\n- dollspace-gay/Wildforge: 큐브스피어 전역 배수 아틀라스에서 블록 복셀 지층·습곡·동굴·유한 물까지 간다.\n- dualmindblade/triangulum: Python 구면 planetgen을 큐브 면 bake로 넘겨 Rust 복셀 뷰어에서 하천·지층·동굴을 보여 준다.\n- Gkrumbach07/procedural-generation: Python/Numba 등각 큐브스피어, 면 경계 D8, manifest, Godot export까지 b-pcg 2D 쪽 구조가 거의 같다.\n\n이들에 없는 것은 정상상태 직접 해법, 큐브 면 결 아티팩트를 없애는 적응형 MFD와 회전 불변성 검증, 실측 DEM·WorldClim 파라미터 보정, 연속 SDF에서 기준면 깊이로 인덱싱한 지층과 지하수면 카르스트 동굴과 단일 물 규칙, Godot golden test다. 평면 세계로는 Veloren이 가장 성숙한 전체 사슬(융기 + stream-power, 다중 수신, 호수, Manning 하폭, 복셀 동굴)이다.\n\n과학적 핵심 부품은 모두 표준 도구에 이미 있다.\n- 4장 점화식: LSDTopoTools/MuddPILE의 steady-state snap(가변 K·U, 가변 S_c)과 사실상 같다.\n- 구면 LEM: fastscapelib v0.3.0 HEALPix planetary 예제(2025)와 Landlab icosphere(2024).\n- MFD 공식: WhiteboxTools의 Quinn/Qin.\n- 3장 회귀: TopoToolbox slopearea.\n\n따라서 캡스톤의 새로운 점은 개별 알고리즘이 아니라 '구면 위 정상상태 + 이음매 없는 MFD + DEM 보정'을 '지질적으로 일관된 SDF 볼륨과 Godot'까지 통합하고 정량 검증한다는 데서 찾아야 한다. demiurge가 하천을 삭제한 사례(셀당 3 km 격자로는 폭 100 m 하천을 표현할 수 없음)는 전역 격자 해상도와 복셀 스케일의 간극이라는 실제 미해결 문제를 보여 주며, b-pcg 6~7장이 왜 필요한지 설명하는 근거로 쓸 수 있다.\n\n이름 확인: PyPI에 bpcg, b-pcg는 미등록이고 GitHub에도 의미 있는 'b-pcg' 프로젝트는 없다. 'BPCG'는 최적화 알고리즘 Blended Pairwise Conditional Gradients(FrankWolfe.jl)의 약어이고 'PCG'는 난수 생성기와 Unreal PCG 프레임워크와 겹치지만, 검색 혼동 수준의 경미한 위험이다.\n\n근거: 저장소 메타데이터(별, 마지막 push)는 gh API로 직접 확인했다. 핵심 주장은 README, 설계문서, 소스(haruka planet_fields.cpp, Veloren erosion.rs, LSDRasterModel.cpp/.hpp, demiurge erosion.ts·caveField.ts, WhiteboxTools quinn/qin, fastscapelib planetary_py.ipynb)를 직접 열어 검증했다. Proland만 검색 결과 수준(secondary)이다. 작업 파일은 scratchpad <scratchpad> 에 있다."
+  }
+ },
+ {
+  "key": "geoscience",
+  "result": {
+   "checks": [
+    {
+     "topic": "정상상태 stream power 유도 (S = k_s Q^-θ, k_s=(U/K)^(1/n), θ=m/n)",
+     "guide_claim": "3장: E=KQ^m S^n에서 U=E로 두면 S=k_s Q^-θ, k_s=(U/K)^(1/n), θ=m/n이 된다. 4장은 이 식으로 정상상태 지형을 바로 계산한다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "대수적으로 맞고 표준 형태다. Tzathas 2024 식(1), Adams 2020 식(1a–c)의 E=K·A^m·S^n과 E=K_lp·Q^m·S^n, Kirby & Whipple 2001에서 같은 식을 확인했다. 다만 세 가지 한계가 있다. (1) 탈착 제한형(detachment-limited) 법칙이라 퇴적이 없다. 그래서 충적 평야, 선상지, 퇴적 분지가 원리상 생기지 않는다. 6장의 퇴적물 두께는 사후에 덧입히는 장식이다. 이와 달리 goSPL은 퇴적과 층서까지 다룬다. (2) '모든 육지가 융기와 침식이 균형을 이룬 정상상태'라는 가정은 지구 대부분(안정 대륙, 빙하 지형)과 맞지 않는다. Willett & Brandon 2002는 정상상태에도 네 종류가 있어 무엇이 정상인지 구분해야 한다고 지적한다. (3) k_lo는 산지 기반암 하천의 10번째 백분위수라서, 이를 대륙 내부 저지대에 적용하면 하천 경사가 실제 충적 하천보다 가파를 가능성이 크다.",
+     "evidence": "verified",
+     "sources": [
+      "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf",
+      "https://doi.org/10.1126/sciadv.aaz3166",
+      "https://doi.org/10.1130/0091-7613(2001)029<0415:qdrurv>2.0.co;2",
+      "https://doi.org/10.1130/0091-7613(2002)030<0175:ossimb>2.0.co;2",
+      "https://joss.theoj.org/papers/10.21105/joss.02804.pdf"
+     ]
+    },
+    {
+     "topic": "4장 상류 적분 솔버 = χ 적분 + 고정점 반복 (신규성)",
+     "guide_claim": "시간 적분 없이 z_c = z_r(c) + d·min(k_s Q^-θ, S_crit)를 바다에서 상류로 적분하고, 수신 셀이 바뀌지 않을 때까지 흐름 계산과 적분을 반복한다. 진동은 수신 셀 히스테리시스 η로 막는다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "수학적으로 옳지만 새로운 방법이 아니다. k_s가 균일하고 Q=A일 때 이 적분은 Perron & Royden 2013의 χ 변환(정상상태 stream power를 적분한 형태)을 이산화한 것이다. '흐름망 계산 → 해석해로 고도 계산'을 수렴할 때까지 반복해 2D 정상상태 지형을 한 번에 얻는 방법은 Steer 2021(Salève, ESurf)이 이미 발표했다. 하천, 붕적(colluvial), 사면 영역도 포함하며, 사면은 m=0, n=1의 임계각으로 다룬다. Tzathas, Gailleton, Steer, Cordonnier 2024(CGF/Eurographics)는 이를 그래픽스로 가져왔다. Steer의 고정점 반복이 느리고 진동한다고 보고했고, 이전 지형과의 지수 이동평균(감쇠), multigrid 가속, 임계 경사 s_c=0.57(≈30°), 4방향 랜덤 수신 셀(격자 결 제거)을 추가했다. 이 가이드의 S_crit≈0.6, 감쇠 λ, 노드 흔들기와 거의 일대일로 대응한다. 4장은 Steer 2021과 Tzathas 2024를 큐브스피어로 옮긴 재구현으로 서술하고, 피치에서 반드시 인용해야 한다. 히스테리시스 η는 작은 공학적 개선 정도다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1002/esp.3302",
+      "https://esurf.copernicus.org/articles/9/1239/2021/",
+      "https://doi.org/10.5194/esurf-9-1239-2021",
+      "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf"
+     ]
+    },
+    {
+     "topic": "D8 단일 수신 셀 적분의 방향성 아티팩트",
+     "guide_claim": "수신 셀 r이 고정되면 z^(k+1)은 정확한 고정점이고, 결은 MFD나 노드 흔들기로 없앤다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "고정점이라는 주장은 맞다. 다만 Tzathas 2024는 단일 수신 셀을 따라 잰 경사(Δz/d)가 실제 경사 크기 ‖∇z‖와 다르다고 지적한다. 그대로 쓰면 등고선이 격자 방향으로 찌그러지므로(일정 경사 원뿔이 동심원이 되지 않음), 보정항을 넣어 방향성 아티팩트를 없앴다. 가이드의 D8 식에는 이 보정이 없다. 그래서 S_crit로 잘린 사면이 8방향 거리 기준의 팔각형 등고선을 만들 수 있고, 면 경계에서 격자가 꺾이는 큐브스피어에서는 이것이 이음새로 보일 수 있다. 회전 불변성 테스트에서 이 항목을 따로 확인해야 한다.",
+     "evidence": "verified",
+     "sources": [
+      "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf"
+     ]
+    },
+    {
+     "topic": "오목도 θ 추정: slope–area 구간 중앙값 회귀와 편향",
+     "guide_claim": "log A 구간별 경사 중앙값에 직선을 맞춰 θ를 얻는다. 융기가 공간적으로 변하면 θ가 치우친다(0.45 → 0.49)는 것을 관찰했으므로 비슷한 지역끼리 나눠 맞춘다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "고전적이고 정당한 방법이다. 관찰한 편향도 문헌과 일치한다. Kirby & Whipple 2001은 공간적으로 변하는 융기율이 하천 오목도를 체계적으로 바꾼다는 것을 이론과 Siwalik 사례로 보였다. Mudd et al. 2018은 수치 실험으로 'χ 기반 방법이 과도기 융기나 공간 가변 융기·침식도 아래에서 slope–area보다 m/n을 더 잘 복원한다'고 결론 내렸고, 실제 DEM에서는 slope–area로 신뢰할 만한 기준 오목도를 뽑기 어렵다고 했다. Smith & Fox 2024는 기존 방법들이 공간 기울기가 있을 때 체계적 오차를 낸다며 대규모 역산을 제안했다. Morris & Roberts 2025는 초기 노이즈가 누적 융기의 1% 미만이어도 slope–area나 χ로 복원한 값이 2배 이상 어긋날 수 있다고 보였다. 권장안: Hergarten et al. 2016의 χ disorder나 Mudd 2018 방식(LSDTopoTools, TopoToolbox)을 쓰고, slope–area는 보조로만 쓴다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1130/0091-7613(2001)029<0415:qdrurv>2.0.co;2",
+      "https://esurf.copernicus.org/articles/6/505/2018/",
+      "https://doi.org/10.1029/2023jf007584",
+      "https://doi.org/10.5194/esurf-13-1003-2025",
+      "https://doi.org/10.5194/esurf-4-1-2016"
+     ]
+    },
+    {
+     "topic": "θ 범위 검사 [0.3, 0.7]와 전 지구 단일 θ_ref",
+     "guide_claim": "θ̂∈[0.3,0.7]은 '전 세계적으로 관측되는 범위'다. 지역별 θ̂의 중앙값을 θ_ref로 고정해 모든 곳에 쓴다.",
+     "verdict": "questionable",
+     "explanation": "Gailleton et al. 2021(JGR-ES)에 따르면 흔히 0.45를 가정하지만, 전 세계 산지·고지대에서 가장 그럴듯한 θ의 중앙값은 0.425이고 변동이 매우 커서 값을 가정하지 말고 직접 구하라고 권고한다. 검색 스니펫에 따르면 사분위가 0.225와 0.575인데, 그렇다면 [0.3,0.7] 필터는 실제 유역의 상당 부분(하위 사분위)을 버린다. Mudd 2018도 실제 지형에서 0.1–0.7 정도의 값을 보고했다. 또 Goren & Shelef 2024는 오목도가 하천망 평면 복잡도를 지배하고 건조도와 상관이 있다고 보였다. 그러니 θ를 전 지구 하나로 고정하면 기후에 따른 하천망 모양 차이를 잃는다. θ를 강수나 건조도의 함수로 학습하는 쪽이 과학적으로도 낫고, 기여 포인트로도 더 크다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1029/2020jf006060",
+      "https://zenodo.org/records/5256857",
+      "https://esurf.copernicus.org/articles/6/505/2018/",
+      "https://doi.org/10.5194/esurf-12-1347-2024"
+     ]
+    },
+    {
+     "topic": "S_crit ≈ 0.6(31°) 학습과 해상도·스케일 불일치",
+     "guide_claim": "사면 셀 경사의 상위 5%를 S_crit로 쓴다(0.5–1.0, 27–45°). A_crit≈10^5–10^6 m². 학습한 값을 행성 솔버에 그대로 쓴다.",
+     "verdict": "questionable",
+     "explanation": "값 자체는 그럴듯하다. Tzathas 2024는 s_c=0.57을 썼고, Montgomery 2001은 정상상태 산맥에서 임계 사면(threshold hillslope)을 다뤘다. 문제는 스케일이다. 경사 분포는 DEM 해상도에 민감하다(Grieve et al. 2016). 반지름 약 6400 km에 면당 4096²이면 평균 셀 면적은 약 5×10^6 m²(한 변 약 2.3 km)로, A_crit보다 크다. 사면-하천 전이 유량 Q*=(k_s/S_crit)^(1/θ)를 계산하면 k_s=60에서 약 2.8×10^4, k_s=250에서 약 6.6×10^5 m³/yr이다. P≈1 m/yr일 때 셀 하나의 유량 약 5×10^6보다 작으므로, 행성 해상도에서는 S_crit가 거의 작동하지 않는다. 사면은 전부 셀보다 작은 규모가 되고, 능선 셀의 경사는 약 0.06–0.24로 정해진다. 4장 그림처럼 400 m 셀에서 검증한 사면 거동이 행성에서는 나타나지 않는다. 결과적으로 30 m DEM에서 학습한 S_crit와 A_crit는 행성 2D 단계에서 쓸모가 없다. 맥에서 저해상도로 조정한 결과가 실습실 고해상도로 그대로 옮겨진다는 가정도 깨진다(Hergarten 2020: 사면 과정과 결합한 탈착 제한형 모델은 격자 해상도에 강하게 의존한다).",
+     "evidence": "verified",
+     "sources": [
+      "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf",
+      "https://doi.org/10.2475/ajs.301.4-5.432",
+      "https://doi.org/10.5194/esurf-4-627-2016",
+      "https://doi.org/10.5194/esurf-8-367-2020"
+     ]
+    },
+    {
+     "topic": "k_sn의 유량 기준 변환과 WorldClim 단위",
+     "guide_claim": "Q=P̄A로 두면 k_s^Q = k_sn·P̄^θ_ref. WorldClim 강수는 mm/월이므로 12개월을 합해 1000으로 나눠 m/yr로 바꾼다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "대수가 맞다(S=k_sn A^-θ=k_sn P̄^θ Q^-θ). Adams et al. 2020(Sci. Adv.)도 Q=A·R(R은 유역 A 평균 강수, m/yr), K=K_lp·R^m으로 같은 정의를 쓴다. WorldClim 2.1의 prec 변수는 mm 단위 월별값이고, 1970–2000 평균이며 30초(약 1 km) 해상도까지 있다. 연강수는 BIO12(Annual Precipitation)로 바로 쓸 수도 있다. 주의할 점: (1) P̄는 셀의 강수가 아니라 상류 유역 평균(강수 가중 누적)이어야 한다. (2) 강수는 유출량이 아니다(증발산). 학습과 생성에 같은 정의를 쓰므로 내부 일관성은 유지되지만, 건조 지역에서는 물리적 의미가 약해진다. (3) 1970–2000 기후값을 10^5–10^6년 규모의 지형에 대응시키는 것은 근사다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1126/sciadv.aaz3166",
+      "https://www.worldclim.org/data/worldclim21.html",
+      "https://www.worldclim.org/data/bioclim.html"
+     ]
+    },
+    {
+     "topic": "MFD 분배식: Quinn 등고선 가중치 0.5/0.354, 지수 범위",
+     "guide_claim": "w ∝ ℓ·S^p, 가로·세로 0.5, 대각선 0.354(Quinn 등 1991), p→∞이면 D8.",
+     "verdict": "sound-with-caveat",
+     "explanation": "Qin et al. 2007(IJGIS) 본문에서 Quinn 1991 식과 L_i=0.5(cardinal), 0.354(diagonal), p→∞이면 SFD라는 점(Holmgren 1994)을 확인했다. Freeman 1991은 p=1.1을 최적으로 제안했고, Holmgren 1994와 Quinn 1995는 단일 방향 흐름에 p=10을 권했다. 따라서 가이드의 [1.1, 8]은 기존 범위 안이다. 다만 0.5/0.354는 정사각 셀을 전제로 한 값이다. 셀 모양과 이웃 거리가 위치마다 다른 등각 큐브스피어에서 고정 상수를 쓰면 기하와 맞지 않는다(실제 이웃 간 경계 길이로 계산하는 편이 일관적이다). Hyväluoma 2017은 정사각 격자 흐름 누적의 회전 의존성을 체계적으로 분석했고, 등방성을 높이려면 cardinal/diagonal 가중치를 방법별로 조정해야 함을 보였다. 이 연구는 가이드의 '격자 정렬 지수'와 회전 테스트의 선행 연구이기도 하다.",
+     "evidence": "verified",
+     "sources": [
+      "https://solim.geography.wisc.edu/axing/publication/030_IJGIS-Qin07_Published.pdf",
+      "https://doi.org/10.1080/13658816.2017.1358365"
+     ]
+    },
+    {
+     "topic": "유량에 따른 적응형 MFD 지수 (신규성 여부)",
+     "guide_claim": "p_c를 유량 Q_c의 smoothstep 함수로 1.1에서 8까지 바꿔, 사면은 퍼뜨리고 하천은 모은다. D8 하이브리드(문턱값에서 전환)는 피해야 할 지름길이다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "방법은 타당하지만 기존 방법이다. Qin et al. 2007이 정리한 바에 따르면 Quinn, Beven & Lamb 1995가 이미 기여 면적이 커질수록 지수를 1(완전 분산)에서 큰 값(SFD)으로 연속적으로 바꾸는 MFD를 제안했다: p=(A/thresh+1)^h. Kim & Lee 2004(SDFAA)도 누적 분포로 p를 정한다. Moore et al. 1993의 FD8/FRho8은 하천 발원 임계 면적 위에서는 MFD, 아래에서는 D8을 쓰는 하이브리드로, 가이드가 '지름길'이라고 부른 방식과 같다. Qin 2007(MFD-md)은 국소 최대 하강 경사로 p∈[1.1,10]을 정한다. 따라서 적응형 지수는 Quinn 1995 계열을 재사용한 것으로, A 대신 강수 가중 Q를 쓴 점만 다르다. Qin 2007이 누적량 기반 지수가 다른 알고리즘의 누적 결과에 의존한다고 비판한 점도 함께 알아 둘 만하다.",
+     "evidence": "verified",
+     "sources": [
+      "https://solim.geography.wisc.edu/axing/publication/030_IJGIS-Qin07_Published.pdf"
+     ]
+    },
+    {
+     "topic": "MFD 정상상태 솔버의 비수렴과 2단계 방식",
+     "guide_claim": "MFD 높이 식을 그대로 반복하면 수렴하지 않는다(최대 변화 약 100 m 정체). 감쇠 반복 30회 뒤 비율을 고정해 한 번 적분하면 '고정한 비율에 대해서는 정확한' 정상상태가 된다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "관찰은 문헌과 맞고, 원인은 수치 문제만이 아니다. Pelletier 2004(GRL)는 같은 조건(균일 융기·침식도·강수·사태 문턱)에서도 steepest-descent 라우팅은 이상적 정상상태에 도달하지만 분기(bifurcation) 라우팅은 하천 유역이 계속 재편되어 정상상태에 이르지 않음을 보였다. 그러므로 MFD 정상상태는 원래 잘 정의되지 않을 수 있고, 2단계 결과는 '고정된 라우팅에 대한 의사(pseudo) 정상상태'로 명시해야 한다. 2단계 결과에 대해 '정확한 정상상태'라고 쓴 표현은 과장이다. Armitage 2019는 노드 간 MFD가 해상도 의존성을 줄이고 실제에 가까운 흐름 경로를 준다고 했고, Shelef & Hilley 2013은 라우팅 규칙이 모델 지형 구조를 크게 바꾼다고 보고했다. 노드 흔들기는 Tzathas 2024의 랜덤 수신 셀과 같은 목적의 기존 기법에 가깝다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1029/2004gl020802",
+      "https://doi.org/10.5194/esurf-7-67-2019",
+      "https://doi.org/10.1002/jgrf.20127",
+      "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf"
+     ]
+    },
+    {
+     "topic": "Priority-flood + ε 채움",
+     "guide_claim": "바다에서 최소 힙으로 채우고(O(N log N)), 라우팅용으로 z̃=max(z, z̃_c+ε), ε≈10^-3 m를 따로 만든다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "Barnes, Lehman, Mulla 2014(Computers & Geosciences 62)의 Priority-Flood와 Alg. 3 'Priority-Flood+ε'를 그대로 쓴 것으로, 부동소수점 데이터에서 O(n log n)이다. 다만 Barnes는 고정 ε 대신 NextAfter를 권한다. ε가 너무 작으면 더해도 값이 바뀌지 않고, 너무 크면 큰 웅덩이가 주변보다 높은 대지(mesa)가 될 수 있다고 경고한다. float32로 저장하면 고도 수 km에서 값 간격이 약 0.5–1 mm라 ε=1e-3 m가 사라질 수 있으니 float64로 계산해야 한다. ε 채움은 평탄면에서 격자 방향의 평행 흐름을 만든다. 수렴형 흐름이 필요하면 Barnes et al.이 평탄면 배수 방향 알고리즘을 따로 제시했다. 4장 결과에는 웅덩이가 없으므로 실제 영향은 6장 호수 경로에 한정된다.",
+     "evidence": "verified",
+     "sources": [
+      "https://arxiv.org/abs/1511.04463"
+     ]
+    },
+    {
+     "topic": "Leopold–Maddock 하류 수리 기하 (W∝Q^0.5, D∝Q^0.4)",
+     "guide_claim": "하천 폭 W=k_W Q̄^0.5, 깊이 D=k_D Q̄^0.4. 유량 100배면 폭 10배, 깊이 약 6배.",
+     "verdict": "sound",
+     "explanation": "Singh 2003(Int. J. Sediment Research)의 Table 1에서 Leopold & Maddock 1953 하류 지수 b=0.50, f=0.40, m=0.10을 확인했다. 100^0.4≈6.3이므로 계산도 맞다. 같은 표에서 연구마다 b가 0.03–0.69로 크게 흩어지므로, 계수 k_W와 k_D는 설정 파라미터로 노출하는 것이 좋다. 기준 유량은 연평균 유량(bankfull 아님)이라는 점을 명시하면 된다.",
+     "evidence": "verified",
+     "sources": [
+      "https://geofaculty.uwyo.edu/neil/teaching/4880_files/HydraulicGeometry.pdf"
+     ]
+    },
+    {
+     "topic": "지하수면 휴리스틱 (물까지 거리 × P_ref/P)",
+     "guide_claim": "z_gw = z' − min(Δmax, κ·δ^w·P_ref/P)에 라플라시안 평활화를 하고, 물가에서는 수면과 같게 고정한다.",
+     "verdict": "questionable",
+     "explanation": "방향성은 맞다. 물가에서 멀수록, 건조할수록 지하수면이 깊어진다. Fan et al. 2013(Science)은 100만 개 이상의 관측정 자료와 모델로 전 지구 지하수면 깊이를 지도화했다(검색 스니펫 기준). 하지만 지하수면 문헌의 핵심 변수가 빠졌다. Haitjema & Mitchell-Bruker 2005와 Gleeson et al. 2011의 water-table ratio WTR=R·L²/(m·K·H·d)는 함양량 R, 지표수 간 거리 L과 함께 수리전도도 K, 대수층 두께 H, 최대 지형 기복 d를 쓴다(스니펫 기준). 습윤하고 K가 낮으면 지형 지배형(지형을 완만하게 따라감), 건조하고 K가 높고 산지이면 함양 지배형(평평하고 깊음)이 된다. 가이드는 K, 즉 암석 종류를 무시한다. 그런데 7장은 이 지하수면 근처의 석회암에 동굴을 만든다. 석회암 카르스트는 K가 매우 커서 지하수면이 국지 기준면(하천 수위) 근처에서 거의 평평한 함양 지배형이 되므로, 바로 그 영역에서 휴리스틱이 가장 크게 틀린다. 개선안: 암석별 K를 반영한 WTR로 '지형 추종'과 '기준면 평탄' 사이를 보간한다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://ngwa.onlinelibrary.wiley.com/doi/10.1111/j.1745-6584.2005.00090.x",
+      "https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2010GL046427",
+      "https://science.sciencemag.org/content/339/6122/940"
+     ]
+    },
+    {
+     "topic": "카르스트 동굴: 지하수면 부근 + 층리면 정렬",
+     "guide_claim": "두 노이즈의 0-집합 교선을 지층 좌표에서 수직으로 압축해 층리를 따라 퍼지게 하고, 석회암이면서 지하수면 근처(가우시안 마스크)에서만 동굴을 만든다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "지질학적 근거가 있다. Audra & Palmer 2011(Géomorphologie)이 정리한 Ford & Ewers 1978의 4-상태 모델에 따르면, 균열 빈도가 높으면 통로가 거의 전부 지하수면을 따라 생긴다(water-table caves). 수평 동굴층은 하천 기준면에 맞춰 형성된다. Paris et al. 2021(CGF)은 inception horizon, 단층, 균열, 투수성 대비를 입력으로 받아 비등방 최단경로로 동굴 골격을 만들고 SDF 구성 트리로 형상을 만든다. KarstNSim(Gouy et al. 2024, J. Hydrology)은 여기에 지하수면과 inception surface를 입력으로 추가했다. 가이드의 방식이 빠뜨린 점은 세 가지다. (1) 기준면이 낮아지며 남은 상부 화석 동굴층(높을수록 오래됨, Palmer 1987). (2) 유입구(싱크홀)에서 유출구(골짜기 바닥의 샘)로 이어지는 연결성. 노이즈 교선은 연결이 보장되지 않는다. (3) 동굴은 모든 층리면이 아니라 특정 inception horizon에 집중된다. 그래픽스 쪽 가장 가까운 선행 연구는 Paris 2021이다.",
+     "evidence": "verified",
+     "sources": [
+      "https://journals.openedition.org/geomorphologie/9571?lang=en",
+      "https://onlinelibrary.wiley.com/doi/10.1111/cgf.14420",
+      "https://github.com/ring-team/KarstNSim_Public"
+     ]
+    },
+    {
+     "topic": "퇴적 기준면 (능선 포락면 = max 필터 + 블러)",
+     "guide_claim": "능선 높이를 퍼뜨린 매끄러운 면을 '침식 전 지표'로 근사하고, z_datum − z'를 깎인 두께로 해석해 지층 인덱스에 쓴다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "지형학에 같은 개념이 있다. Small & Anderson 1998(Geology)은 현존 정상부 평탄면(summit flats)에 맞춘 매끄러운 면에서 깎여 나간 평균 깊이로 플라이스토세 동안의 기복 생성을 추정했다(geophysical relief 계열). 그러니 '깎인 두께' 해석은 근거가 있다. 다만 지층이 이 면과 평행하게 쌓였다는 가정은 근사다(실제 지층은 과거 퇴적면 기준이며 습곡·단층으로 변형된다). 게임 시각화 목적(골짜기 벽에 지층이 순서대로 드러나게 함)으로는 충분하다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1130/0091-7613(1998)026<0123:prpilm>2.3.co;2"
+     ]
+    },
+    {
+     "topic": "구면 위 수계·판·강수 결합 (2·5장의 신규성)",
+     "guide_claim": "큐브스피어 그래프 위에서 채움, 라우팅, 누적을 하고, 판 구조 융기와 위도별 강수로 stream power 지형을 만든다.",
+     "verdict": "sound-with-caveat",
+     "explanation": "기술적으로는 타당하지만 조합 자체가 이미 있다. 과학 쪽 goSPL(Salles et al. 2020, JOSS)은 비정형 구면 메시 위에서 MFD 기반 stream power 하천 침식, Barnes 2014 priority-flood 웅덩이 처리, 판 운동(수평·수직 변위) 강제, 시공간 강수, 다중 암상과 층서를 전 지구 규모로 계산한다. 그래픽스 쪽에는 Derzapf et al. 2011('River Networks for Instant Procedural Planets', CGF)과 Cortial et al. 2019('Procedural Tectonic Planets', CGF)가 있다. 취미 프로젝트로는 World Orogen(2026-02 생성, 2026-09 갱신, 별 105개, GPL-3.0)이 Fibonacci 구면 Voronoi 위에서 판 경계 수렴·발산·변환 분류, priority-flood, Braun–Willett식 암시적 stream power, 위도·이류 기반 강수까지 구현했다. 큐브스피어는 차별점이 아니라 구현 선택이다.",
+     "evidence": "verified",
+     "sources": [
+      "https://joss.theoj.org/papers/10.21105/joss.02804.pdf",
+      "https://doi.org/10.1111/j.1467-8659.2011.02052.x",
+      "https://doi.org/10.1111/cgf.13614",
+      "https://github.com/raguilar011095/planet_heightmap_generation"
+     ]
+    }
+   ],
+   "data_driven_pcg_prior": "결론부터: 실제 DEM에서 slope–area나 χ 회귀로 θ, k_sn, S_crit 같은 stream-power 스칼라 파라미터를 뽑아 stream-power 기반 절차적 생성기에 넣는 그래픽스 논문은 이번 세션 검색에서 찾지 못했다. 다만 찾지 못했다는 것이 없다는 증거는 아니다. 또 이 빈틈은 실재하지만 얇다. 같은 정신을 더 강한 형태로 구현한 선행 연구가 있고, 4개의 스칼라는 문헌 표에서 바로 가져올 수 있는 수준이기 때문이다.\n\n(1) 가장 가까운 연구는 Schott, Paris, Fournier, Guérin, Galin 2023, 'Large-scale Terrain Authoring through Interactive Erosion Simulation', ACM TOG 42(5), https://doi.org/10.1145/3592787 이다. 고도가 아니라 융기(uplift) 영역에서 stream power 침식으로 지형을 만들고, 입력 DEM에서 융기장을 역복원하는 inverse procedural modeling을 제공한다. 실제 DEM에서 stream-power 입력을 '공간 필드'로 학습해 생성에 쓰는 셈이라, 3장(스칼라 4개)보다 강한 형태다(초록 확인). 코드: https://github.com/H-Schott/StreamPowerErosion (MIT).\n\n(2) Argudo, Galin, Peytavie, Paris, Gain, Guérin 2019, 'Orometry-based Terrain Analysis and Synthesis', ACM TOG 38(6), https://doi.org/10.1145/3355089.3356535 는 실제 산맥 DEM의 봉우리·안부에서 orometry 지표 분포를 측정한다. 이 지표로 산맥을 분류하고, 같은 분포를 따르도록 봉우리-안부 그래프를 합성한 뒤 일관된 하천망을 유도한다. '실제 DEM에서 지형계측 통계를 학습해 생성을 구동'한다는 점에서 개념상 가장 가깝다.\n\n(3) 예제·학습 기반 연구: Zhou, Sun, Turk, Rehg 2007, TVCG, https://doi.org/10.1109/tvcg.2007.1027 (DEM 패치 합성, 지형학 기법으로 능선·계곡 추출). Guérin et al. 2017, ACM TOG, https://doi.org/10.1145/3130800.3130804 (실제 DEM과 스케치로 학습한 cGAN, 침식 합성기 포함). Perche et al. 2023, StyleDEM, arXiv:2304.09626. Löchner et al. 2023, CGF, https://doi.org/10.1111/cgf.14941 (실제 DEM으로 학습한 diffusion, 배수 시뮬레이션으로 평가). MESA 2025, CVPRW, https://doi.org/10.1109/cvprw67362.2025.00289 (Copernicus DEM). Goslin 2025–26, InfiniteDiffusion/Terrain Diffusion, arXiv:2512.08309 (지구 규모, 무한 영역). 이들은 파라미터를 명시적으로 뽑지 않고 신경망에 암묵적으로 담는다. Cortial et al. 2019는 판 구조 행성을 실제 고도 데이터로 증폭한다(https://doi.org/10.1111/cgf.13614).\n\n(4) Tzathas, Gailleton, Steer, Cordonnier 2024 (CGF 43(2), https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf)는 m=0.4, n=1, k=2·10^-5, 강수 1 m/yr, s_c=0.57, Hack 상수 C=1.5와 h=0.6을 '흔히 쓰는 값'으로 고정했다. DEM에서 맞춘 값이 아니며, m과 n은 아직 열린 문제라고 명시한다. 공저자 Gailleton은 전 지구 오목도 연구의 저자이므로, '학습한 파라미터로 Tzathas류 솔버를 구동'하는 것이 이 프로젝트가 주장할 수 있는 가장 직접적인 차별점이다.\n\n(5) 지구과학 쪽에서는 DEM에서 SPL 파라미터를 학습하는 일이 표준 작업이다. Mudd et al. 2018 (https://esurf.copernicus.org/articles/6/505/2018/), Gailleton et al. 2021 (θ 중앙값 0.425, 31개 현장 컴파일 데이터 https://zenodo.org/records/5256857), Adams et al. 2020 (강수 정규화 stream power, https://doi.org/10.1126/sciadv.aaz3166), Fox et al. 2014 (하천 프로파일로 융기 역산, https://doi.org/10.1002/2014jf003196), Barnhart et al. 2020 (LEM 파라미터를 실제 지형에 보정, https://doi.org/10.1029/2018jf004961), Smith & Fox 2024 (m/n 역산, https://doi.org/10.1029/2023jf007584)이 그 예다. 3장의 방법론 자체는 교과서적이다.\n\n권고: '학습'을 입력 보정에만 쓰지 말고 평가 지표로도 쓰면 차별성이 커진다. 생성 지형과 실제 DEM에서 k_sn과 χ disorder, Hack 지수, 고도분포곡선(hypsometry), 배수밀도의 분포를 비교하는 것이다. Morris & Roberts 2025(https://doi.org/10.5194/esurf-13-1003-2025)는 개별 지형의 지표는 노이즈에 매우 민감하지만 이런 지표들의 '분포'는 통계적으로 안정적이라고 보였다. 기존 그래픽스의 사실감 평가는 지형형태(geomorphon)와 지각 실험 기반의 PTRM(https://doi.org/10.1145/3514244)이 대표적이고, stream-power 지표로 사실감을 평가하는 쪽은 상대적으로 비어 있다.",
+   "summary": "[판정 요약] 2~6장의 지형학·수문학 내용은 대부분 표준 문헌과 맞는다. 다만 핵심 부품마다 거의 같은 선행 연구가 있어서, 신규성은 '통합'에만 있다고 보는 것이 정직하다.\n\n(1) 4장 정상상태 솔버는 Steer 2021(ESurf, Salève)의 '흐름망 → 해석해 고도' 고정점 반복을 그대로 쓴 것이다. 그래픽스 버전인 Tzathas·Gailleton·Steer·Cordonnier 2024(CGF)는 진동을 막는 지수 이동평균(감쇠), multigrid, 임계 경사 s_c=0.57, 격자 결을 없애는 랜덤 수신 셀까지 이미 갖췄다. 가이드의 S_crit≈0.6, 감쇠 λ, 노드 흔들기와 일대일로 대응한다. 수학적으로는 Perron & Royden 2013의 χ 적분과 같다.\n\n(2) 2장의 '유량 의존 적응형 MFD 지수'는 Quinn·Beven·Lamb 1995의 기여 면적 의존 지수, Moore 1993의 FD8(MFD에서 D8로 전환하는 하이브리드), Qin 2007 MFD-md([1.1,10])로 이미 다뤄졌다. Quinn 가중치 0.5/0.354는 Qin 2007 본문에서 확인했다.\n\n(3) 구면 위 수계와 판 구조·강수 결합은 goSPL(구면 메시, MFD, priority-flood, 판 강제, 층서), Derzapf 2011, Cortial 2019, World Orogen(2026, GitHub 별 105개)에 이미 있다.\n\n(4) DEM 학습과 생성의 결합은 Schott 2023(입력 DEM에서 융기장 역복원)과 Argudo 2019(orometry 통계 학습)가 더 강한 형태로 해냈다.\n\n[과학적 약점]\n(a) 스케일 불일치: 반지름 약 6400 km, 면당 4096²이면 셀이 약 2.3 km, 면적 약 5×10^6 m²다. 그래서 30 m DEM에서 학습한 A_crit(10^5–10^6 m²)와 S_crit가 셀보다 작은 규모가 된다. 사면-하천 전이 유량 Q*≈3×10^4–7×10^5 m³/yr가 셀 하나의 유량보다 작으므로 S_crit가 사실상 작동하지 않는다. 400 m 격자에서 검증한 거동이 행성에서는 재현되지 않는다(경사의 해상도 의존성: Grieve 2016, Hergarten 2020).\n(b) MFD 정상상태는 원래 잘 정의되지 않을 수 있다. Pelletier 2004에 따르면 분기 라우팅에서는 유역 재편이 계속된다. 따라서 2단계 결과는 '의사 정상상태'로 표기해야 한다.\n(c) slope–area 회귀는 공간 가변 융기, 노이즈, 과도기 지형에서 편향된다(Kirby & Whipple 2001, Mudd 2018, Smith & Fox 2024, Morris & Roberts 2025). χ 기반 방법(Hergarten 2016, LSDTopoTools)이 낫다.\n(d) θ를 전 지구 하나로 고정했다. Gailleton 2021에 따르면 중앙값은 0.425이고 변동이 커서 [0.3,0.7] 필터는 과도하다. Goren & Shelef 2024에 따르면 θ는 건조도와 상관이 있고 하천망 평면 모양을 지배한다.\n(e) 지하수면 휴리스틱은 수리전도도 K를 무시한다. 그래서 석회암 동굴 마스크와 모순된다. 카르스트는 함양 지배형이라 지하수면이 평평하다(Haitjema 2005, Gleeson 2011의 WTR).\n(f) 탈착 제한형 모델이라 퇴적 지형(평야, 선상지)이 없다.\n\n[맞는 부분] Priority-Flood+ε(Barnes 2014 Alg.3; 고정 ε 대신 NextAfter 권장, float64 필요), Leopold–Maddock b=0.5와 f=0.4(Singh 2003 표 확인), k_sn→k_s^Q=k_sn·P̄^θ 변환(Adams 2020의 Q=A·R과 같음), WorldClim 단위(mm/월, BIO12=연강수), 지하수면 부근·층리면 동굴(Ford & Ewers 1978, Audra & Palmer 2011, Paris 2021, KarstNSim 2024), 능선 포락면의 '깎인 두께' 해석(Small & Anderson 1998)은 근거가 있다.\n\n[캡스톤 관점의 권고]\n1. 피치에서 4장을 'Steer 2021/Tzathas 2024의 큐브스피어 이식과 확장'으로 명시하고 두 논문을 기준선으로 비교한다. fastscapelib과 goSPL 비교도 함께 한다.\n2. 3장을 '입력 보정'에서 '보정 + 평가'로 바꾼다. 생성 지형과 실제 DEM의 k_sn·χ·Hack·hypsometry 분포를 비교한다.\n3. θ를 건조도의 함수로 학습한다.\n4. Tzathas식 경사 보정항을 추가해 D8 등고선 이방성을 없앤다.\n5. 암석별 K를 반영한 지하수면을 쓴다.\n6. 스케일 문제를 해결한다. S_crit는 3D 단계(7장)의 세부 기하에서 쓰거나, 셀 크기에 맞춘 유효 S_crit를 쓴다.\n이렇게 하면 '기존에 없던 부품'은 아니어도 '검증 가능한 통합 파이프라인'으로서 타당성을 주장할 수 있다."
+  }
+ },
+ {
+  "key": "feasibility",
+  "result": {
+   "code_issues": [
+    "[verified: main.py 실행으로 확인] FACE_BASIS의 면 1(−X), 3(−Y), 5(−Z)에서 u_f 부호가 가이드 표와 반대입니다. 코드 값은 (0,1,0), (0,0,1), (1,0,0)이고 가이드 값은 (0,−1,0), (0,0,−1), (−1,0,0)입니다. 실제로 계산하면 u×v가 각각 (1,0,0), (0,1,0), (0,0,1)이 되어 n_f와 반대인 왼손 좌표계입니다. 점들은 여전히 구면을 덮기 때문에 면적 합 검사나 산점도로는 드러나지 않는 '조용한 버그'입니다. 그러나 (a) manifest.json의 face_basis를 엔진과 공유하는 설계와 어긋나고, (b) 이 세 면에서 i 인덱스 방향이 뒤집혀 가이드 규칙(σ1, σ2)으로 만든 이웃 표와 고스트 줄이 틀어지며, (c) 메쉬를 만들면 세 면만 삼각형 감김 방향(winding)이 반대가 되어 법선과 백페이스 컬링이 뒤집힙니다. 같은 볼트의 figures/make_figures.py에 있는 FACES 표는 가이드와 일치하는 올바른 값이므로 그대로 복사하면 됩니다.",
+    "[verified: 실행] cubesphere_grid가 np.linspace(-1,1,n)을 쓰는 탓에 셀 중심(a_i = −1 + (2i+1)/n)이 아니라 면 경계 위의 점을 샘플합니다. n=16에서 1536점 중 고유한 점은 1352개뿐이고, 모서리 12개와 꼭짓점 8개에서 184개가 중복됩니다. pos는 경계점인데 area는 셀 경계로 계산한 셀 면적이라 둘이 서로 다른 격자를 가리킵니다. 수정은 axis = -1 + (2*np.arange(n)+1)/n 입니다.",
+    "[verified: 실행] 인덱스 순서가 뒤집혀 있습니다. meshgrid(indexing='ij') 다음에 reshape(-1)을 하면 평탄 인덱스가 i*n+j(b가 가장 빨리 변함)가 됩니다. 가이드는 c = f·n² + j·n + i(a, 즉 i가 가장 빨리 변함)입니다. 실제로 평탄 인덱스 1이 (a=−1, b=−0.867)입니다. 번들(.f32)을 엔진이 가이드 규약대로 읽으면 면마다 전치됩니다.",
+    "[verified] 면적 저장 방식이 가이드와 다릅니다. main.py는 6면 면적을 이어 붙여 전체 면적으로 저장하는데, 가이드는 '면 하나분만 저장하고 c % n²로 조회'하라고 하고 test_area_sum도 6*g.area.sum()으로 검사합니다. 따라서 가이드 테스트를 그대로 돌리면 6×4π가 되어 실패합니다. 반대로 현재의 면적 합 검사는 pos와 무관하게 계산되므로 위 pos 버그를 전혀 잡지 못합니다. pos를 검증하는 테스트(왕복 변환 cell_of(p_c)=c)가 필요합니다.",
+    "[verified] 1장의 필수 부품이 없습니다. to_face, cell_of, neighbor_table((N,8) int32, 없으면 −1), face_neighbor_dists, Grid.nbr, area_full, cross_face_pairs와 tests/가 모두 없습니다. neighbor_distance는 벡터화되어 있지 않아(np.cross와 axis 없는 np.linalg.norm) (N,8) 이웃 쌍에 쓸 수 없습니다. 패키지 구조(src/bpcg/core/cubesphere.py), pyproject.toml, uv 설정도 없는데 가이드는 `uv run`을 전제로 합니다.",
+    "[verified] 코드 위생 문제가 있습니다. to_sphere 안의 디버그 출력(print(f\"DEBUG -> f : ...\"))이 호출마다 실행됩니다. 134행 주석에 LLM 출력 잔재로 보이는 '[cite: 1]'가 남아 있습니다. 6행 주석 'u_f * v_f = n_f'는 외적을 곱으로 잘못 적었고, 코드 자체가 이 조건을 어깁니다. 핵심 모듈이 matplotlib을 import하고 플로팅 코드가 같은 파일에 섞여 있습니다.",
+    "[verified: venv 및 PyPI 확인] venv는 Python 3.14, numpy 2.5.3, matplotlib만 있고 numba, pytest, warp-lang이 없습니다. Numba 0.68.0(2026-09-30)은 numpy<2.6, Python>=3.10을 요구하므로 현재 환경과 호환됩니다. NVIDIA Warp는 macOS에서 CPU로만 실행되므로(공식 설치 문서) 맥에서는 GPU 가속 이득이 없습니다.",
+    "[verified] '현재 코드는 1장 일부뿐'이라는 평가는 부분적으로 틀립니다. 볼트의 figures/make_figures.py(1126줄)에 평면 96×96 순수 파이썬 참조 구현이 이미 있습니다. priority-flood(heapq), 히스테리시스 D8, D8 정상상태 솔버, 적응형 MFD 2단계 솔버, 노드 흔들기, 격자 정렬 지수가 들어 있습니다. 다만 (a) 위치가 가이드에 적힌 docs/figures/가 아니라 볼트 폴더이고, (b) 평면 전용이라 큐브스피어 이웃 표로 옮겨야 하며, (c) 순수 파이썬 루프라서 n≥256에서는 쓸 수 없어 Numba로 다시 작성해야 합니다. 그래도 2·4장 위험을 크게 줄여 주는 자산입니다."
+   ],
+   "guide_internal_issues": [
+    "[verified] 이미지 링크 경로가 두 방식으로 섞여 있습니다. 16개는 볼트 루트 기준 경로('프로젝트/(캡스톤)%20B-PCG/figures/f1_sphere_grid.png' 등)이고, 6개는 파일 이름만 적었습니다(f1_edge_continuity.png, f2_d8_vs_mfd.png, f2_mfd_compare.png, f4_mfd_convergence.png, f4_jitter.png, f7_ghost.png). 가이드 파일 기준 상대 경로로는 둘 다 풀리지 않고, Obsidian의 경로 탐색에서만 보입니다. 과목 요구대로 GitHub에 공개하면 22개 그림이 모두 깨지므로 'figures/xxx.png'로 통일해야 합니다. 또한 가이드는 그림 스크립트 위치를 docs/figures/make_figures.py라고 적었지만 실제로는 볼트의 figures/에 있습니다.",
+    "[verified] n의 의미가 여러 개입니다. 1장과 main.py의 Grid.n은 면당 해상도인데, 가이드의 테스트 코드는 g.n을 전체 셀 수로 씁니다(range(g.n), np.arange(g.n), np.ones(g.n)). 게다가 3·4장에서 n은 stream power의 기울기 지수입니다(E=KQ^mS^n, fastscapelib 비교 조건 'n=1').",
+    "[verified] 기호가 여러 뜻으로 겹쳐 쓰여 설정 키가 충돌합니다. η는 판 경계 워프 진폭(5장), 수신 셀 히스테리시스 η≈0.02(4장), η_U, η_0, η_P에 쓰입니다. λ는 MFD 감쇠 0.3, 노이즈 기본 주파수, 암석 배율 λ_ℓ, 재질 함수 λ(x)(7·8장 골든 테스트)를 뜻합니다. κ는 경계 판정 0.3과 지하수 기울기 계수, σ는 위상 순열, 강수 폭 σ1·σ2, 이웃 규칙 부호 σ1·σ2, 블러 G_σ, σ_gw입니다. w는 MFD 비율, 산맥 폭, w_shelf, w_m, 물 판정 w(x)이고, ρ는 유출 비율, 최대값 필터 반경, 지표 반경 ρ(x)입니다. m은 stream power 지수, 노이즈 마스크 m(p), 고스트 줄 번호이고, β는 융기 이득과 동굴 억제 상수, τ는 전단 성분과 터널 굵기입니다. u는 u_f, u_k, u(x), ℓ은 등고선 길이, 암석 지역 ℓ(c), 수평 거리, ε은 채움 엡실론과 프레임 연속성 기준입니다. 구현 전에 기호표를 다시 정리해야 합니다.",
+    "[verified] sst(잘린 smoothstep)가 2장의 적응형 지수 식에서 먼저 쓰이는데, 정의는 6장에 처음 나옵니다.",
+    "[verified] 핵심 파라미터가 정해져 있지 않습니다. 행성 반지름 R, 복셀 간격 Δx, 최종 해상도 n, 대상 하드웨어, 생성 시간 예산이 어디에도 없습니다(main.py 기본값은 R=6371 km이고 8장의 ulp 계산도 6400 km 기준). 또 다음이 미정입니다. manifest.json 스키마와 .f32 배치(바이트 순서, 면 순서, 고스트 줄 포함 여부, 단위). 암석 지도 ℓ(c), λ_ℓ, 지역별 지층 두께 표의 생성 규칙(lithology.py는 파일 이름만 있음). 단층 개수와 배치(𝓗(n_q·x−o_q)는 무한 평면이라 행성 반쪽 전체의 지층을 어긋나게 하므로 국소 지지가 필요). 동굴 파라미터 α, τ, β, σ_gw. 기준면의 ρ와 σ. Q_riv, ρ_ro, k_W, k_D, Δ_max, κ. 복셀마다 '가장 가까운 하천 스플라인 점'을 찾는 공간 색인. 엔진의 물 렌더링. planet_generator.gd가 어떤 복셀 노드, 메셔, LOD에 연결되는지. 7장 int8 TSDF를 누가 소비하는지(godot_voxel은 자체 8/16비트 고정소수점 SDF를 씀).",
+    "[verified] 8장 골든 테스트는 재질 λ와 물 w가 '완전 일치'해야 한다고 요구합니다. 그런데 s≈T_i(지층 경계)나 r≈h_w(수면) 근처의 점은 부동소수 오차만으로 분류가 뒤집히므로, 경계 띠를 제외하는 규칙이 필요합니다. 1e-4 m 허용치도 행성 규모의 float32 해상도보다 작습니다(engine_risks 참고).",
+    "[verified] 가이드의 정량 근거(31회 수렴, 정렬 지수 2.92→1.18, MFD 자기 일관성 0.8%, 흔들기 25회 수렴)는 모두 96×96 평면 실험에서 나왔습니다. 그런데 4장은 최대 반복을 50회로 잡습니다. Steer(2021)와 Tzathas 외(2024)는 고정점 반복 횟수가 가장 긴 하천의 셀 수에 비례한다고 보고합니다(512²/1024²/2048²에서 43/82/156회). 큐브스피어 n≥1024에서는 50회 안에 수렴하지 않을 가능성이 높습니다.",
+    "[verified] fastscapelib 비교 조건에 빠진 것이 있습니다. 솔버에 들어 있는 S_crit 상한과 히스테리시스는 fastscapelib에 없으므로, 비교할 때 S_crit을 끄는 등의 설정이 필요하지만 명시되어 있지 않습니다. 2장의 'topotoolbox 비교'도 실행 환경(MATLAB 또는 Python 바인딩)이 정해져 있지 않습니다.",
+    "[memory, 추론] 5·6장의 측지 거리(수렴 경계, 해안, 하천, 물가)를 '다중 출발점 다익스트라'로 8이웃 그래프 위에서 구하면 챔퍼 거리의 이방성 때문에 등거리선이 팔각형으로 격자에 정렬됩니다. 그 방향이 면 경계에서 바뀌므로 프로젝트가 없애려는 '면 경계 흔적'을 거리장이 다시 만듭니다. 경계점에 KD-tree를 만들어 대원 거리를 직접 계산하는 편이 낫습니다.",
+    "[memory, 추론] 3장의 S_crit(사면 경사 95% 분위수)은 고해상도 DEM(약 30 m)에서 학습하지만, 경사는 해상도에 의존하는 양입니다. 학습 DEM을 행성 셀 크기로 다시 샘플링하는 절차가 없습니다(scale_risks의 해상도 격차 참고).",
+    "[verified] 사소한 표현 문제가 있습니다. 2장의 '면당 4096²에서 약 3.2 GB'는 6면 전체 합(6·4096²·8·4 B ≈ 3.22 GB)이므로 '면당'이라는 표현이 오해를 부릅니다."
+   ],
+   "chapter_estimates": [
+    {
+     "chapter": "0. 인프라 (저장소, uv/pyproject, CI, 번들 형식 manifest와 .f32, 테스트 골격)",
+     "person_weeks": "1–1.5",
+     "risk": "low",
+     "notes": "1 person-week는 집중 작업 약 20시간 기준입니다. 번들 스키마(바이트 순서, 면 순서, 고스트 포함 여부)를 1주차에 확정하지 않으면 8장에서 다시 작업하게 됩니다."
+    },
+    {
+     "chapter": "1장 큐브스피어 격자 (버그 수정, 역사상, cell_of, 이웃 표, 테스트)",
+     "person_weeks": "1–1.5",
+     "risk": "low",
+     "notes": "명세가 가장 완성도 높은 장이고, make_figures.py에 올바른 FACES 표가 있습니다. 현재 버그 3개(기저, 셀 중심, 인덱스 순서)를 고치고 이웃 대칭, 꼭짓점 24셀, 왕복 변환 테스트를 넣으면 끝납니다."
+    },
+    {
+     "chapter": "2장 수계: D8 (Numba priority-flood, 수신 셀, 순서, 유량)",
+     "person_weeks": "1.5–2",
+     "risk": "low",
+     "notes": "make_figures.py의 평면 구현을 Numba와 이웃 표 기반으로 옮기는 작업입니다. heapq 대신 Numba용 배열 힙을 직접 짜야 하고, z̃는 float64로 둬야 합니다(ε=1e-3 m가 float32 ulp의 약 2배에 불과)."
+    },
+    {
+     "chapter": "2장 수계: 적응형 MFD (Quinn 가중치, p 1.1→8)",
+     "person_weeks": "1.5–2",
+     "risk": "medium",
+     "notes": "유량 누적만 보면 구현이 쉽습니다. 다만 유량에 따라 지수를 바꾸는 방식은 Quinn et al.(1995)이 이미 제안한 것이므로 새로움으로 내세울 수 없습니다(Qin 2007 PDF에서 확인). 재계산 비용(높이 순 정렬, 셀당 거듭제곱 8회)이 큽니다."
+    },
+    {
+     "chapter": "3장 DEM 파라미터 학습 (경사-면적 회귀, WorldClim 단위 변환)",
+     "person_weeks": "2–3",
+     "risk": "high",
+     "notes": "데이터 확보(SRTM/Copernicus 타일, 재투영, WorldClim), 비슷한 지역끼리 묶기, 회귀까지 데이터 공학 비중이 큽니다. 데모 화면에는 거의 보이지 않고, km급 셀에서는 S_crit이 사실상 작동하지 않습니다(scale_risks). 문헌값(θ≈0.45, S_crit≈0.6, k_s 범위)으로 대체하면 0.2 person-week이면 됩니다. 컷 1순위입니다."
+    },
+    {
+     "chapter": "4장 정상상태 솔버: D8 + 히스테리시스 (+ 노드 흔들기), 큐브스피어 적용",
+     "person_weeks": "1.5–2.5",
+     "risk": "medium",
+     "notes": "평면 프로토타입이 이미 있습니다. 진짜 위험은 반복 횟수가 해상도에 따라 늘어나는 것입니다(Tzathas 2024: 43/82/156회). 노드 흔들기 또는 Tzathas 방식(낙차에 비례한 확률로 수신 셀 선택)은 트리 구조를 유지하므로 수렴이 보장됩니다."
+    },
+    {
+     "chapter": "4장 확장: 멀티그리드 coarse-to-fine (n=128→…→1024)",
+     "person_weeks": "1.5–2",
+     "risk": "high",
+     "notes": "n≥1024에서 실용적인 시간 안에 수렴하려면 사실상 필수입니다. Tzathas 외(2024)는 2048²에서 고정점 538.71초 대 멀티그리드 33.65초를 보고했습니다. 큐브스피어에서는 면별 2×2 평균과 면 경계 처리를 따로 해야 합니다."
+    },
+    {
+     "chapter": "4장 확장: MFD 2단계 솔버 (감쇠 반복 30회 + 고정 비율 적분)",
+     "person_weeks": "1.5–2",
+     "risk": "high",
+     "notes": "가이드 스스로 수렴하지 않는다고 인정합니다. 분수령은 반복당 약 1셀씩만 움직이므로(Tzathas 2024) 반복 30회로는 n≥1024의 대륙 규모 수계를 조직하지 못합니다. 노드 흔들기나 무작위 수신 셀로 대체하는 것을 권합니다."
+    },
+    {
+     "chapter": "5장 행성 입력 필드 (판, 오일러 극, 경계 분류, 융기, k_s, 해양 비율, 강수, 3D 노이즈)",
+     "person_weeks": "2–3",
+     "risk": "medium",
+     "notes": "식은 단순하지만 보기 좋은 대륙이 나오도록 파라미터를 조정하는 데 시간이 많이 듭니다. 측지 거리는 다익스트라 대신 KD-tree 대원 거리를 권합니다. 노이즈는 정수 해시로 Python과 엔진에 같은 구현을 둬야 합니다. Cortial et al.(2019, Procedural Tectonic Planets)과 World Orogen이 이 장의 상위호환에 가깝습니다."
+    },
+    {
+     "chapter": "6장 파생 맵 (미세 기복과 재채움 호수, 수리 기하, 수면 단조화, 폴리라인, 지하수면, 기준면, 퇴적물)",
+     "person_weeks": "2.5–4",
+     "risk": "medium",
+     "notes": "호수, 수면, 하천 폭과 깊이, 기준면은 각각 쉽습니다. Catmull-Rom 폴리라인을 만들고 복셀 질의용 공간 색인을 붙이는 부분이 어렵습니다. 지하수면은 동굴이 없으면 필요 없습니다."
+    },
+    {
+     "chapter": "7장 3D 샘플 함수 (SDF 지표, 3D 노이즈 오버행, 하도 깎기, 지층, 습곡·단층, 동굴, 물 규칙, int8, 고스트 셀)",
+     "person_weeks": "3–5 (고스트 셀 +1)",
+     "risk": "high",
+     "notes": "파이썬 참조 구현은 할 만하지만, 엔진으로 옮겨 실시간 성능을 내는 것이 본체입니다. 동굴, 단층, 습곡, 고스트 재보간, int8 TSDF는 데모 대비 비용이 큽니다. 지층은 '기준면 아래 깊이'를 셰이더에서 색 띠로 칠하면 복셀 재질 채널 없이도 보입니다."
+    },
+    {
+     "chapter": "8장 엔진 통합 (번들 로더, 생성기 이식, VoxelLodTerrain/Transvoxel, 정밀도, 국소 프레임, 방사 중력, 물 렌더링, 재질, 골든 테스트)",
+     "person_weeks": "5–7",
+     "risk": "very-high",
+     "notes": "GDScript 생성기는 확장성이 없다고 공식 문서가 밝힙니다. C++ 모듈로 가면 커스텀 엔진 빌드가 필요하고, GDExtension판은 테스트가 덜 됐다고 공식 문서가 밝힙니다. 지구 규모는 참조 사례가 없습니다(Zylann 데모 행성은 반지름 1–2 km). 물과 지층 재질은 따로 구현해야 하고, 1e-4 m 골든 테스트는 float32로는 불가능합니다. 데모 점수의 60%가 걸린 곳인데 명세가 가장 빈약합니다."
+    },
+    {
+     "chapter": "검증 문화 (회전 불변 테스트, 격자 정렬 지수, 질량 보존, fastscapelib/topotoolbox 비교)",
+     "person_weeks": "1.5–2.5",
+     "risk": "medium",
+     "notes": "질량 보존, 정렬 지수, θ 복원은 싸고 '기술 깊이' 점수에 효과가 큽니다. 회전 테스트는 n≤256 노트북 설정에서만 현실적입니다. fastscapelib 비교는 S_crit을 꺼야 하고 설치 비용도 듭니다."
+    },
+    {
+     "chapter": "발표, 보고서, 매뉴얼, 데모 준비 (피치 10/23, 데모 12/04, 보고서 12/18)",
+     "person_weeks": "3–4",
+     "risk": "low",
+     "notes": "동료 학생 투표가 있으므로 데모 시나리오, 백업 영상, 리허설에 최소 1.5 person-week를 따로 확보해야 합니다. 전체 범위 합계는 약 30–43 person-weeks로, 가용 약 27(3명×9주, 주 20시간)을 크게 넘습니다."
+    }
+   ],
+   "engine_risks": [
+    "[verified] godot_voxel(Voxel Tools)의 배포 형태와 성숙도: 공식 문서는 Module(커스텀 엔진 빌드와 커스텀 export template)과 GDExtension(공식 Godot 4.4.1 이상)을 함께 제공한다고 밝힙니다. 다만 GDExtension판은 최근에 추가되어 테스트가 덜 됐고, Module판에 없는 버그가 있을 수 있다고 적혀 있습니다(FastNoise2 미포함). 최신 v1.7(2026-08-20)은 Godot 4.7.2 기준이고, 'double' 빌드가 large world coordinates를 지원하지만 export template은 제공하지 않는다고 릴리스 노트에 적혀 있습니다. 따라서 배정밀도로 가면 데모를 에디터에서 실행하거나 템플릿을 직접 빌드해야 합니다. 출처: https://voxel-tools.readthedocs.io/en/latest/getting_the_module/ , https://github.com/Zylann/godot_voxel/releases/tag/v1.7 (macOS 에셋 포함 여부는 릴리스 목록 요약에서만 봤으므로 secondary).",
+    "[verified] GDScript로 복셀마다 샘플 함수를 돌리는 방식은 공식적으로 확장 불가입니다. performance.md는 GDScript가 복잡한 3D 루프에 이미 꽤 느려 프로토타입용일 뿐 '확장성이 없다(not scalable)'고 하고, VoxelGeneratorScript를 에디터에서 여러 스레드로 돌리면 디버그 동기화 때문에 크게 느려진다고 명시합니다. 독립 벤치마크(Godot 4.7.2, boids 1만 개)에서는 GDScript 51.2 ms, C# 7.8 ms, C++ GDExtension 7.5 ms로 약 6.6–6.8배 차이였습니다. 출처: https://github.com/Zylann/godot_voxel/blob/master/doc/source/performance.md , https://github.com/sanchitgulati/godot-cpp-gdextension-csharp-gdscript-benchmark . 가이드가 계획한 planet_generator.gd(7장 함수를 GDScript로 이식)는 역사상, 맵 6–10장 이중선형 보간, 다옥타브 노이즈 3–4개, 스플라인 최근접 질의, 동굴 노이즈 2개를 복셀마다 수행합니다. 32³ 청크 하나에 0.1–1초 이상 걸릴 것으로 추정됩니다(memory 기반 추정). C#도 대안이 되기 어렵습니다. 문서에 따르면 C++ 확장 클래스와 C#의 연동은 '정의되어 있지 않아' 리플렉션으로 호출해야 합니다(getting_the_module, verified).",
+    "[verified] 가장 빠른 우회로는 VoxelGeneratorGraph입니다. 묶음 처리 덕분에 'C++와 비슷한 성능'을 내고, 컴퓨트 셰이더 GPU 백엔드도 있습니다(Forward+ 필요). SdfSphereHeightmap 노드는 파노라마(등장방형) 높이맵 이미지를 구에 감아 SDF를 만들어 줍니다. 단, Image 노드는 필터링 없이 샘플합니다. 출처: https://github.com/Zylann/godot_voxel/blob/master/doc/source/graph_nodes.md , performance.md. 이 경로는 맵을 등장방형으로 다시 샘플링해 넘겨야 하므로 극 왜곡이 생기고, 큐브스피어와 고스트 셀 작업의 의미가 엔진 쪽에서는 사라집니다. 큐브스피어를 끝까지 유지하려면 C++ 생성기를 Module 빌드에 넣어야 하는데, 맥에서 Godot과 모듈을 직접 컴파일하는 비용이 듭니다(memory).",
+    "[verified] 행성 규모의 참조 사례: Zylann 본인의 solar_system_demo 행성은 반지름 1–2 km(대형 모드 10–20 km)이고, origin shifting으로 약 50 km 규모 계를 처리합니다. README는 10배 규모에서 '물리가 버그투성이이고 배정밀도 빌드라면 나을 수도 있다'고 적고 있습니다. 출처: https://github.com/Zylann/solar_system_demo . main.py 기본값인 지구 반지름(6371 km) 복셀 행성은 이 생태계에 참조 구현이 없는 영역입니다.",
+    "[verified] Godot의 large world coordinates: precision=double로 엔진을 재컴파일해야 하고, GDExtension도 REAL_T_IS_DOUBLE로 다시 빌드해야 합니다. 셰이더는 단정밀도로 남고 에뮬레이션으로 보정합니다. 기본 빌드에서 Vector3는 32비트이고 GDScript의 float는 64비트입니다. 공식 표에 따르면 [2048, 4096] m 구간(간격 약 0.0002 m)이 1인칭 게임에 권장되는 단정밀도 최대 범위이고, [32768, 65536] m를 넘으면 보통 배정밀도가 필요합니다. 대안으로 origin shifting을 제시합니다. 출처: https://docs.godotengine.org/en/stable/tutorials/physics/large_world_coordinates.html . 결론적으로 R≤5 km급 소행성이면 단정밀도에 카메라 상대 렌더링이나 원점 이동으로 충분하고, 지구 규모라면 배정밀도 빌드가 필수입니다.",
+    "[verified] Transvoxel LOD 관련 위험: VoxelLodTerrain은 lod_count 기본 4, lod_distance 48이고 LOD 단계마다 거리가 2배가 됩니다. mesh_block_size는 16 또는 32만 됩니다. LOD 이음매는 전이 메쉬와 셰이더 CUSTOM0로 처리하므로 커스텀 셰이더에 이 처리를 넣어야 합니다. SDF는 기본적으로 8/16비트 고정소수점으로 저장되고, 8비트는 큰 LOD에서 값이 잘려 각진 모양이 납니다. 출처: https://voxel-tools.readthedocs.io/en/latest/api/VoxelLodTerrain/ , https://github.com/Zylann/godot_voxel/blob/master/doc/source/smooth_terrain.md . 따라서 가이드의 int8 TSDF는 엔진과 중복되거나 충돌합니다. performance.md는 또 충돌 형상 생성이 메인 스레드로 미뤄져 로딩이 크게 느려지고, Vulkan에서 빠르게 이동하면 메쉬 파괴 비용 때문에 끊긴다고 적습니다. 궤도에서 지표로 내려오는 플라이스루 데모가 바로 이 상황입니다.",
+    "[verified] 재질과 물: 부드러운 지형 텍스처링은 정점당 텍스처 4개, 텍스처마다 4비트 가중치로 묶입니다(smooth_terrain.md). 사암, 석회암, 셰일, 화강암, 퇴적층 같은 지층을 복셀 재질 채널로 넣기보다 '기준면 아래 깊이'를 셰이더에서 계산해 칠하는 편이 현실적입니다. 복셀 모듈에는 물 시뮬레이션이나 렌더링이 없으므로(memory), 7장의 '물 규칙 하나'는 엔진에서 바다 구 메쉬와 호수·하천 수면 메쉬나 셰이더로 따로 구현해야 하는데, 가이드에 명세가 없습니다.",
+    "[verified + 계산] 골든 테스트 |d_py − d_eng| < 1e-4 m: 엔진이 float32 Vector3를 쓰면 R=6.37e6 m에서 표현 간격이 0.5 m(가이드 8장의 계산 그대로)이고, R=2–4 km에서도 약 0.0002 m(Godot 문서 표)로 1e-4 m보다 큽니다. 따라서 1e-4 m는 엔진 쪽 평가를 배정밀도로 할 때만 가능합니다. GDScript 스칼라 float(64비트), C++ double, 또는 double 빌드가 그 경우입니다. VoxelGeneratorGraph 런타임은 float32로 알고 있으므로(memory) 그래프 경로로는 행성 반지름 좌표에서 1e-4 m를 만족할 수 없습니다. 복셀 저장도 8/16비트로 양자화되므로 메쉬 수준의 일치는 원리적으로 불가능합니다. 권장안은 행성 국소 좌표의 배정밀도로 양자화 전 d를 비교하고, 허용치를 1e-3·Δx처럼 복셀 크기에 비례하게 잡고, 재질과 물은 분류 경계 띠를 빼고 비교하는 것입니다.",
+    "[verified] 파이썬 쪽 가속 스택: NVIDIA Warp 공식 설치 문서는 macOS 휠이 CPU 실행만 지원하고 Metal 가속은 없다고 밝힙니다(https://nvidia.github.io/warp/stable/user_guide/installation.html). 맥에서 하는 개발에는 Numba의 parallel=True(prange)로 충분하므로 Warp 의존성은 빼는 것을 권합니다. Numba 0.68.0은 PyPI 메타데이터상 numpy<2.6, Python>=3.10을 요구하므로 현재 venv(Python 3.14, numpy 2.5.3)와 호환됩니다(https://pypi.org/project/numba/)."
+   ],
+   "scale_risks": [
+    "[계산] 메모리: N=6n²입니다. n=1024이면 N=6.29M이고 float32 필드 하나가 25 MB, float64가 50 MB, 이웃 표 (N,8) int32가 0.20 GB입니다. n=2048이면 N=25.2M, float32 101 MB, float64 201 MB, 이웃 표 0.81 GB입니다. n=4096이면 N=100.7M, float32 403 MB, float64 805 MB, 이웃 표 3.22 GB, MFD 비율을 저장하면 float32×8로 3.22 GB입니다. 솔버 작업 집합(z, z̃ f64, Q f64, rec, order i32, 이웃 표, 힙 약 1.2 GB, k_s, P, A)은 n=4096에서 약 8–12 GB이므로 16 GB 맥북에서는 불가능하고 실습실 장비에서만 됩니다.",
+    "[verified, Tzathas et al. 2024 Table 2] 고정점 정상상태 솔버의 실측값(Numba, Xeon E5-2650 v4)은 512²/1024²/2048²에서 각각 7.85 s/70.89 s/538.71 s였고, 반복 횟수는 43/82/156회로 해상도에 비례했습니다. 반복 1회당 셀당 약 0.7–0.8 µs입니다. 같은 논문의 멀티그리드는 1.79 s/8.18 s/33.65 s였습니다. 이를 큐브스피어에 외삽하면(추정) n=1024(6.3M 셀)는 반복당 3–5초에 100–300회로 5–25분, n=2048은 1–3시간, n=4096은 수 시간에서 하루가 걸립니다. 파라미터를 조정하며 반복 실행하기에는 불가능한 시간입니다. 가이드의 '최대 50회'는 96×96 실험에서 나온 숫자라 이 규모에 맞지 않습니다.",
+    "[verified 근거 + 추정] MFD 2단계 솔버의 감쇠 반복은 해상도와 무관하게 30회로 고정되어 있습니다. 그런데 분수령은 반복당 약 1셀씩만 움직이므로(Tzathas 2024) n≥1024에서는 수계가 조직되지 못하고 분수령에 절벽이나 불연속이 남을 가능성이 큽니다. 비용도 큽니다. 반복마다 z̃ 기준으로 1억 개를 argsort하는 데 약 10초 이상(memory 추정), 셀당 거듭제곱 8회, 비율을 저장하지 않으면 재계산 비용이 두 배로 듭니다.",
+    "[memory, 추정] priority-flood: 파이썬 heapq는 n≥256에서 쓸 수 없으므로 Numba로 배열 힙을 직접 구현해야 합니다. O(N log N)에 log₂N≈27이라 n=4096에서 채움 한 번에 수십 초가 걸리고, 이것을 반복마다 합니다. ε=1e-3 m는 4–8 km 고도에서 float32 ulp(4.9e-4 m)의 약 2배이므로 z̃를 float32로 두면 긴 평탄면(큰 호수)에서 거짓 싱크가 생길 수 있습니다. z̃는 반드시 float64로 둬야 하고, ε·k 누적으로 호수가 수 m 기울어지는 효과도 생깁니다.",
+    "[memory, 추정] 거리장(수렴 경계, 해안, 하천, 물가 거리와 최대값 필터 M_ρ)이 장마다 따로 있고, 각각 priority-flood와 맞먹는 다익스트라 비용이 듭니다. 게다가 8이웃 그래프 거리는 이방성이 있어 등거리선이 팔각형이 되고, 면 경계에서 방향이 꺾여 격자 흔적을 남깁니다.",
+    "[계산 + memory] 번들 크기: float32 필드 12–16개 기준으로 n=1024는 0.3–0.4 GB, n=2048은 1.2–1.6 GB, n=4096은 4.8–6.4 GB입니다. GitHub는 파일당 100 MB 제한이 있어(memory) 번들을 저장소에 넣을 수 없으므로 시드로 다시 생성하거나 릴리스 에셋으로 올려야 합니다. 엔진은 수 GB를 RAM에 올려야 합니다. SdfSphereHeightmap 경로로 n=4096급 해상도를 등장방형으로 내보내면 16384×8192 float 이미지 하나가 약 512 MB입니다.",
+    "[계산] 해상도 격차가 설계 수준의 문제입니다. 지구 반지름이면 셀 한 변이 n=1024에서 9.77 km, n=4096에서도 2.44 km인데 복셀은 약 1 m입니다. 사면과 하천의 경계 Q* = (k_s/S_crit)^(1/θ)는 k_s 60–250, S_crit 0.6, θ 0.45에서 2.8e4–6.6e5 m³/yr입니다. 반면 셀 하나에 내리는 비만으로도 Q = A_c·P ≈ 8.1e7 m³/yr(n=1024, P=1 m/yr)입니다. 즉 모든 셀이 하천 영역에 들어가 S_crit과 사면 능선이 사라지고, 걸어 다니는 규모의 기복은 전부 노이즈가 만듭니다. 3장의 학습값도 사실상 화면에 드러나지 않습니다. 반면 R=10 km 소행성이면 n=1024에서 셀 약 15 m, A_c≈200 m²라서 140–3300셀 상류에서 하천이 시작되고, 가이드의 물리가 걷는 규모에서 보입니다.",
+    "[계산] 회전 불변 테스트는 전체 파이프라인을 두 번 이상 돌려야 합니다. 노트북 설정(n≤256, 약 39만 셀)에서만 현실적이고, 실제 생성 해상도로는 CI에 넣을 수 없습니다. 테스트 해상도와 실제 생성 해상도의 차이를 보고서에 명시해야 합니다."
+   ],
+   "mvp_proposal": "[결론] 지구 규모, 전 장 구현, 1e-4 m 골든 테스트를 버리고 '반지름 5–20 km 소행성 하나를 시드에서 생성해 궤도에서 강 계곡까지 내려가 걷는' 수직 슬라이스 하나에 집중해야 합니다. 동료 투표로 매기는 데모 60%는 '보이는 것'으로 결정됩니다.\n\n[반드시 구현할 것 (MVP)]\n(1) 1장 전체. 버그 3개를 고치고 테스트를 붙입니다.\n(2) 2장 D8을 Numba로 구현하고 질량 보존과 싱크 없음 테스트를 넣습니다.\n(3) 4장 D8 정상상태 솔버. 히스테리시스를 넣고, MFD 대신 노드 흔들기 또는 Tzathas식 무작위 수신 셀을 쓰고, 큐브스피어에 적용합니다. 가능하면 멀티그리드(n=128→1024)까지 갑니다.\n(4) 5장 축약판. 판 보로노이와 노이즈 워프, 오일러 극, 수렴 경계 판정, KD-tree 거리로 계산한 융기, k_s 로그 보간, 면적 가중 해양 문턱값, 위도 띠 강수까지만 합니다.\n(5) 6장 축약판. 미세 기복과 재채움으로 호수를 만들고, 하천 셀, 폭·깊이, 단조 수면, 기준면(최대값 필터와 블러)을 만듭니다.\n(6) 엔진. godot_voxel GDExtension의 VoxelLodTerrain과 VoxelGeneratorGraph를 씁니다. SdfSphereHeightmap에 하도 깎기를 미리 반영한 높이맵을 넣고 3D 노이즈로 오버행을 더합니다. 지층은 기준면 깊이 텍스처를 셰이더에서 읽어 색 띠로 칠하고, 바다·호수·하천 수면은 별도 메쉬나 셰이더로 그립니다. 방사 중력과 평행 이동 프레임을 쓰는 CharacterBody3D, 궤도↔지표 카메라를 붙입니다. 단정밀도에 원점 이동이면 충분합니다.\n(7) 저렴한 검증. 격자 정렬 지수(면 경계 띠와 면 중심 띠 비교), θ 복원(4장 결과 지형으로 경사-면적 회귀), 해상도별 수렴 반복 수와 시간 표, n=128 회전 테스트입니다.\n\n[대비책] 그래프 경로가 막히면 6면 큐브스피어 쿼드트리 높이장 메쉬(GDScript 또는 C# 메쉬 생성)로 바꿉니다. 오버행과 동굴은 포기하지만 데모는 확보됩니다. 결정 시점은 2주차 말입니다.\n\n[과감히 자를 것]\n- 3장 DEM 학습: 문헌값으로 대체하고, 생성한 지형에서 θ를 복원하는 그래프만 '검증'으로 남깁니다.\n- MFD 솔버와 적응형 지수: Quinn 1995와 같은 아이디어라 새로움도 없고 수렴하지도 않습니다.\n- 고스트 셀 재보간: 엔진이 등장방형을 쓰거나, 각 면에 인접 면 값을 단순 복사한 패딩을 붙입니다.\n- 습곡, 단층, 동굴, 지하수면, 퇴적물 두께: 동굴은 8주차 스트레치 목표로만 둡니다.\n- int8 TSDF: 엔진이 자체 처리합니다.\n- 1e-4 m 골든 테스트: '파이썬 대 엔진 높이 샘플 1만 점을 국소 배정밀도로 비교하고 허용치는 1e-3·Δx' 정도로 완화합니다.\n- n=4096: 노트북은 n≤512, 실습실은 n=1024를 상한으로 둡니다.\n- Warp 의존성과 fastscapelib/topotoolbox 비교: 시간이 남으면 Tzathas 공개 코드와 히프소메트리만 비교합니다.\n\n[10/23 피치에서 보여줄 것]\n(a) 문제 정의: 절차적 행성은 수계 일관성이 없고, 물리 기반 침식은 느리며 평면 전용입니다.\n(b) 관련 연구를 정직하게 배치합니다. Steer 2021, Tzathas 2024의 정상상태 해석해, Cordonnier 2016, Schott 2023, Cortial 2019의 판 구조 행성, goSPL의 전지구 LEM, World Orogen, Zylann solar_system_demo를 놓고 우리 기여를 '큐브스피어 위의 정상상태 해석 솔버와 면 경계 불변성 검증, 그리고 수계와 일치하는 3D 복셀 세계(지층, 물)를 실제 엔진까지 잇는 통합'으로 범위를 좁혀 주장합니다.\n(c) 라이브 또는 영상: n=256 행성에서 면 경계를 건너는 강, D8과 흔들기의 정렬 지수 비교, 수렴 그래프를 보여줍니다.\n(d) Godot에서 같은 행성의 높이장을 보여주는 1차 플라이스루, 위험 표, 주차별 계획을 보여줍니다.\n\n[12/04 데모]\n시드를 입력하면 n=512 행성을 1–2분 안에 생성합니다(백업으로 n=1024 미리 생성본을 준비). Godot에서 궤도→대기→강 계곡으로 내려가 계곡 벽에 드러난 지층 띠와 호수, 강 수면을 걸어서 보여줍니다. 옆 화면에는 같은 지점의 2D 맵(유량, 융기, 판)을 띄웁니다. 백업 영상도 반드시 준비합니다.\n\n[3인 분담]\n- A(코어, 행성): 1장, 5장, 멀티그리드, 번들 형식, 성능 측정.\n- B(수계, 지형): 2장, 4장, 6장, 검증 지표와 그래프.\n- C(엔진, 데모): Godot 전부(생성기 그래프, 셰이더, 물, 플레이어, UI)와 데모 영상.\n피치와 보고서는 공동으로 맡고, 주 2회 통합 빌드를 합니다.",
+   "timeline": "W1 (10/01–10/07)\n- A: 1장 버그 수정(기저, 셀 중심, 인덱스 순서), to_face, cell_of, neighbor_table과 테스트 6종. uv/pyproject와 GitHub CI.\n- B: make_figures.py의 평면 수계를 Numba로 이식(배열 힙 priority-flood, D8, 순서, 유량)하고 질량 보존과 싱크 없음 테스트.\n- C: 맥에 godot_voxel GDExtension(v1.7, Godot 4.7.2)을 설치하고 VoxelLodTerrain과 VoxelGeneratorGraph SdfSphereHeightmap으로 시험 높이맵 행성을 띄웁니다. 방사 중력과 평행 이동 플레이어 시제품.\n- 공동: 번들 스키마(manifest와 .f32) 확정, 관련 연구 조사 시작.\n\nW2 (10/08–10/14)\n- A: 큐브스피어 이웃 표로 수계를 연결하고, 판 보로노이와 워프, 오일러 극, 경계 분류, KD-tree 거리 융기, 해양 문턱값 v0.\n- B: D8 정상상태와 히스테리시스, 노드 흔들기. 평면에서 θ 복원과 수렴 그래프를 확인.\n- C: 번들 내보내기(등장방형 높이맵 포함)와 Godot 로더. 파이썬이 만든 행성을 처음으로 엔진에 띄웁니다.\n- 2주차 말 결정: 그래프 경로로 갈지, 높이장 메쉬로 대비할지.\n\nW3 (10/15–10/21)\n- 통합: 큐브스피어 n=256 정상상태 행성을 생성합니다. 면 경계 띠와 중심 띠의 격자 정렬 지수, n=128 회전 테스트, 해상도별 시간 표를 만듭니다.\n- C: Godot 플라이스루 영상.\n- 공동: 피치 덱(문제 정의, 관련 연구 대비 차별점, 기술 깊이, 위험 표, 주차 계획). 10/21–22 리허설.\n\nW4 (10/22–10/28)\n- 10/23 피치.\n- A: 강수, k_s 필드, 멀티그리드 coarse-to-fine 착수.\n- B: 6장 v1(미세 기복과 재채움 호수, 하천 셀, 폭·깊이, 단조 수면).\n- C: 바다 구와 호수·하천 수면 셰이더, 삼면 투영 지형 재질.\n\nW5 (10/29–11/04)\n- A: 실습실에서 n=1024 생성과 성능 프로파일링.\n- B: 하도 깎기를 높이맵에 반영하고 기준면(최대값 필터와 블러)을 만듭니다.\n- C: 기준면 깊이로 지층 띠를 칠하는 셰이더, LOD와 충돌 조정, 걷기 품질.\n\nW6 (11/05–11/11)\n- 파이썬 7장 축약판(지표, 깎기, 지층) 참조 구현과 단면 이미지.\n- 3D 노이즈 오버행을 그래프에 추가합니다.\n- 파이썬 대 엔진 샘플 비교 테스트(완화된 허용치).\n- 핵심 기능을 동결합니다.\n\nW7 (11/12–11/18)\n- 스트레치: 동굴(노이즈 두 개의 교선과 석회암 마스크)은 그래프로 가능할 때만 합니다.\n- 생성 UI(시드, 슬라이더, 진행률), 미니맵과 2D 맵 오버레이.\n- 백업 영상 1차본.\n\nW8 (11/19–11/25)\n- 버그 수정과 성능 마무리.\n- 평가 장(수렴 반복과 시간 대 n, θ 복원, 정렬 지수, Tzathas 수치와 비교).\n- 동료 사용자 테스트.\n\nW9 (11/26–12/02)\n- 데모 시나리오 고정, 리허설 3회 이상, 최종 슬라이드, 백업 영상 최종본, README와 재현 스크립트.\n\n12/04 데모 (12/11 예비일)\n- 이후 12/18까지 보고서와 소프트웨어 매뉴얼을 씁니다(GitHub 공개).\n\n[분담]\n- A: 코어와 행성 필드.\n- B: 수계, 지형, 파생 맵, 검증.\n- C: 엔진과 데모.",
+   "feasibility_verdict": "infeasible-without-major-cuts",
+   "summary": "[판정] 가이드에 적힌 8개 장 전체는 3명이 9주 안에 끝낼 수 없습니다. 추정치는 약 30–43 person-weeks이고, 가용은 약 27 person-weeks(주 20시간 기준)입니다. 반면 소행성 하나를 '생성 → 정상상태 수계 → Godot에서 강 계곡 걷기'로 잇는 수직 슬라이스는 약 19 person-weeks로 충분히 할 수 있고, 캡스톤으로도 타당합니다. 이 판정은 기능을 대폭 덜어 낸다는 전제에서만 성립합니다.\n\n[코드와 가이드의 사실관계]\n- main.py에는 실행으로 확인한 버그가 셋 있습니다. (1) 면 1, 3, 5의 u 부호가 반대라 왼손 좌표계입니다. 면적 검사로는 드러나지 않고, 엔진과 매니페스트 불일치, 감김 방향 반전을 일으킵니다. (2) linspace(-1,1,n) 때문에 셀 중심이 아니라 경계점을 샘플해 n=16에서 184점이 중복됩니다. (3) 인덱스 순서가 가이드 규약과 전치되어 있습니다.\n- 디버그 print, '[cite: 1]' 잔재가 있고 이웃 표와 역사상이 없습니다.\n- 대신 볼트의 figures/make_figures.py에 올바른 FACES 표와 평면 D8, MFD, 흔들기 솔버 참조 구현이 이미 있습니다.\n- 가이드 쪽 문제는 다음과 같습니다. 이미지 링크 22개가 GitHub에서 모두 깨집니다(볼트 루트 경로 16개, 파일 이름만 6개). η, λ, κ, σ, w, ρ, m, n 등 기호가 여러 뜻으로 겹칩니다. Grid.n의 의미가 테스트와 충돌합니다. R, Δx, 번들 스키마, 암석 지도, 단층, 엔진 연결 방식이 정해져 있지 않습니다. 정량 근거는 모두 96×96 평면 실험에서 나왔습니다.\n\n[규모 위험]\n- 지구 반지름이면 셀이 2.4–9.8 km라서 셀 하나의 유량만으로도 사면-하천 경계 Q*를 100배 이상 넘습니다. S_crit과 DEM 학습은 화면에서 사라지고, 걷는 규모의 지형은 전부 노이즈가 됩니다. 반지름 5–20 km 소행성으로 범위를 바꿔야 물리가 보입니다.\n- 고정점 반복 횟수는 해상도에 비례합니다(Tzathas 2024 실측: 43/82/156회, 2048²에서 538.71초). 그래서 '최대 50회' 가정은 n≥1024에서 깨지고, 멀티그리드가 필요합니다.\n- n=4096은 작업 메모리 8–12 GB, 번들 5–6 GB로 노트북과 GitHub의 한계를 넘습니다.\n\n[엔진 위험] 웹에서 원문을 확인했습니다.\n- 공식 문서는 GDScript 생성기를 '확장성이 없다'고 하고, 독립 벤치마크에서 GDScript가 C#, C++보다 약 6.7배 느렸습니다.\n- godot_voxel GDExtension판은 테스트가 덜 됐다고 공식 문서가 밝힙니다. C#과 확장 클래스 연동은 정의되어 있지 않습니다. double 빌드에는 export template이 없습니다.\n- Zylann 본인의 행성 데모도 반지름 1–2 km 수준입니다.\n- Vector3 기본값이 float32이고 SDF 저장이 8/16비트이므로 1e-4 m 골든 테스트는 원리적으로 성립하지 않습니다.\n- 가장 현실적인 경로는 VoxelGeneratorGraph의 SdfSphereHeightmap(등장방형)과 셰이더 지층, 별도 수면 메쉬 조합이고, 높이장 쿼드트리 메쉬를 대비책으로 둡니다.\n\n[새로움, 적대적 평가] 각 부품에는 거의 같은 선행 연구가 있습니다.\n- 4장의 '바다에서부터 상류로 적분 + 수신 셀이 안정될 때까지 반복'은 Steer(2021, ESurf)의 정상상태 해석 모델과 Tzathas, Gailleton, Steer, Cordonnier(2024, Eurographics/CGF)의 방법 그 자체입니다. Tzathas 쪽은 Numba 구현, 한계 경사 0.57, 격자 정렬 계곡을 막는 무작위 수신 셀, 멀티그리드 가속, 공개 코드(gitlab.inria.fr/landscapes/analytical-terrains)까지 갖추고 있습니다.\n- 유량에 따라 지수를 바꾸는 적응형 MFD는 Quinn et al.(1995)이 이미 제안했습니다(Qin 2007에서 확인).\n- 판에서 융기, stream power로 이어지는 흐름은 Cordonnier et al.(2016)과 Schott et al.(2023, TOG)이 했습니다.\n- 판 구조 행성은 Cortial et al.(2019)이 했습니다(검색 결과만 확인).\n- 구면 메쉬 위의 전지구 LEM(MFD, priority-flood, 판 구조 입력)은 goSPL(Salles 2020, JOSS)이 있습니다.\n- 공개 행성 생성기로는 World Orogen(JS, GPL-3)이 판, priority-flood, 암시적 stream power, 기후를 갖췄습니다.\n- Godot 복셀 행성과 동굴은 Zylann의 solar_system_demo가 있습니다.\n- 남는 차별점은 알고리즘이 아니라 시스템 통합입니다. (1) 등각 큐브스피어 위의 정상상태 해석 솔버, (2) 면 경계 불변성의 정량 검증(회전 테스트, 격자 정렬 지수), (3) 수계와 일치하는 3D 복셀 세계(기준면으로 노출되는 지층, 물)를 실제 엔진까지 잇는 것입니다. 피치에서 '새 알고리즘'을 주장하면 질의응답에서 바로 반박당하고, '통합 + 검증 + 데모'로 범위를 좁혀야 설득력이 있습니다.\n\n[근거 수준]\n- verified: Godot large world coordinates 문서, voxel-tools 문서와 원본 md(performance, graph_nodes, smooth_terrain, getting_the_module, VoxelLodTerrain API), godot_voxel v1.7 릴리스 노트, solar_system_demo README, Tzathas 2024 PDF 원문, goSPL JOSS PDF, Qin 2007 PDF, Steer 2021 ESurf 초록, Warp 설치 문서, Numba PyPI 메타데이터, World Orogen README, GDScript 벤치마크 README.\n- secondary: Cortial 2019, Schott 2023(ACM 페이지 403), godot_voxel 릴리스 목록의 macOS 에셋 포함 여부.\n- memory: GitHub 100 MB 제한, VoxelGeneratorGraph의 float32 런타임, 복셀당 비용 추정치."
+  }
+ },
+ {
+  "key": "need",
+  "result": {
+   "pain_points": [
+    {
+     "pain": "청크 단위로 노이즈를 평가하는 국소 생성 방식으로는 하류까지 일관되게 내리막으로 흐르는 긴 강을 구조적으로 만들 수 없다",
+     "who": "복셀/오픈월드 게임 개발자 (Veloren 개발진)",
+     "evidence_quote_or_paraphrase": "사전 시뮬레이션 덕분에 내리막으로만 흐르는 긴 강이 가능하며, 순수 국소 제약 방식으로는 불가능하다고 설명",
+     "evidence": "verified",
+     "url": "https://blog.jsbarretto.com/post/veloren"
+    },
+    {
+     "pain": "복셀 게임 Veloren은 이 문제를 풀려고 Cordonnier 2016식 융기+하천 침식을 월드 생성 전에 돌린다. 다만 평면 세계라서 행성 규모에는 해답이 없다",
+     "who": "복셀 게임 개발자",
+     "evidence_quote_or_paraphrase": "HN에서 개발자가 산과 강을 Cordonnier 2016 논문 기반으로 생성한다고 설명. erosion 모듈에 multi-receiver, Planchon-Darboux 함수가 있음",
+     "evidence": "verified",
+     "url": "https://news.ycombinator.com/item?id=43517337"
+    },
+    {
+     "pain": "No Man's Sky 행성에는 강이 없다. 수면은 행성 중심에서 약간 어긋난 구 하나일 뿐이라 플레이어가 강을 요구하는 글을 올린다",
+     "who": "행성 탐험 게임 플레이어",
+     "evidence_quote_or_paraphrase": "2024년 Steam 토론. '아직 강은 없다'는 답과 함께 수면이 구 하나라는 설명이 달림",
+     "evidence": "verified",
+     "url": "https://steamcommunity.com/app/275850/discussions/0/4423184558849920168/"
+    },
+    {
+     "pain": "가장 큰 복셀 게임인 Minecraft의 강은 노이즈로 위치가 정해지고, 해수면 높이까지 고인 물로 채워진다. 유역 개념이 없다",
+     "who": "복셀 게임 플레이어/모더",
+     "evidence_quote_or_paraphrase": "강은 PV 노이즈가 가장 낮은 곳에 생기고 해수면까지 정지된 물로 채워진다고 위키에 명시",
+     "evidence": "verified",
+     "url": "https://minecraft.wiki/w/River"
+    },
+    {
+     "pain": "Minecraft 지하수(aquifer)는 16x12x16 셀마다 무작위 수위를 주는 3D 보로노이 방식이다. 그래서 지표 수계나 강수와 무관하게 수위가 셀 경계에서 계단처럼 끊긴다",
+     "who": "복셀 게임 플레이어/설계자",
+     "evidence_quote_or_paraphrase": "수위가 셀 경계에서 매끄럽지 않고 급격한 단계로 바뀐다고 위키에 기술",
+     "evidence": "verified",
+     "url": "https://minecraft.wiki/w/Aquifer"
+    },
+    {
+     "pain": "바닐라 Vintage Story에는 지형을 따라 흐르는 하천이 없어 플레이어가 유역·하천·지하수 모드를 직접 설치한다. 다운로드 약 18.8만 건",
+     "who": "복셀 생존게임 플레이어",
+     "evidence_quote_or_paraphrase": "하천이 경사를 따라 흐르려면 주변 지형 정보가 필요하다며 유역 모델을 만들었다고 설명. 다운로드 187,875건",
+     "evidence": "verified",
+     "url": "https://mods.vintagestory.at/algernonswatersheds"
+    },
+    {
+     "pain": "침식 시뮬레이션은 규모가 커지면 감당이 안 된다. 1 km²에서 1초 미만이던 방법이 100x100 km²에서는 3시간 넘게 걸리고, GPU도 복잡도 자체를 바꾸지는 못한다",
+     "who": "지형 생성 연구자·툴 사용자 (Galin et al. 2019 STAR)",
+     "evidence_quote_or_paraphrase": "결론의 '계산 효율' 미해결 과제 항목을 요약",
+     "evidence": "verified",
+     "url": "https://www.cs.purdue.edu/cgvlab/www/publications/Galin19CGF/"
+    },
+    {
+     "pain": "행성 전체를 생성하는 기존 시도는 절차적 노이즈에 지나치게 의존해 사실감과 제어가 부족하다. 행성 규모의 사실적 지형은 미해결 과제로 남아 있다",
+     "who": "지형 생성 연구 커뮤니티",
+     "evidence_quote_or_paraphrase": "Galin 2019 결론의 Large-scale terrains, Volumetric models 항목(복셀은 수백 m 규모로 제한)을 요약",
+     "evidence": "verified",
+     "url": "https://www.cs.purdue.edu/cgvlab/www/publications/Galin19CGF/"
+    },
+    {
+     "pain": "절차적 방법에는 지질학적 일관성이 없어 하천이 갑자기 끊긴다. 물리 시뮬레이션은 수천 번 반복해야 한다. 시뮬레이션은 2048²에서 4799초, 해석해 multigrid는 33.65초",
+     "who": "지형 생성 연구자 (Tzathas et al. 2024)",
+     "evidence_quote_or_paraphrase": "초록: 절차적 방법은 지질 일관성이 부족하고, 시뮬레이션은 수천 번의 반복이 필요하다",
+     "evidence": "verified",
+     "url": "https://www-sop.inria.fr/reves/Basilic/2024/TGSC24/Analytical_Terrains_EG.pdf"
+    },
+    {
+     "pain": "GPU 병렬 stream-power 시뮬레이션도 4096² 격자가 수렴하는 데 약 1036초가 걸린다. 큐브스피어 6면 전체(면당 2048²이면 약 2500만 셀)로 키우면 비용이 더 커진다",
+     "who": "대규모 지형 저작 연구자 (Schott et al. 2023)",
+     "evidence_quote_or_paraphrase": "Table 1: 4096² 수렴 시간 1036 s. 서론에서 '수문학적 일관성을 갖춘 저작 기법이 필요하다'고 명시",
+     "evidence": "verified",
+     "url": "https://hal.science/hal-04049125"
+    },
+    {
+     "pain": "인디 개발자가 문헌 기반 지질 시뮬레이션을 직접 만들어도 26 km 타일 하나를 굽는 데 11시간이 걸린다",
+     "who": "인디 우주 게임 개발자 (Project Nova / WorldForge)",
+     "evidence_quote_or_paraphrase": "832x832 셀(약 26 km) 최종 bake에 약 11시간이 걸린다고 README에 기재",
+     "evidence": "verified",
+     "url": "https://github.com/Nylem-Labs/nova-worldforge"
+    },
+    {
+     "pain": "고급 지형 도구는 침식·하천을 사실적으로 시뮬레이션하지만 수 시간이 걸린다",
+     "who": "게임/그래픽스 실무자 (HN 댓글)",
+     "evidence_quote_or_paraphrase": "World Machine/Terragen 등을 언급하며 '시뮬레이션에 몇 시간이 걸리는 것이 유일한 단점'",
+     "evidence": "verified",
+     "url": "https://news.ycombinator.com/item?id=45280360"
+    },
+    {
+     "pain": "캡처하거나 생성한 지형은 표면만 표현하고 지하 지질 정보는 담지 않는다. 그래서 지하 하천의 용출 같은 현상을 모델링할 수 없다",
+     "who": "지형 그래픽스 연구자 (Inria GRAPHDECO, Cordonnier & Bousseau, BRGM 협업 인턴십 공고)",
+     "evidence_quote_or_paraphrase": "기존 방법은 대부분 지표만 표현하고 지하 지질은 다루지 않는다는 문제의식(공고 PDF 원문을 읽었으나 URL은 확보하지 못함)",
+     "evidence": "verified"
+    },
+    {
+     "pain": "구면 위에서 판 구조와 하천을 직접 구현해 보면 산맥 모양과 판 고도 보간이 제대로 나오지 않는다. 숙련 개발자도 시간 부족으로 미완성으로 남긴다",
+     "who": "절차적 생성 취미/인디 개발자 (Amit Patel, Red Blob Games)",
+     "evidence_quote_or_paraphrase": "산이 제대로 보이지 않고 판 고도 보간이 항상 맞지는 않는다고 회고",
+     "evidence": "verified",
+     "url": "https://www.redblobgames.com/x/1843-planet-generation/"
+    },
+    {
+     "pain": "절차적 강 생성 기법은 많지만 지형과 수문 사이에 현실적인 결합이 없다. 고비용 유체 시뮬레이션 말고는 지형 위의 물을 다루는 자료가 드물다",
+     "who": "절차적 지형 개발자 (Nick McDonald 블로그, 현 erosiv Studio)",
+     "evidence_quote_or_paraphrase": "기존 방법은 지형과 수문의 강한 현실적 결합이 부족하다고 지적",
+     "evidence": "verified",
+     "url": "https://nickmcd.me/2020/04/15/procedural-hydrology/"
+    },
+    {
+     "pain": "지형이 게임플레이에 영향을 줄 때(강, 산맥, 교역로)에만 생성 품질이 체감된다. NMS는 지형이 플레이와 단절돼 있다는 비판",
+     "who": "게이머 (Dwarf Fortress와 NMS 비교)",
+     "evidence_quote_or_paraphrase": "DF에서는 강·산·화산이 요새 전략과 교역로를 바꾸지만 NMS는 그렇지 않다는 HN 댓글(2026-09)",
+     "evidence": "verified",
+     "url": "https://news.ycombinator.com/item?id=49629738"
+    },
+    {
+     "pain": "수천 개 행성을 절차 생성한 Starfield는 행성이 비슷비슷하게 느껴진다는 비판을 전 개발자에게서도 받았다",
+     "who": "AAA 우주 게임 플레이어/개발자",
+     "evidence_quote_or_paraphrase": "전 Bethesda 디자이너 Bruce Nesmith: 행성이 'very samey'하게 느껴질 때 무너진다(GameSpot 인터뷰를 포럼이 인용)",
+     "evidence": "secondary",
+     "url": "https://www.resetera.com/threads/starfield-designer-says-the-game-fell-short-of-fallout-and-elder-scrolls-calls-space-inherently-boring.1332052/"
+    },
+    {
+     "pain": "단일 흐름(D8)은 이론이 예측하는 매끈한 지형에서 하도 지형으로의 전이를 재현하지 못하고, 다중 흐름(D∞)은 재현한다. 문서가 MFD를 채택한 근거로 쓸 수 있다",
+     "who": "지형 진화 모델 연구자",
+     "evidence_quote_or_paraphrase": "Anand et al. 초록: D8과 달리 D∞ MFD는 선형 안정성 분석의 예측을 따른다",
+     "evidence": "verified",
+     "url": "https://arxiv.org/abs/1909.03176"
+    },
+    {
+     "pain": "큐브스피어 면 경계에서 D8의 격자 결 방향이 꺾여 이음새가 보인다는 문제. 이번 조사에서는 외부 개발자나 플레이어의 불만 사례를 찾지 못했다. 설계 문서의 자체 분석에만 근거한다",
+     "who": "큐브스피어 기반 행성 개발자(가정)",
+     "evidence_quote_or_paraphrase": "D8 격자 편향은 수문학의 통설(Tarboton 1997 등)이지만 원문 접근 실패. 게임 맥락의 증거는 없음",
+     "evidence": "memory"
+    },
+    {
+     "pain": "기존 지형 도구는 아티스트 작업 흐름과 시각적 사실감 위주라 파라미터화, 재현성, 스크립팅 지원이 약하다. ML 학습용 합성 지형을 만들기 어렵다",
+     "who": "로보틱스/ML 연구자",
+     "evidence_quote_or_paraphrase": "Wallin 2025: 기존 도구는 아티스트 중심이고 파라미터화·재현성 지원이 제한적",
+     "evidence": "verified",
+     "url": "https://arxiv.org/abs/2506.19751"
+    }
+   ],
+   "target_users": [
+    "1차: 행성 규모 탐험형 복셀/오픈월드 게임을 만드는 인디·오픈소스 개발자, 특히 Godot 사용자. 근거로 Veloren, 2026년에 잇따라 나온 행성 생성 저장소(World Orogen, demiurge, triangulum, minos, WorldForge)가 있다",
+    "1차: 기존 복셀 게임의 월드 생성 모더. Vintage Story 하천·지하수 모드가 약 18.8만 다운로드를 기록했다. Minecraft 강과 지하수는 휴리스틱이다",
+    "2차: 절차적 지형 연구자와 학생. 행성 규모 수계와 지하 일관성을 검증 가능한 오픈소스 기준선으로 쓸 수 있다(Galin 2019의 미해결 과제)",
+    "2차: 월드빌더·TTRPG 제작자. Azgaar FMG(GitHub 약 6k stars)와 World Orogen 사용층으로, 지도에 3D 탐험을 더하는 수요",
+    "3차(증거 약함): 지구과학 교육자. AR Sandbox(NSF 지원 유역 교육)와 Landlab 교육용 노트북이 있으나 행성 규모 복셀의 교육적 수요는 확인하지 못함",
+    "3차(증거 약함): 합성 데이터가 필요한 ML·로보틱스 연구자. Infinigen과 Wallin 2025가 있으나 행성 규모 수문 레이블에 대한 수요는 확인하지 못함"
+   ],
+   "problem_statement_draft": "행성 하나를 통째로 걸어 다니는 복셀 게임을 만들려는 인디·오픈소스 개발자에게는 세 조건을 동시에 만족하는 지형 도구가 없다. 지표의 강이 실제로 바다까지 흐르고, 지층·지하수·동굴이 지표와 같은 논리로 맞물리고, 그 결과를 빠르게, 재현 가능하게, 엔진에 바로 넣을 수 있어야 한다. 청크마다 노이즈를 평가하는 국소 생성은 구조적으로 전역 수계를 만들지 못한다(Veloren 개발 블로그). 그래서 No Man's Sky에는 강이 없고, Minecraft의 강은 해수면 높이의 고인 물이며, 지하수 수위는 무작위 보로노이 칸으로 정해진다. 플레이어는 하천·지하수 모드를 직접 설치해 이 빈자리를 메운다(Vintage Story 모드 약 18.8만 다운로드). 반대로 침식 시뮬레이션은 100 km² 규모에서도 수 시간이 걸린다(Galin 2019, WorldForge 26 km 타일 11시간). Gaea·World Machine은 평면 하이트맵만 다루고, 2026년에 쏟아진 행성 생성기들(World Orogen 등)은 지표 2D에서 멈춰 지하를 만들지 않는다. B-PCG는 실측 DEM에서 학습한 하천 법칙으로 침식의 '결과'인 정상상태 지형을 직접 계산한다. Steer 2021과 Tzathas 2024의 해석해 접근을 큐브스피어와 MFD로 확장한 것이다. 이렇게 얻은 수계에서 지층 기준면·지하수면·동굴을 하나의 3D 샘플 함수로 유도해 Godot에 이음새 없이 공급하는 오픈소스 파이프라인이다. 성공 여부는 다섯 가지로 측정한다. (1) 하천 셀 100%가 바다나 호수에 도달하고 역류 구간이 0개다. (2) 회전 테스트에서 면 경계 띠와 내부의 하천 방향·배수밀도 분포 차이가 통계적으로 유의하지 않다. (3) 오목도, ksn, 측고곡선(hypsometry) 등 지형 지표가 실측 DEM 범위 안에 든다. (4) 같은 격자에서 시간적분 침식(fastscapelib)보다 10배 이상 빠르다. (5) 렌더링을 같게 맞춘 2AFC 블라인드 평가에서 동료 학생 20명 이상이 노이즈 기준선 대비 65% 이상 B-PCG를 고른다(p<0.05).",
+   "measurable_success_criteria": [
+    "수계 연결성: 유량 임계값 이상인 하천 셀 중 하류 경로가 바다나 지정 호수로 끝나는 비율 100%. 하천 수면이 하류로 갈수록 높아지는 역류 구간 0개. 노이즈 기준선(동일 해상도 fBm + D8)과 같은 표로 비교 보고",
+    "이음새 통계(회전 테스트): 입력(판 구조, 노이즈)을 무작위 SO(3) 회전 10회 이상으로 재생성. 면 경계 ±k셀 띠와 면 내부의 하천 방향 히스토그램, 배수밀도, 경사 분포를 KS 검정으로 비교해 p>0.05, 효과크기 기준치 이하. D8 모드의 결과를 대조군으로 함께 제시",
+    "격자 정렬 지수(GAI): MFD 결과가 0.9 이상(1이면 결 없음). 같은 지형에 D8을 쓴 값과 나란히 보고",
+    "지형학적 사실성: 생성 지형에서 측정한 오목도 θ, ksn 분포, 측고 적분(hypsometric integral), 배수밀도, Hack 지수, Horton 비 중 80% 이상이 학습에 쓰지 않은 실측 DEM 2~3개 지역의 사분위 범위 안에 든다. 노이즈 기준선은 대부분 탈락함을 함께 보인다(WorldForge의 morphometric gate 방식 참고)",
+    "속도: 같은 평면 격자(512², 1024², 2048²)에서 fastscapelib 시간적분이 정상상태에 이르는 시간 대비 10배 이상 빠르다. Tzathas 2024의 표 수치와 비교 가능한 형식으로 보고. 행성 전체(예: 면당 1024², 약 630만 셀)는 실습실 PC 1대에서 X분 이내(목표치 사전 명시)",
+    "정확성: 균일 U, K에서 fastscapelib 대비 평균 고도와 고도 분포 차이 5% 미만. 실측 DEM의 유량 누적이 topotoolbox와 일치. 질량 보존 오차 1e-6 이하",
+    "지하 일관성: 무작위 골짜기 벽 단면 1000개 이상에서 지층 순서가 기준면 아래 깊이 순서와 100% 일치. 동굴 복셀 100%가 석회암·지하수면 마스크 조건을 만족. 동굴이 지표 수계와 연결된 곳에서 물 규칙 위반(지하수면 아래의 공기 등) 0건",
+    "엔진: 무작위 10k점에서 |d_python − d_engine| < 1e-4 m(골든 테스트). 면 경계 고스트 셀 보간의 불연속 0. 걷는 고도에서 60 fps 이상, 극점을 통과해도 프레임이 뒤집히지 않음",
+    "사용자 평가: 최종 데모에서 동료 학생 20명 이상을 대상으로 Cortial 2019식 2AFC 블라인드 비교(B-PCG 대 노이즈 기준선, 렌더링·텍스처 동일). 선택률 65% 이상, 이항검정 p<0.05. 추가로 '물이 어디로 흐를지/동굴이 어디 있을지' 예측 과제의 정답률 차이로 지형의 '읽힘'을 측정",
+    "재현성과 공개: 시드가 같으면 비트 단위로 같은 맵 번들이 나온다. GitHub 공개 저장소에서 원커맨드로 그림과 지표를 재생성할 수 있다"
+   ],
+   "weaknesses_of_current_framing": "planet_guide.md(1104줄)는 '어떻게 만드는가'를 설명하는 구현 교재다. '왜 필요한가'를 논증하는 내용은 없다. (1) 문제 정의와 대상 사용자가 없다. 0장의 한 줄 요약은 파이프라인 구조만 말하고, 누가 어떤 불편을 겪는지는 한 줄도 없다. 게임 관련 언급은 4장의 '게임 지형으로는 충분히 일관된 수준' 한 번뿐이다. (2) 관련 연구가 전혀 없다. 문서 안 URL이 0개이고, 4장 정상상태 솔버의 직접적 선행 연구인 Steer 2021(고정점 반복)과 Tzathas 2024(multigrid 가속, 2048² 33.65초)를 인용하지 않는다. 그래서 심사자에게는 기존 방법의 재구현을 독창적 아이디어처럼 내세우는 것으로 읽힐 위험이 크다. Cordonnier 2016, Cortial 2019/2020(수문학적으로 일관된 행성), gospl, Veloren, 2026년 행성 생성기들, Paris 2021(지질적 동굴)과의 차별점도 없다. (3) MFD와 이음새 문제를 스스로 만든 격자 선택(큐브스피어+D8)의 부산물로 제시한다. 사용자가 실제로 이 이음새를 겪는다는 외부 근거가 없고, 아이코사/피보나치 그래프 격자를 쓰면 애초에 생기지 않는 문제라는 반론에 답하지 못한다. (4) '확인하기' 표는 단위 테스트 수준의 내부 정확성 기준이다. 사용자 가치와 연결된 결과 지표가 빠져 있다. 노이즈 기준선이나 기존 생성기와의 비교, 시뮬레이션 대비 속도, 사용자 평가가 없다. 중간발표 평가 항목인 문제 정의와 계획의 실현 가능성 어느 쪽에도 근거를 주지 못한다. (5) 핵심 기여가 무엇인지 우선순위가 없다. 8개 장이 같은 비중으로 나열되어 있어서, 10주 남은 3인 팀이 무엇을 반드시 시연할지(예: 지표 수계에서 지하 일관성까지 이어지는 단면 하나)가 보이지 않는다. 현재 코드는 1장 일부뿐이므로 실현 가능성 논증도 따로 필요하다. (6) '왜 정상상태인가'에 정량적 동기가 없다. '순수 파이썬으로 몇 초'라는 96² 예시만 있고, 시뮬레이션 대비 속도 이득을 행성 해상도에서 보이는 계획이 없다.",
+   "counterarguments": "가장 강한 반론은 다섯 가지다. (1) 플레이어는 잘 알아채지 못한다. Zechmann & Hlavacs(GAME-ON 2025, arXiv 2510.24764)의 사용자 연구(N=15)에서 FBM과 Minecraft식 노이즈로 만든 Godot 행성이 '지형 특징과 사실감' 항목에서 약 4.1/5를 받았다. 높은 평가의 요인은 텍스처, 나무, 대기 효과였다. Minecraft는 노이즈 강(해수면 높이의 고인 물)과 무작위 보로노이 지하수로도 크게 성공했다. Thumbsticks(2016)는 NMS의 단조로움이 지형 수학이 아니라 '항상 착륙·진행 가능해야 한다'는 게임 제약에서 나온다고 본다. Starfield의 'samey' 비판도 지형학보다는 콘텐츠와 관심 지점(POI) 설계 문제에 가깝다. 다만 Cortial 2019의 2AFC 연구(24명, 97 대 47표, p<0.004)는 렌더링을 통제하면 사람들이 지질 구조의 차이를 구별한다는 반대 증거다. (2) 평면 도구로 충분하다. Gaea는 Wētā FX, Avatar, Death Stranding 2, BBC 'Solar System'에 쓰였고, World Machine은 tiled build로 대륙 규모를 만든다. 대부분의 게임은 행성 전체가 필요하지 않다. 지구 크기 행성을 내세운 Light No Fire는 2026년 현재 미출시다. (3) 2D 행성 수계는 이미 있다. Derzapf 2011(행성 하천망), Cortial 2019(판 구조 행성), Cortial 2020(바다에 연결된 하천·호수를 가진 행성을 GPU 실시간 증폭), gospl(전구 지형진화 모델, MFD 지원), World Orogen(2026, 구면 Braun-Willett 암시적 stream power, Barnes priority-flood, 기후·쾨펜, 무료 브라우저, GPL)이 있다. demiurge(2026, 큐브스피어, stream power, 호수 채움)와 triangulum(2026, Python 행성 생성 후 큐브스피어 복셀 뷰어, 하천)은 B-PCG의 1~5장과 8장을 거의 그대로 한다. Veloren은 Cordonnier 2016 기반 침식과 multi-receiver 흐름을 이미 복셀 게임에 넣었다. 정상상태 직접 해법도 Steer 2021과 Tzathas 2024가 이미 발표했다. 따라서 '행성에 바다까지 가는 강을 만든다'는 주장은 새롭지 않다. (4) 지하 부분도 연구 수준에서는 더 앞서 있다. Paris et al. 2021은 inception horizon, 균열, 지하수면을 고려한 지질적으로 일관된 카르스트 동굴망을 만든다. B-PCG의 '노이즈 영집합 교차 + 석회암 마스크' 동굴은 게임용 휴리스틱이다. (5) 이음새 문제는 자초한 것일 수 있다. World Orogen, Amit Patel, triangulum처럼 피보나치나 아이코사 보로노이 그래프에서 수계를 돌리면 면 경계 자체가 없다. 그러면 적응형 MFD와 회전 테스트의 필요성은 큐브스피어를 택한 이유(복셀 샘플링, 텍스처 아틀라스, LOD)로 따로 정당화해야 한다. 속도 면에서도 Tzathas는 경우에 따라 GPU 시간적분(Schott 2023)이 더 빠를 수 있다고 인정한다. 덧붙여 남은 일정(중간발표까지 3주, 최종 데모까지 10주) 대비 범위(8개 장, 현재 1장 일부)가 커서 실현 가능성 자체가 가장 현실적인 반론이다.",
+   "non_game_uses": [
+    "지구과학 교육(증거: verified, 관련성 중간): AR Sandbox는 NSF 지원 비공식 과학교육 프로젝트로 지형도 읽기, 등고선, 유역, 집수역을 가르친다(https://web.cs.ucdavis.edu/~okreylos/ResDev/SARndbox/MainPage.html). Landlab은 물리 과정 교육용 노트북을 별도로 큐레이션해 Binder로 제공한다(https://github.com/landlab/landlab). Inria의 Cordonnier & Bousseau 공고도 디지털 지형이 교육과 대중 소통에 중요하다고 명시한다. 다만 '행성 규모 복셀'을 교육에 쓰려는 수요는 확인하지 못했다. B-PCG에 적용한다면 '골짜기 벽에 지층이 순서대로 드러나는' 지점이 교육용 시연 포인트다",
+    "ML·로보틱스 합성 데이터(verified, 관련성 낮음~중간): Infinigen(CVPR 2023)은 SDF 지형(동굴, 강 장면 포함)을 marching cubes로 만들어 컴퓨터 비전 학습 데이터를 무한히 생성한다(https://arxiv.org/abs/2306.09310). Wallin 2025는 기존 지형 도구가 아티스트 중심이라 파라미터화와 재현성이 약하다며 ML 학습용 파라미터 지형 라이브러리를 내놓았다(https://arxiv.org/abs/2506.19751). 행성 규모 수문 레이블(유량, 하천 마스크, 지하수면)에 대한 수요 근거는 찾지 못했으므로 피치에서는 '부가 가능성'으로만 언급하는 것이 안전하다",
+    "월드빌딩·TTRPG(verified, 관련성 중간): Azgaar Fantasy Map Generator(GitHub 약 6k stars)는 판타지 작가, 게임 마스터, 지도 제작자를 위해 하천, 호수, 하이트맵, 지구본 보기를 제공한다(https://github.com/Azgaar/Fantasy-Map-Generator). World Orogen은 판 구조, 침식, 기후를 갖춘 무료 브라우저 행성 생성기로 고해상도 지도를 내보낸다(https://www.orogen.studio/). 2D 지도 수요는 확실하다. 3D 지하까지 필요한지는 미확인",
+    "영화·VFX·다큐멘터리(verified, 행성 규모 관련성 낮음): Gaea는 Wētā FX, Avatar, BBC/PBS 'Solar System'에 쓰였다(https://quadspinner.com/). World Machine은 영화 매트 페인팅과 게임에 쓰인다(https://www.world-machine.com/). 모두 평면 하이트필드 워크플로라 B-PCG의 구면·지하 기능이 필요한 사례는 확인하지 못했다",
+    "지구과학 연구(verified, B-PCG가 경쟁하기 어려움): gospl(JOSS 2020)은 전구 규모 고지형·퇴적 분지 복원 도구가 부족하다는 Statement of Need에서 출발한 MFD 기반 전구 지형진화 모델이다(https://doi.org/10.21105/joss.02804). 연구용 시뮬레이터와 경쟁하기보다 '게임용 고속 근사의 검증 기준'으로 쓰는 편이 적절하다"
+   ],
+   "summary": "결론: 기술 깊이와 검증 문화는 캡스톤 기준으로 충분하다. 그러나 '왜 필요한가'와 '무엇이 새로운가'가 비어 있어, 지금 상태로는 중간발표의 문제 정의 항목에서 약점이 크다. (1) 기존에 없었나: 개별 요소는 대부분 이미 있다. 행성 하천망(Derzapf 2011), 판 구조 행성(Cortial 2019), 수문학적으로 일관된 실시간 행성(Cortial 2020), 정상상태와 해석해 stream power(Steer 2021, Tzathas 2024: 2048²를 33.65초에, 시뮬레이션은 4799초), 전구 지형진화 모델(gospl), 복셀 게임의 stream power 침식(Veloren), 지질적 동굴(Paris 2021)이 있다. 특히 2026년 2~8월에만 World Orogen(구면 Braun-Willett+priority-flood+기후), demiurge(큐브스피어 stream power), triangulum(Python 행성 생성 후 큐브스피어 복셀 게임), minos(큐브스피어 SDF 복셀+동굴 선택), WorldForge(DEM 지표 검증, 26 km 타일 11시간)가 공개됐다. '행성에 강을 만든다'는 주장만으로는 새롭지 않다. (2) 무엇이 다른가: 확인한 범위에서 아무도 하지 않은 것은 다음 조합이다. 구면 정상상태 솔버, 실측 DEM에서 학습한 파라미터, 큐브스피어 이음새의 통계적 검증(회전 테스트, GAI), 그리고 지표 수계에서 유도한 지하 일관성(기준면 기반 지층, 지하수면, 석회암 동굴, 통합 물 규칙)을 엔진 골든 테스트까지 잇는 오픈 파이프라인. 확인한 2026년 프로젝트들은 지표 2D에서 멈추거나 지하가 노이즈다. 단, WebSearch 할당량이 조사 도중 소진되어 reddit, GDC, Space Engineers 계열은 직접 확인하지 못했다. 그러므로 '없다'는 '이번 조사에서 찾지 못했다'는 뜻이다. (3) 왜 필요한가: 근거는 중간 수준이다. 찬성 쪽에는 국소 생성으로는 강이 불가능하다는 Veloren 블로그, 강이 없는 NMS, 고인 물 강과 무작위 지하수를 쓰는 Minecraft, Vintage Story 하천·지하수 모드 약 18.8만 다운로드, Galin 2019의 미해결 과제(행성 규모, 볼륨, 계산 효율), 지하 지질이 빠져 있다는 Inria 공고가 있다. 반대 쪽에는 노이즈 행성도 사실감 약 4.1/5를 받은 2025 사용자 연구와 Minecraft의 성공이 있다. (4) 권고: 피치를 '최초의 행성 수계'가 아니라 '지표와 지하가 같은 논리로 읽히는(legible) 행성'으로 다시 짠다. Steer와 Tzathas를 솔버의 출처로 명시하고 기여를 구면화, MFD, 지하 연결로 좁힌다. 노이즈 기준선, fastscapelib 속도, 렌더링을 통제한 2AFC 사용자 평가(동료 학생)를 성공 지표로 미리 선언한다. 남은 10주를 감안해 '지표 수계에서 지층·동굴 단면까지 이어지는 데모 하나'를 반드시 시연할 범위로 정한다. 근거 자료 상당수(Galin, Tzathas, Cortial, Schott 등의 PDF 본문)는 이 세션의 스크래치패드(<scratchpad>/)에서 읽었다."
+  }
+ }
+]

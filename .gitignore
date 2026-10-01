@@ -1,0 +1,73 @@
+# --- 파이썬 ---
+__pycache__/
+*.py[oc]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.ipynb_checkpoints/
+
+# --- 데이터 (docs/conventions.md 의 '데이터') ---
+# data/ 는 README 와 manifest 만 올립니다. 원자료·중간 결과·캐시는 올리지 않습니다.
+data/*
+!data/README.md
+!data/manifest.json
+out/
+*.part
+
+# 자료 형식은 어느 폴더에 있어도 올리지 않습니다.
+*.tif
+*.tiff
+*.nc
+*.h5
+*.hdf5
+*.he5
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.gdb/
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.geojson
+*.parquet
+*.f32
+*.u8
+*.npy
+*.npz
+# 예외: 1 MB 이하 시험 자료와 문서 근거용 작은 결과 (conventions 8절)
+!tests/fixtures/*.npz
+!analysis/*/results/*.npz
+
+# --- Godot 실행 파일과 내보내기 템플릿 (scripts/setup 이 .tools/ 에 받음) ---
+.tools/
+*.app/
+Godot_v*
+*.exe
+*.x86_64
+*.arm64
+*.tpz
+*.dmg
+
+# --- 엔진 (Godot 4) ---
+engine/.godot/
+engine/baked/
+engine/export/
+*.pck
+
+# --- 편집기·운영체제 ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.claude/*.lock
+.claude/settings.local.json

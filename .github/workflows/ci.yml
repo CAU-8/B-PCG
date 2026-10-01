@@ -1,0 +1,127 @@
+# 저장소 점검 (CI). main 에 올리거나 PR 을 열면 돕니다.
+#
+#   lint    ruff 린트와 서식 검사 (Ubuntu)
+#   test    빠른 테스트(-m "not slow")와 설치 스크립트 점검 모드 (Ubuntu, Windows, macOS 15)
+#   engine  Godot 4.7.2 를 받아 엔진 연기 시험(tests/test_engine_smoke.py) (Ubuntu)
+#   setup   설치 스크립트 전체 실행 (uv 설치부터 Godot 까지). Actions 탭에서 손으로만 돌립니다.
+#
+# data, godot 표시가 붙은 테스트는 데이터나 Godot 이 없으면 스스로 건너뜁니다.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 같은 브랜치·PR 에 새 커밋이 오면 앞의 실행은 취소합니다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.17"
+  GODOT_VERSION: "4.7.2"
+  # 모든 uv 명령이 uv.lock 을 고치지 않고, lock 이 pyproject.toml 과 어긋나면 실패하게 합니다.
+  UV_LOCKED: "1"
+  # Windows 러너의 표준 출력이 한글을 못 찍어 실패하지 않게. (파일 읽기 인코딩은 코드에서 정합니다.)
+  PYTHONIOENCODING: utf-8
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    name: 린트 (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv 는 v8 부터 v10 같은 큰 버전 태그를 내지 않아 커밋 SHA 로 고정합니다.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked
+      - run: uv run ruff check --output-format=github .
+      - run: uv run ruff format --check .
+      - name: 설치 스크립트 문법과 인코딩
+        run: |
+          bash -n scripts/setup.sh
+          # PowerShell 5.1 은 BOM 없는 UTF-8 의 한글을 깨뜨립니다.
+          test "$(head -c 3 scripts/setup.ps1 | od -An -tx1 | tr -d ' \n')" = "efbbbf" \
+            || { echo "::error file=scripts/setup.ps1::UTF-8 BOM 이 없습니다"; exit 1; }
+
+  test:
+    name: 테스트 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked
+      - run: uv run pytest -m "not slow"
+      # 설치 스크립트의 점검 모드(-Check)로 doctor 까지 돌립니다. 아무것도 설치하지 않습니다.
+      - name: 설치 스크립트 점검 모드 (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: bash scripts/setup.sh --check
+      - name: 설치 스크립트 점검 모드 (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Check
+
+  engine:
+    name: 엔진 연기 시험 (Godot 4.7.2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      # 이 액션은 Godot 을 받아 PATH 에 godot 을 두고, 환경 변수 GODOT 에 실행 파일 경로를 넣습니다.
+      - uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ env.GODOT_VERSION }}
+          use-dotnet: false
+          include-templates: false
+      - name: Godot 버전 확인 (임시 HOME 으로)
+        run: |
+          echo "GODOT=$GODOT"
+          v="$(HOME="$(mktemp -d)" "$GODOT" --headless --version)"
+          echo "$v"
+          case "$v" in
+            "$GODOT_VERSION".stable*) ;;
+            *) echo "::error::Godot $GODOT_VERSION 이 아닙니다: $v"; exit 1 ;;
+          esac
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv sync --locked
+      - run: uv run pytest -m godot tests/test_engine_smoke.py
+
+  # 새 컴퓨터처럼 uv 도 없는 상태에서 설치 스크립트를 끝까지 돌려 봅니다 (Godot 포함).
+  setup:
+    name: 설치 스크립트 전체 (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: 설치 (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: bash scripts/setup.sh --godot
+      - name: 설치 (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Godot

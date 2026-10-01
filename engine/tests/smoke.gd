@@ -1,0 +1,262 @@
+extends SceneTree
+## 엔진 연기 검사(smoke test). 화면 없이(--headless) 돌려 핵심 경로가 살아 있는지 봅니다.
+##
+## 실행 (저장소 맨 위에서, 처음 한 번과 스크립트를 바꾼 뒤에는 --import 를 먼저):[br]
+##   godot --headless --path engine --import[br]
+##   godot --headless --path engine --script res://tests/smoke.gd[br]
+## GDScript 구문 오류나 셰이더 오류가 있어도 Godot 는 종료 코드 0 으로 끝납니다.
+## 그래서 성공하면 'BPCG_SMOKE_OK' 를 찍고 quit(0), 실패하면 'BPCG_SMOKE_FAIL: <이유>' 를 찍고
+## quit(1) 합니다. tests/test_engine_smoke.py 가 이 표시를 봅니다.
+
+const SAMPLE_STEM := "res://samples/sample"
+const MAIN_SCENE := "res://scenes/main.tscn"
+const CROSS_SECTION_SHADER := "res://shaders/cross_section.gdshader"
+const SCRIPT_DIRS: Array[String] = ["res://scripts"]
+const SHADER_UNIFORMS: Array[String] = ["plane_normal", "plane_offset_m", "strata_thickness_m"]
+const HEIGHT_TOLERANCE_M := 1e-3
+## 물리 광선이 맞힌 높이와 표본 높이의 허용 차이 (m).
+const RAY_TOLERANCE_M := 0.05
+## 플레이어가 땅에 닿기를 기다리는 최대 물리 프레임 수.
+const MAX_LANDING_FRAMES := 600
+## 검사 전체 시간 제한 (ms). 넘으면 실패로 끝냅니다.
+const WATCHDOG_MS := 60000
+
+var _done := false
+var _started_ms := 0
+
+
+func _initialize() -> void:
+	_started_ms = Time.get_ticks_msec()
+	print("Godot %s | 물리 엔진: %s" % [
+		Engine.get_version_info().string,
+		ProjectSettings.get_setting("physics/3d/physics_engine")])
+	_run()
+
+
+func _process(_delta: float) -> bool:
+	if not _done and Time.get_ticks_msec() - _started_ms > WATCHDOG_MS:
+		_fail("시간 제한 %d ms 를 넘었습니다" % WATCHDOG_MS)
+	return false
+
+
+func _run() -> void:
+	# _initialize() 때는 root 가 아직 트리에 들어가기 전이라 한 프레임 기다립니다.
+	await process_frame
+	if not _check_scripts():
+		return
+	if not _check_shader():
+		return
+	if not _check_heightmap():
+		return
+	var main := _instantiate_main()
+	if main == null:
+		return
+	if not await _check_physics(main):
+		return
+	_pass()
+
+
+## scripts/ 의 모든 .gd 가 구문 오류 없이 읽히는지 봅니다.
+func _check_scripts() -> bool:
+	for dir in SCRIPT_DIRS:
+		for file in DirAccess.get_files_at(dir):
+			if not file.ends_with(".gd"):
+				continue
+			var path := dir.path_join(file)
+			var script := load(path) as GDScript
+			if script == null or not script.can_instantiate():
+				return _fail("스크립트를 읽지 못했습니다 (구문 오류?): %s" % path)
+	return true
+
+
+## 단면 셰이더가 컴파일되는지 봅니다. 컴파일에 실패하면 uniform 목록이 비어 있습니다.
+func _check_shader() -> bool:
+	var shader := load(CROSS_SECTION_SHADER) as Shader
+	if shader == null:
+		return _fail("셰이더를 읽지 못했습니다: %s" % CROSS_SECTION_SHADER)
+	var names := shader.get_shader_uniform_list().map(
+			func(u: Dictionary) -> String: return u.name)
+	for uniform_name in SHADER_UNIFORMS:
+		if not names.has(uniform_name):
+			return _fail("셰이더 uniform '%s' 가 없습니다 (컴파일 오류?): %s" % [
+				uniform_name, CROSS_SECTION_SHADER])
+	return true
+
+
+## 표본 높이맵을 HeightmapLoader 로 읽어 메시와 충돌 모양을 확인합니다.
+func _check_heightmap() -> bool:
+	var meta: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAMPLE_STEM + ".json"))
+	if not (meta is Dictionary):
+		return _fail("표본 설명 파일을 읽지 못했습니다: %s.json" % SAMPLE_STEM)
+	var hm := HeightmapLoader.load_stem(SAMPLE_STEM)
+	if not hm.is_valid():
+		return _fail("HeightmapLoader 가 표본을 읽지 못했습니다: " + hm.error_message)
+	var w := int(meta["width"])
+	var h := int(meta["height"])
+	if hm.width != w or hm.height != h or hm.heights.size() != w * h:
+		return _fail("높이맵 크기가 다릅니다: %d x %d, 표본 %d개" % [
+			hm.width, hm.height, hm.heights.size()])
+
+	var mesh := hm.build_mesh()
+	var arrays := mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	if vertices.size() != w * h:
+		return _fail("꼭짓점 수 %d 가 width * height = %d 와 다릅니다" % [vertices.size(), w * h])
+	if normals.size() != w * h:
+		return _fail("법선 수 %d 가 꼭짓점 수와 다릅니다" % normals.size())
+	if indices.size() != (w - 1) * (h - 1) * 6:
+		return _fail("인덱스 수 %d 가 맞지 않습니다" % indices.size())
+
+	var lo := INF
+	var hi := -INF
+	for v in vertices:
+		lo = minf(lo, v.y)
+		hi = maxf(hi, v.y)
+	if (absf(lo - float(meta["min"])) > HEIGHT_TOLERANCE_M
+			or absf(hi - float(meta["max"])) > HEIGHT_TOLERANCE_M):
+		return _fail("메시 높이 범위 %f ~ %f 가 json 의 %s ~ %s 와 다릅니다" % [
+			lo, hi, meta["min"], meta["max"]])
+	for n in normals:
+		if n.y <= 0.0:
+			return _fail("아래를 향한 법선이 있습니다: %s" % n)
+	# Plane(a, b, c) 는 시계 방향 점 순서로 법선을 정합니다. 앞면이 위를 봐야 합니다.
+	var first := Plane(vertices[indices[0]], vertices[indices[1]], vertices[indices[2]])
+	if first.normal.y <= 0.0:
+		return _fail("삼각형 감김 방향이 반대입니다 (앞면이 아래를 봄)")
+
+	var shape := hm.build_shape()
+	if shape.map_width != w or shape.map_depth != h or shape.map_data.size() != w * h:
+		return _fail("충돌 모양 크기가 다릅니다: %d x %d" % [shape.map_width, shape.map_depth])
+	if (absf(shape.get_min_height() - float(meta["min"])) > HEIGHT_TOLERANCE_M
+			or absf(shape.get_max_height() - float(meta["max"])) > HEIGHT_TOLERANCE_M):
+		return _fail("충돌 모양 높이 범위 %f ~ %f 가 json 과 다릅니다" % [
+			shape.get_min_height(), shape.get_max_height()])
+
+	var row := floori((h - 1) / 3.0)
+	var col := floori((w - 1) / 4.0)
+	var probe := hm.origin + Vector3(col * hm.spacing_m, 0.0, row * hm.spacing_m)
+	var expected := hm.origin.y + hm.heights[row * w + col]
+	if absf(hm.height_at(probe) - expected) > HEIGHT_TOLERANCE_M:
+		return _fail("height_at 이 표본 값과 다릅니다: %f, 기대 %f" % [hm.height_at(probe), expected])
+	print("높이맵: %d x %d, 간격 %.1f m, 높이 %.2f ~ %.2f m" % [w, h, hm.spacing_m, lo, hi])
+	return true
+
+
+## 시작 장면을 만들어 트리에 붙이고 구성이 맞는지 봅니다. 실패하면 null.
+func _instantiate_main() -> Node:
+	var packed := load(MAIN_SCENE) as PackedScene
+	if packed == null:
+		_fail("시작 장면을 읽지 못했습니다: %s" % MAIN_SCENE)
+		return null
+	var main := packed.instantiate()
+	if main == null:
+		_fail("시작 장면을 만들지 못했습니다: %s" % MAIN_SCENE)
+		return null
+	root.add_child(main)
+
+	var terrain := main.get_node_or_null("Terrain") as HeightmapTerrain
+	if terrain == null or terrain.heightmap == null or not terrain.heightmap.is_valid():
+		_fail("Terrain 노드가 없거나 높이맵을 읽지 못했습니다")
+		return null
+	if not (terrain.get_node_or_null("Mesh") is MeshInstance3D):
+		_fail("Terrain 아래 Mesh 가 없습니다")
+		return null
+	var collision := terrain.get_node_or_null("Body/Shape") as CollisionShape3D
+	if collision == null or not (collision.shape is HeightMapShape3D):
+		_fail("Terrain 아래 Body/Shape (HeightMapShape3D) 가 없습니다")
+		return null
+	var material := terrain.material as ShaderMaterial
+	if (material == null or material.shader == null
+			or material.shader.resource_path != CROSS_SECTION_SHADER):
+		_fail("Terrain 재질이 단면 셰이더가 아닙니다")
+		return null
+
+	var camera := main.get_node_or_null("Player/Head/Camera") as Camera3D
+	if camera == null or camera.far < 10000.0:
+		_fail("플레이어 카메라가 없거나 far 가 10000 m 보다 짧습니다")
+		return null
+	var env_node := main.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if env_node == null or env_node.environment == null or env_node.environment.sky == null:
+		_fail("WorldEnvironment 나 하늘(Sky)이 없습니다")
+		return null
+	if not env_node.environment.fog_enabled:
+		_fail("안개가 꺼져 있습니다")
+		return null
+	if not (main.get_node_or_null("Sun") is DirectionalLight3D):
+		_fail("DirectionalLight3D (Sun) 가 없습니다")
+		return null
+	print("시작 장면: 지형 %s" % terrain.used_stem)
+	return main
+
+
+## 물리 광선이 높이맵과 같은 자리를 맞히는지, 플레이어가 땅에 내려서는지 봅니다.
+func _check_physics(main: Node) -> bool:
+	var terrain := main.get_node("Terrain") as HeightmapTerrain
+	var player := main.get_node("Player") as CharacterBody3D
+	var hm := terrain.heightmap
+	await physics_frame
+	await physics_frame
+
+	var space := terrain.get_world_3d().direct_space_state
+	var worst := 0.0
+	var last_row := hm.height - 1
+	var last_col := hm.width - 1
+	var extent := Vector3(last_col * hm.spacing_m, 0.0, last_row * hm.spacing_m)
+	var samples: Array[Vector2i] = [
+		Vector2i(0, 0),
+		Vector2i(floori(last_row / 3.0), floori(last_col / 4.0)),
+		Vector2i(floori(last_row / 2.0), floori(last_col / 2.0)),
+		Vector2i(last_row, last_col),
+	]
+	for rc in samples:
+		var local := hm.origin + Vector3(rc.y * hm.spacing_m, 0.0, rc.x * hm.spacing_m)
+		# 가장자리 표본은 모양 경계에 걸리므로 안쪽으로 1 cm 옮겨 쏩니다.
+		local.x = clampf(local.x, hm.origin.x + 0.01, hm.origin.x + extent.x - 0.01)
+		local.z = clampf(local.z, hm.origin.z + 0.01, hm.origin.z + extent.z - 0.01)
+		var top := terrain.to_global(
+				Vector3(local.x, hm.origin.y + hm.max_height_m + 100.0, local.z))
+		var bottom := terrain.to_global(
+				Vector3(local.x, hm.origin.y + hm.min_height_m - 100.0, local.z))
+		# 플레이어가 지형 가운데 서 있으므로 광선에서 뺍니다.
+		var query := PhysicsRayQueryParameters3D.create(top, bottom, 0xFFFFFFFF, [player.get_rid()])
+		var hit := space.intersect_ray(query)
+		if hit.is_empty():
+			return _fail("물리 광선이 지형을 맞히지 못했습니다: 행 %d, 열 %d" % [rc.x, rc.y])
+		var expected := terrain.to_global(Vector3(local.x, terrain.height_at(local), local.z)).y
+		var err := absf(hit.position.y - expected)
+		worst = maxf(worst, err)
+		if err > RAY_TOLERANCE_M:
+			return _fail("물리 광선 높이 %f 가 높이맵 %f 와 %f m 다릅니다 (행 %d, 열 %d)" % [
+				hit.position.y, expected, err, rc.x, rc.y])
+
+	var frames := 0
+	while not player.is_on_floor() and frames < MAX_LANDING_FRAMES:
+		await physics_frame
+		frames += 1
+	if not player.is_on_floor():
+		return _fail("플레이어가 %d 물리 프레임 안에 땅에 닿지 않았습니다 (y = %f)" % [
+			MAX_LANDING_FRAMES, player.global_position.y])
+	var feet := terrain.to_local(player.global_position)
+	var ground := terrain.to_global(Vector3(feet.x, terrain.height_at(feet), feet.z)).y
+	if absf(player.global_position.y - ground) > 0.2:
+		return _fail("플레이어 발 높이 %f 가 지면 %f 와 다릅니다" % [player.global_position.y, ground])
+	print("물리: 광선 오차 최대 %.4f m, 플레이어 착지 %d 프레임" % [worst, frames])
+	return true
+
+
+func _pass() -> void:
+	if _done:
+		return
+	_done = true
+	print("BPCG_SMOKE_OK")
+	quit(0)
+
+
+func _fail(reason: String) -> bool:
+	if not _done:
+		_done = true
+		print("BPCG_SMOKE_FAIL: " + reason)
+		quit(1)
+	return false

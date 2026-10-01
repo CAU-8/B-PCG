@@ -1,0 +1,697 @@
+[
+ {
+  "key": "bare-earth-dtm",
+  "result": {
+   "summary": "결론: 1577 데이터의 TerrainHeight(SRTM 유래)는 Lopé와 Rabi의 숲 아래에서 지면보다 수 m에서 20 m가량 높은 표면모델(DSM)이므로, θ를 바로 적합하는 데 쓰면 안 됩니다. 가봉에서 LVIS와 비교한 연구(Okolie 2024)에 따르면 전지구 DEM의 평균오차는 +17~24 m이고, Lopé 고지대 RMSE는 NASADEM 19.8 m, Copernicus 30.3 m입니다. 이 정도면 θ≈0.1이라는 결과는 지면 신호가 아니라 캐노피 계단과 잡음에서 나왔다고 봐야 합니다. 두 사이트를 보정할 자료는 ORNL DAAC 1775의 LVIS 25 m 지면고 격자(lope 9.2 MB, rabi 6.7 MB, Earthdata 로그인 필요)가 1순위입니다. LVIS가 없는 swath 구역은 1577 Capon HH에서 뽑은 지면 피크로 채우되, LVIS 지면점에 맞춰 묶는 방식(tie)이 2순위입니다. 3순위인 전지구 bare-earth DEM에서는 숲 지역 정확도가 FathomDEM > FABDEM ≈ GEDTM30 순입니다. 발표된 지면 추출법은 'HH Capon 스펙트럼의 최대 피크'(El Moussawi 2019)를 지면으로 잡습니다. 다만 AfriSAR 개요 논문(Fatoyinbo 2021)은 UAVSAR가 잡은 지면이 대체로 LVIS보다 높다고 적고 있습니다. 위상보정이 'roto-translation까지'만 결정하므로 절대 오프셋과 기울기는 LVIS로 다시 묶어야 합니다. 3장의 θ, k_s, S_crit 전지구 적합은 가봉 자료가 아니라 다음 조합으로 하는 것이 맞습니다: 식생이 적은 곳은 Copernicus GLO-30(AWS, 로그인 없음), 숲은 FABDEM 또는 FathomDEM, 방법은 χ 기반 concavity, 여러 구조지질 환경의 사이트 세트. 하나 더 짚을 점은, Lopé swath를 Ogooué 본류가 통과하는 것으로 보인다는 것입니다(좌표 기반 추정). 그렇다면 swath 안에서만 계산한 유역면적이 크게 잘려 있어 θ를 낮추는 또 다른 원인이 됩니다.",
+   "findings": [
+    {
+     "topic": "1577 데이터의 높이 기준과 기하: 지면을 추출하기 전에 알아야 할 사실",
+     "detail": "로컬 zip 안의 comp/Polarimetric_height_profile.pdf(ORNL 가이드)를 직접 읽고 확인한 내용입니다. (1) Tomogram의 Heights는 SRTM 유래 DEM(TerrainHeight)을 기준으로 한 상대고입니다. 픽셀 (i,j,k)의 위경도고는 (Latitude[j,k], Longitude[j,k], Heights[i]+TerrainHeight[j,k])입니다. (2) Figure 3 캡션은 TerrainHeight를 'height of the terrain above the ellipsoid'로 정의합니다. 즉 WGS84 타원체고일 가능성이 높고, EGM96 정표고인 SRTM 원본과 다릅니다. (3) Latitude/Longitude 배열은 H=0(DEM 위) 점에서만 1 m 이내로 정확합니다. 높이 H인 산란체는 평면 오차 X=H/tanθ만큼 range 방향으로 밀립니다. 지면이 DEM보다 20 m 아래이고 근거리 입사각이 약 25°이면 약 43 m가 밀려 30 m 격자에서 1픽셀이 넘습니다. (4) Fourier는 8 m 높이 격자이고 수직분해능도 약 8 m입니다(Fatoyinbo 2021). Capon은 2 m 격자이지만 '편파 간 상대 보정이 보장되지 않고 radiometric calibration이 보존되지 않을 수 있다'고 명시되어 있습니다. (5) 위상보정은 Tebaldini et al. 2016(phase center double localization)입니다. 이 방법은 초록에 따르면 플랫폼과 표적 위치를 'up to a roto-translation'까지만 결정합니다. 따라서 swath 전체의 절대 높이 오프셋과 완만한 기울기는 DEM 관례로 고정됐을 수 있고, 국지적인 지면 편차만 신뢰할 수 있습니다(이 부분은 추론). (6) 원본 SLC는 UAVSAR jobName lopenp_TM140_03, rabifo_TM130_02로 공개되어 있습니다(registration 필요).",
+     "actionable_step": "① 사바나나 맨땅 픽셀(LVIS RH98 < 3 m 또는 Copernicus 수관피복이 낮은 곳)에서 TerrainHeight − Copernicus GLO-30(EGM2008)을 계산합니다. 그 값이 EGM2008 지오이드고 N과 같은지(타원체고인지) 확인합니다. ② 지면 피크 h_g를 구한 뒤 geocoding할 때 range 방향으로 h_g/tan(θ_inc)만큼 보정합니다. θ_inc는 ORNL 1601의 lope_local_incidence_angle.tif로 근사하거나, HDF5 attribute(Altitude, Ranges)에서 계산합니다. ③ 편파 간 Capon 파워를 서로 비교하지 말고, 각 프로파일 안의 피크 위치만 사용합니다.",
+     "evidence": "verified",
+     "sources": [
+      "file: data/Polarimetric_height_profile_1577.zip → comp/Polarimetric_height_profile.pdf",
+      "https://doi.org/10.3334/ORNLDAAC/1577",
+      "https://doi.org/10.1109/TGRS.2015.2488358"
+     ]
+    },
+    {
+     "topic": "발표된 TomoSAR/PolInSAR 지면(DTM) 추출 알고리즘과 LVIS 대비 정확도",
+     "detail": "(a) Fatoyinbo et al. 2021, RSE 264:112533, 1577 데이터 자체를 다룬 논문: 20×20 m 기둥 프로파일에서 '지면을 나타내는 강한 피크 1개와, 지면 위 약 20 m에 있는 약하고 넓은 캐노피 피크'가 보입니다. LVIS와 가장 비슷한 것은 Capon입니다. Capon과 Fourier의 지면 위치는 LVIS와 잘 맞지만 'UAVSAR가 잡은 지면이 대체로 LVIS보다 높다'고 적혀 있습니다. 정량적인 RMSE는 제시하지 않습니다. (b) El Moussawi, Ho Tong Minh, …, Lavalle 2019, Remote Sens. 11(5):475, Lopé: 위상보정 초기 지면을 z_g = argmax_z S_Capon(z; HH)로 정의합니다(식 5). 이후 SKP로 지면 위상을 추정해 SLC에서 제거하므로, 이 논문의 프로파일은 지면 기준입니다. 검증은 1 m 해상도 SFL(헬기 소형풋프린트 라이다) DTM/CHM(북부 Lopé 약 15 km²)에 대해 정성적으로만 했고, 지면 RMSE는 보고하지 않았습니다. 수관고는 power-loss −9.2 dB 임계로 RMSE 3.32 m, bias −0.059 m, R² 0.92입니다. (c) Shiroma & Lavalle 2020, IEEE TGRS: Lopé UAVSAR의 InSAR backscatter-height histogram에 Gaussian decomposition, quantile, backscatter threshold 세 알고리즘을 적용했습니다(HH, HV, VV, HH+VV, HH−VV). LVIS 대비 평균 RMSE는 지형 5 m, 수관상단 4 m, 수고 6 m입니다. (d) Mariotti d'Alessandro & Tebaldini 2019, IEEE TGRS 57(9), doi:10.1109/TGRS.2019.2908517: 서아프리카 P-band 3개 데이터셋에서 P-band 위상중심이 경사와 입사각에 따라 지면보다 수 m 위에 있을 수 있음을 보였습니다. 토모그래피로 얻은 DTM은 라이다와 '최소한 비슷한' 정확도이고, 대형풋프린트 라이다와 차이가 더 크다고 보고합니다(ESA P-band 자료 사용). (e) Liu et al. 2021 GRSL은 F-SAR P/L(Lopé)에 WISE 추정기를 썼습니다. Pardini et al.(JSTARS, 'L- and P-Band 3-D SAR Reflectivity Profiles vs. Lidar Waveforms: The AfriSAR Case')은 제목만 확인했습니다. (f) 참고로 LVIS 자체의 오차: Fatoyinbo 2021의 ALS 교차 비교에서 지면 RMSE는 1.75 m(Mondah)~4.2 m(Lopé)이고, 평균 bias는 +0.64 m(Lopé)~+2.3 m(Rabi)입니다. Silva et al. 2018(JSTARS)은 Lopé에서 LVIS와 SF 라이다의 지면 RMSE 0.5 m, bias 0.29 m를 보고합니다.",
+     "actionable_step": "1577 데이터에 적용할 지면 추출 절차입니다. ① Capon HH 프로파일 P(h)를 dB로 바꾸고 프로파일마다 최대값으로 정규화합니다. ② 국소 최대점 중 '최대값 대비 −6~−10 dB 이내이고 노이즈 플로어보다 높은 가장 낮은 피크'를 지면 후보로 고릅니다. 단순 argmax(El Moussawi 방식)와 결과를 비교합니다. ③ Fourier HH, VV, HHVV(복소)로 Pauli 이중반사 파워 P_db(h)=(S_HH+S_VV−2·Re S_HHVV)/2를 계산해 지면-줄기 이중반사 피크로 교차 확인합니다(추론에 기반한 보조 판별자). ④ 포물선 보간으로 2 m 이하 서브빈 위치를 구합니다. ⑤ 5×5 median 필터를 적용하고, 국소 중앙값에서 3·MAD를 넘는 값은 제거한 뒤 보간합니다. ⑥ DTM_tomo = TerrainHeight + h_g를 만들고 평면 보정을 합니다. ⑦ LVIS ZG(타원체)와의 잔차를 azimuth와 range에 대한 1~2차 다항식으로 적합해 roto-translation 모호성을 제거합니다. 결과는 LVIS 지면점의 20%를 holdout으로 남겨 RMSE와 bias로 보고합니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.1016/j.rse.2021.112533",
+      "https://ntrs.nasa.gov/api/citations/20210016637/downloads/1-s2.0-S0034425721002534-main.pdf",
+      "https://doi.org/10.3390/rs11050475",
+      "https://doi.org/10.1109/tgrs.2019.2956989",
+      "https://doi.org/10.1109/tgrs.2019.2908517",
+      "https://doi.org/10.1109/lgrs.2021.3069371",
+      "https://doi.org/10.1109/jstars.2018.2816962",
+      "https://doi.org/10.1109/IGARSS.2017.8127498"
+     ]
+    },
+    {
+     "topic": "SRTM/NASADEM/Copernicus의 캐노피 편향: 가봉·콩고 정량값",
+     "detail": "(1) Okolie et al. 2024, Geo-spatial Inf. Sci., doi:10.1080/10095020.2023.2296010: AfriSAR LVIS L2(EGM2008로 변환)를 기준으로 Akanda와 Lopé를 평가했습니다. 네 DEM 모두 지면을 과대추정했고 평균오차는 +17.40 m(ASTER)~+23.96 m(AW3D)입니다. 가봉 전체 RMSE는 NASADEM 20.28, ASTER 22.08, Copernicus 26.13, AW3D 26.65 m입니다. Lopé 숲 고지대만 보면 NASADEM 19.82 m, Copernicus 30.28 m입니다. 수관피복이 70%를 넘으면 NASADEM RMSE 20.79 m로 NASADEM이 가장 낫습니다. (2) Simard et al. 2024, JGR-Biogeosciences: ICESat 대비 식생 편향은 NASADEM = 0.87·RH50 + 1.52 m, GLO-30 = 1.10·RH50 + 2.21 m입니다. X-band인 GLO-30이 C-band보다 편향이 큽니다. 편향이 가장 큰 곳은 Amazon, Congo, 동남아입니다. 맨땅에서는 GLO-30 bias 0.05 m, RMSE 0.55 m이고 NASADEM은 0.00 m, 1.50 m입니다. (3) Magruder et al. 2016, IJRS: 가봉에서 SRTM 고도가 '일관되게 캐노피 부피 안'에 있습니다. (4) Hawker et al. 2022(FABDEM 논문): 숲 MAE가 COPDEM 5.15 m에서 FABDEM 2.88 m로 줄었고(초록 인용), 피복 50% 초과에서 중앙오차는 약 12 m에서 0.45 m로 줄었습니다(표는 요약본으로만 확인). 해석: Lopé 노숙림의 RH50을 15~20 m로 가정하면 SRTM 편향은 약 15~19 m입니다. 사용자가 관찰한 '−20 m까지 내려가는 반사'와 숲-사바나 경계의 0→+20 m 계단, 그리고 14~23%에 이르는 pit 비율과 앞뒤가 맞습니다.",
+     "actionable_step": "ORNL 1775의 l3a1 RH50 격자와 TerrainHeight − LVIS 지면고(datum 통일 후)를 산점도로 그려 기울기와 절편을 적합합니다. 기울기가 약 0.9, 절편이 1~2 m 정도로 Simard 2024를 재현하면, 이를 3장의 'DSM→DTM 편향 모델' 그림으로 씁니다. 또한 이 회귀를 LVIS가 없는 지역(RH50은 GEDI나 전지구 수고지도에서 가져옴)의 1차 보정식으로 활용합니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://www.tandfonline.com/doi/full/10.1080/10095020.2023.2296010",
+      "https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2023JG007672",
+      "https://doi.org/10.1080/01431161.2016.1232870",
+      "https://iopscience.iop.org/article/10.1088/1748-9326/ac4d4f"
+     ]
+    },
+    {
+     "topic": "두 사이트 보정의 1순위: AfriSAR LVIS(격자 DTM과 풋프린트 L2)의 정확한 다운로드 경로",
+     "detail": "[A] ORNL DAAC 1775, 'AfriSAR: Gridded Forest Biomass and Canopy Metrics Derived from LVIS, Gabon, 2016'(Armston et al. 2020, doi:10.3334/ORNLDAAC/1775): 25 m GeoTIFF이고 좌표계는 EPSG:32732(UTM 32S), nodata −9999입니다. 지면고 파일은 l3c1_ground_elev로, '해발고(above mean sea level)'로 표기되어 있으나 지오이드 모델은 명시되지 않았습니다. 그 밖에 l3a1 RH25~RH100, l3b1 canopy_cover/PAI, l3d1 valid_data_mask/shots/flightlines가 있습니다. 내삽은 natural neighbor입니다. 사이트 범위: Lopé 11.397–12.024E, −0.016~−0.642, 비행일 2016-03-02. Rabi 9.595–10.277E, −1.685~−2.295, 비행일 2016-03-07. CMR에서 확인한 파일 크기: lvis2_lope_…_l3c1_ground_elev 9.16 MB, rabi 6.73 MB, lope valid_data_mask 0.61 MB. 1577 swath와 겹치는 정도: Lopé는 swath 북쪽 끝(위도 −0.016~+0.109, Ogooué 주변)이 LVIS 격자 밖입니다. Rabi는 swath 북단(약 −1.62~−1.685)을 빼고 대부분 겹칩니다. 다만 비행선 사이와 구름으로 생긴 공백은 mask로 확인해야 합니다. [B] NSIDC AFLVIS2, 'AfriSAR LVIS L2 Geolocated Surface Elevation Product V1'(Blair & Hofton 2018, doi:10.5067/A0PMUXXVUYNH): ASCII .TXT 형식이고 열은 LFID, SHOTNUMBER, TIME, GLON, GLAT, ZG(가장 낮은 모드의 평균고), ZH, ZT, RH10…RH100, AZIMUTH, INCIDENTANGLE, COMPLEXITY 등입니다. 기준은 WGS84 타원체(ITRF2008)이고 풋프린트는 약 20 m입니다. CMR 기준 0302(Lopé) 21개 파일 약 2.6 GB, 0307(Rabi) 17개 파일 약 2.1 GB입니다. 두 제품 모두 무료 NASA Earthdata Login이 필요합니다.",
+     "actionable_step": "Earthdata 계정을 만든 뒤 ~/.netrc를 설정하는 일은 사용자가 직접 합니다. 이후 Python에서 `import earthaccess; earthaccess.login(); g=earthaccess.search_data(short_name='Afrisar_LVIS_Biomass_VProfiles_1775'); earthaccess.download([x for x in g if any(k in x['umm']['GranuleUR'] for k in ['l3c1_ground_elev','valid_data_mask','l3a1_RH50','l3a1_RH98']) and ('lope' in x['umm']['GranuleUR'] or 'rabi' in x['umm']['GranuleUR'])],'data/lvis')`. 직접 URL은 https://data.ornldaac.earthdata.nasa.gov/protected/afrisar/Afrisar_LVIS_Biomass_VProfiles/data/lvis2_lope_2016022020160308_l3c1_ground_elev_e32732_v0301_r025m.tif 입니다(rabi도 같은 패턴). 가이드 본문에 오타로 적힌 'gound_elev'는 404입니다. 풋프린트는 `earthaccess.search_data(short_name='AFLVIS2', temporal=('2016-03-02','2016-03-02'))`처럼 받습니다. Rabi는 '2016-03-07'입니다. 경로는 https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/LVIS/AFLVIS2/1/2016/03/02/ 입니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://daac.ornl.gov/AFRISAR/guides/Afrisar_LVIS_Biomass_VProfiles.html",
+      "https://doi.org/10.3334/ORNLDAAC/1775",
+      "https://nsidc.org/data/aflvis2/versions/1",
+      "https://nsidc.org/sites/default/files/aflvis2-v001-userguide_1.pdf",
+      "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=AFLVIS2"
+     ]
+    },
+    {
+     "topic": "전지구 bare-earth DEM 대안: FABDEM V1-2, FathomDEM, GEDTM30(라이선스, 타일, URL)",
+     "detail": "[FABDEM V1-2] data.bris DOI 10.5523/bris.s5hqmjcdj8yo2ibzi9b4ew3sn(2023-01-18 공개, 전체 296.7 GiB). 라이선스는 'CC BY-NC-SA 4.0'이며 상업 이용은 fabdem@fathom.global로 문의해야 합니다. 메타데이터 칸에는 'Non-Commercial Government Licence'로 적혀 있어 어느 쪽이든 비상업입니다. 기준은 EGM2008, 1″ GeoTIFF입니다. zip은 10×10° 단위로 남서-북동 표기(예: S10E010-N00E020_FABDEM_V1-2.zip)이고, 타일은 남서 모서리 표기(예: S01E011_FABDEM_V1-2.tif)입니다. 가봉에 필요한 zip은 세 개입니다(HEAD로 크기 확인): S10E000-N00E010(48 MB: S02E009, S03E009), S10E010-N00E020(2.10 GB: S01E011, S02E010, S03E010), N00E010-N10E020(2.38 GB: N00E011). GEE 대안 자산은 projects/sat-io/open-datasets/FABDEM입니다. 요약본으로만 확인한 내용: 학습 라이다 12개국에 중앙아프리카가 포함되지 않았다고 하며, 열대 고밀도 숲에서는 잔여 양(+)편향 가능성을 고려해야 합니다. [FathomDEM v1-0] Uhe et al. 2025, ERL, doi:10.1088/1748-9326/ada972. 'Eurasia and Africa'는 Zenodo 10.5281/zenodo.14511570에 있으며 restricted라서 학교 이메일로 접근을 요청해야 합니다. CC BY-NC-SA 4.0, EGM2008, 1×1° 타일(예: n45e002.tif), 30×30° zip입니다. [GEDTM30 v1.2] Ho et al. 2025, PeerJ, doi:10.7717/peerj.19673. CC-BY 4.0로 가장 관대한 라이선스이고, ICESat-2와 GEDI로 학습한 RF 앙상블입니다. 논문 요약에 따르면 EGM2008 기준이고 '아마존과 콩고 분지에서 불확실성이 높다'고 합니다. 전지구 COG는 https://s3.opengeohub.org/global/dtm/v1.2/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif(Float32 m)이고 표준편차 레이어는 gedtm_rf_std_…입니다. GEDTM30 논문의 수관 영역 라이다 대비 RMSE는 GEDTM30 6.72 m, FABDEM 6.82 m, FathomDEM 4.95 m입니다(요약본 기준). 가봉 LVIS로 이 세 DEM을 검증한 발표 연구는 찾지 못했습니다.",
+     "actionable_step": "Lopé/Rabi 범위만 로그인 없이 바로 잘라 보려면 `gdal_translate -projwin 11.35 0.15 11.95 -0.50 /vsicurl/https://s3.opengeohub.org/global/dtm/v1.2/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif lope_gedtm30.tif`를 씁니다(Rabi는 -projwin 9.60 -1.55 10.25 -2.20). FABDEM은 위 세 zip을 받아(약 4.5 GB) 필요한 6개 타일만 풉니다. FathomDEM은 Zenodo에서 접근 요청을 넣어 둡니다. 세 DEM을 모두 LVIS 지면점으로 검증해 bias, RMSE, NMAD 표를 만드는 것만으로도 3장의 독자 기여가 됩니다(가봉에서는 아직 발표되지 않음).",
+     "evidence": "verified",
+     "sources": [
+      "https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn",
+      "https://iopscience.iop.org/article/10.1088/1748-9326/ac4d4f",
+      "https://gee-community-catalog.org/projects/fabdem/",
+      "https://zenodo.org/records/14511570",
+      "https://www.fathom.global/academic-papers/fathomdem-research-paper/",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC12296579/",
+      "https://codeberg.org/openlandmap/GEDTM30/raw/branch/main/metadata/cog_list.csv"
+     ]
+    },
+    {
+     "topic": "DSM 원본: Copernicus GLO-30(AWS, 로그인 없음)과 NASADEM(LP DAAC)",
+     "detail": "[Copernicus GLO-30] AWS 공개 버킷 s3://copernicus-dem-30m/ 이며 로그인이 필요 없습니다. 타일 이름은 Copernicus_DSM_COG_10_{S01_00}_{E011_00}_DEM/…tif(남서 모서리) 형식이고 EGM2008 기준입니다. HEAD로 확인한 크기: Lopé는 S01_00_E011_00 47.7 MB, N00_00_E011_00 46.9 MB. Rabi는 S02_00_E009_00 42.9 MB, S02_00_E010_00 49.7 MB, S03_00_E009_00 13.2 MB, S03_00_E010_00 47.6 MB. X-band DSM이라 숲 편향이 가장 큽니다(1.10·RH50+2.21 m). 반면 맨땅 정확도는 최고 수준입니다(RMSE 0.55 m). Okolie 2024에서도 수관피복 40% 미만 구역에서 가장 정확했습니다. [NASADEM] LP DAAC NASADEM_HGT.001이며 Earthdata Login이 필요하고 LP DAAC 기준 퍼블릭 도메인(CC0)입니다. 확인한 URL 패턴은 https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_s01e011/NASADEM_HGT_s01e011.zip 입니다(n00e011, s02e009, s02e010, s03e009, s03e010). 높이 기준이 EGM96 지오이드라는 점은 기억에 의존한 것이라 확인이 필요합니다. NASADEM은 SRTM C-band를 재처리한 것이므로 1577의 TerrainHeight와 사실상 같은 편향을 공유합니다. 따라서 보정 자료가 될 수 없고 대조군으로만 씁니다.",
+     "actionable_step": "`aws s3 cp --no-sign-request s3://copernicus-dem-30m/Copernicus_DSM_COG_10_S01_00_E011_00_DEM/Copernicus_DSM_COG_10_S01_00_E011_00_DEM.tif .`를 쓰거나, GDAL /vsis3/에 AWS_NO_SIGN_REQUEST=YES를 설정해 창(window)만 읽습니다. 파이프라인에서 GLO-30은 (i) 사바나와 맨땅 구역의 datum 점검용, (ii) swath 밖까지 포함하는 지역 흐름누적 계산용(유역 절단 문제 해결)으로 씁니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://registry.opendata.aws/copernicus-dem/",
+      "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S01_00_E011_00_DEM/Copernicus_DSM_COG_10_S01_00_E011_00_DEM.tif",
+      "https://www.earthdata.nasa.gov/data/catalog/lpcloud-nasadem-hgt-001",
+      "https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2023JG007672"
+     ]
+    },
+    {
+     "topic": "GEDI L2A와 ICESat-2 ATL08: LVIS가 없는 구역과 다른 사이트의 독립 지면점",
+     "detail": "GEDI02_A V002(doi:10.5067/GEDI/GEDI02_A.002, LP DAAC): HDF5이고 granule당 약 1.44 GB입니다. 관측 기간은 2019-04-04~2023-03-16과 2024-04-26~2025-07-10이며 51.6°N~S를 덮으므로 가봉이 포함됩니다. elev_lowestmode는 타원체고입니다. 공간 subsetting은 Harmony로 할 수 있고 Earthdata Login이 필요합니다. Urbazaev et al. 2022(Sci. Remote Sens., doi:10.1016/j.srs.2022.100067)의 결과: ICESat-2와 GEDI 모두 지면 평균오차가 1 m 미만이지만 열대림은 예외입니다. 열대 산지림에서는 신호 종료 임계가 낮은 GEDI algorithm 5가 지면 정확도를 높입니다. 경사, 피복 90% 초과, degrade flag가 오차를 키웁니다. GEDTM30 학습 시에는 quality_flag=1, degrade_flag=0, sensitivity ≥ 0.95를 썼습니다. 열대림에서는 power beam, 야간, sensitivity ≥ 0.98을 쓰는 것이 관행인데, 이 부분은 기억에 의존했습니다.",
+     "actionable_step": "`earthaccess.search_data(short_name='GEDI02_A', version='002', bounding_box=(11.35,-0.50,11.95,0.15))`로 Lopé 북부의 LVIS 공백 구역을 포함해 받습니다. Harmony subsetting을 쓰면 용량을 줄일 수 있습니다. 필터는 quality_flag==1, degrade_flag==0, sensitivity≥0.98, power beam(BEAM0101/0110/1000/1011), solar_elevation<0이고, 가능하면 selected_algorithm 대신 a5 지면을 씁니다. 같은 필터를 거친 GEDI 점은 다른 열대 및 아열대 사이트에서 전지구 DEM 편향을 점검하는 공통 기준으로도 씁니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.earthdata.nasa.gov/data/catalog/lpcloud-gedi02-a-002",
+      "https://doi.org/10.1016/j.srs.2022.100067",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC12296579/"
+     ]
+    },
+    {
+     "topic": "수직 datum 통일: 섞으면 수 m~십수 m 오차가 생깁니다",
+     "detail": "각 자료의 기준은 다음과 같습니다. 1577 TerrainHeight는 가이드 Figure 3 정의상 타원체고입니다(검증 권장). AFLVIS2 ZG는 WGS84 타원체(ITRF2008)입니다. ORNL 1775 지면 격자는 '해발'로 표기됐으나 지오이드 모델이 명시되지 않았습니다. GEDI elev_lowestmode는 타원체입니다. Copernicus, FABDEM, FathomDEM, GEDTM30은 EGM2008입니다. NASADEM은 EGM96입니다(기억). Okolie 2024는 LVIS를 EGM2008 정표고로 변환해 비교했습니다. 흐름 라우팅만 할 때는 지오이드 차이가 수십 km 안에서 매끄러워 거의 무시해도 됩니다. 그러나 '자료 간 차이 = 캐노피 편향'으로 해석할 때는 지오이드고 N(가봉에서 수 m 규모)이 그대로 편향으로 들어갑니다.",
+     "actionable_step": "모든 자료를 WGS84 타원체(EPSG:4979) 또는 EGM2008(EPSG:3855) 중 하나로 통일합니다. 예: `gdalwarp -s_srs EPSG:4326+3855 -t_srs EPSG:4979 fabdem.tif fabdem_ellh.tif`(PROJ 그리드 us_nga_egm08_25.tif 필요). 1775 격자는 같은 위치의 AFLVIS2 ZG와 비교해 오프셋이 EGM2008과 EGM96 중 어느 N과 일치하는지로 기준을 판별합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://nsidc.org/sites/default/files/aflvis2-v001-userguide_1.pdf",
+      "https://daac.ornl.gov/AFRISAR/guides/Afrisar_LVIS_Biomass_VProfiles.html",
+      "https://www.tandfonline.com/doi/full/10.1080/10095020.2023.2296010",
+      "https://zenodo.org/records/14511570"
+     ]
+    },
+    {
+     "topic": "토모그램이 정말 DEM 오차를 담고 있는지 가르는 결정적 진단",
+     "detail": "사용자 관찰: Capon-HV 평균 피크가 SRTM 기준 약 0 m, 캐노피는 +30~40 m, 반사가 −20 m까지 나타납니다. 그런데 Okolie와 Simard의 수치대로라면 숲 아래 SRTM은 지면보다 약 15~20 m 높아야 하고, 따라서 지면 피크는 −15~−20 m에 나와야 합니다. 경우는 둘입니다. (i) 위상보정의 roto-translation 고정이나 지면 위상 제거 관례 때문에 지면이 DEM(0 m)에 묶였다면, 토모그램은 상대 구조만 주고 절대 DTM을 줄 수 없습니다. (ii) 국지 지면 피크가 숲 아래에서 음(−)의 값을 보이고 사바나에서 약 0이면, 토모그램이 DEM 오차를 담고 있는 것입니다. 참고로 HV는 부피산란이 주성분이라 지면 판별에 적합하지 않습니다. 지면 판별은 HH나 이중반사로 해야 합니다.",
+     "actionable_step": "LVIS 지면점이 있는 픽셀에서 x = TerrainHeight − LVIS_ZG(datum 통일 후), y = −h_g(Capon HH 지면 피크)를 산점도로 그립니다. 기울기가 1에 가깝고 상관이 높으면 (ii)이므로 토모 DTM을 채택합니다. y가 약 0이고 x와 무상관이면 (i)이므로 토모는 캐노피 구조와 식생 복셀용으로만 쓰고, DTM은 LVIS와 전지구 bare-earth DEM에 맡깁니다. 숲과 사바나(LVIS RH98 기준)로 나눠 따로 보고합니다.",
+     "evidence": "memory",
+     "sources": [
+      "https://doi.org/10.1109/TGRS.2015.2488358",
+      "https://doi.org/10.1016/j.rse.2021.112533",
+      "https://www.tandfonline.com/doi/full/10.1080/10095020.2023.2296010"
+     ]
+    },
+    {
+     "topic": "θ≈0.07–0.13의 원인: DTM 문제와 그 밖의 파이프라인 요인",
+     "detail": "(1) 캐노피 계단: 숲-사바나 경계와 하천변 갤러리 숲에서 0→+15~20 m 계단이 생겨 인공 댐과 pit이 됩니다(pit 14~23%). 이를 priority-flood로 메우면 평탄면이 생기고 기울기 정보가 사라집니다. (2) 기울기 잡음 하한: S_noise ≈ √2·σ_z/L입니다. σ_z가 5 m라면 L=30 m에서 약 0.24, L=1 km에서 약 0.007입니다. A가 10^6.5를 넘는 구간에서 중앙 기울기가 약 0.04에 머무는 것은 잡음과 캐노피가 지배하는 하한으로 해석됩니다(추론). (3) 유역 절단: Lopé 역(−0.103, 11.605)이 swath 안(해당 경도에서 위도 약 −0.27~+0.05)에 있고 Ogooué가 그 옆을 흐릅니다. swath 안에서만 누적하면 대하천 셀의 A가 655 km² 정도로 크게 잘립니다. 이는 좌표로 추정한 것이며 확인이 필요합니다. 잘린 A는 큰 하천의 기울기를 작은 A에 대응시켜 θ를 끌어내립니다. (4) Rabi는 기복이 7~180 m로 낮아 DTM 오차 대비 하도 낙차가 작으므로, θ 적합 자체가 ill-conditioned입니다.",
+     "actionable_step": "① fill 대신 breach(최소비용 carving, 예: WhiteboxTools BreachDepressionsLeastCost)를 씁니다. ② 흐름누적은 swath보다 넓은 GLO-30이나 FABDEM 지역 DEM에서 계산하고, 경계로 들어오는 유역이 잘린 하천(Ogooué 본류와 충적 범람원)은 마스킹합니다. 대안으로 MERIT Hydro나 HydroSHEDS의 upstream area를 경계 유입으로 씁니다(기억 기반). ③ θ는 χ 기반으로 구합니다(Mudd et al. 2018, ESurf 6:505, LSDTopoTools chi_mapping_tool). slope–area를 쓸 때는 고정 수직간격(예: 10~20 m 낙차)이나 1 km 이상 구간 회귀로 기울기를 구합니다. ④ A가 10^5~10^6 m² 미만인 colluvial 구간과 호수, pit 셀은 제외합니다. ⑤ 같은 절차로 SRTM, FABDEM, 융합 DTM 세 가지의 θ를 비교해 'DEM 종류에 따른 θ 민감도'를 정량화합니다.",
+     "evidence": "memory",
+     "sources": [
+      "https://doi.org/10.5194/esurf-6-505-2018",
+      "https://mapcarta.com/N4866650406",
+      "file: comp/lope_forest.kml (swath 꼭짓점)"
+     ]
+    },
+    {
+     "topic": "(a) 두 사이트 보정과 (b) 3장 전지구 θ, k_s, S_crit 적합에 무엇이 최선인가",
+     "detail": "(a) 사이트 보정의 우선순위입니다. 1위는 LVIS 25 m 지면고 격자(1775)로 valid_data_mask 구역에 씁니다. 지면 오차는 ALS 대비 RMSE 1.75~4.2 m, bias +0.6~2.3 m입니다. 2위는 swath 안 LVIS 공백(특히 Lopé 북단 Ogooué 주변)에 1577 Capon HH 지면을 LVIS와 GEDI로 tie한 값입니다. 기대 정확도는 Shiroma & Lavalle 2020의 L-band 지형 약 5 m 수준이며, 위 진단을 통과해야 쓸 수 있습니다. 3위는 그 밖의 구역에 FathomDEM, FABDEM V1-2, GEDTM30을 쓰는 것으로, LVIS로 현장 검증한 뒤 가장 나은 것을 고릅니다. SRTM, NASADEM, GLO-30 원본은 보정 자료가 아닙니다(가봉 평균오차 +17~24 m). (b) 전지구 적합: 가봉 두 사이트는 안정 강괴이자 저기복 열대림이라는 하나의 표본일 뿐이므로 θ 대표값으로 쓰면 안 됩니다. 식생이 적은 지역(건조와 반건조, 수목한계선 위)은 GLO-30 DSM(무료, 로그인 없음, 맨땅 RMSE 약 0.5 m)으로 충분합니다. 숲 지역은 FathomDEM이나 FABDEM(비상업 SA)을 쓰고, 재배포 라이선스가 걱정되면 GEDTM30(CC-BY)을 씁니다. S_crit은 30 m DEM에서 경사가 과소평가되므로 일부 사이트에서 OpenTopography나 USGS 3DEP 1~10 m 라이다로 보정하는 것이 바람직합니다(기억). k_sn 비교에는 θ_ref 고정(관행적으로 0.45, 기억)을 씁니다. 구조지질 환경 다양성은 Seybold et al. 2021(Nat. Geosci., 전지구 하천 종단 분석)을 참고해 사이트를 고릅니다(내용 세부는 기억). 유역평균 침식률(10Be) 자료가 있는 유역을 고르면 k_s와 침식률 관계로 K까지 묶을 수 있습니다(기억).",
+     "actionable_step": "3장 데이터 표를 '사이트 × DEM 종류(GLO-30, FABDEM, FathomDEM/GEDTM30, 라이다) × 방법(χ concavity, slope–area)'으로 설계합니다. 가봉은 'DSM 편향이 θ를 얼마나 왜곡하는가'를 보여 주는 검증 사례로 배치합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://daac.ornl.gov/AFRISAR/guides/Afrisar_LVIS_Biomass_VProfiles.html",
+      "https://doi.org/10.1109/tgrs.2019.2956989",
+      "https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2023JG007672",
+      "https://www.tandfonline.com/doi/full/10.1080/10095020.2023.2296010",
+      "https://doi.org/10.1038/s41561-021-00720-5",
+      "https://doi.org/10.5194/esurf-6-505-2018"
+     ]
+    },
+    {
+     "topic": "확장 옵션: ESA AfriSAR P-band TomoSAR와 라이다",
+     "detail": "ESA AfriSAR 2015/2016 캠페인은 Gabon 4개 사이트의 P/L-band PolInSAR와 TomoSAR(ONERA SETHI, DLR F-SAR)를 포함하고, 'LIDAR data: Available'로 표시되어 있습니다. 총 약 1.5 TB입니다. 접근하려면 EO Sign In 계정을 만들고 data access request를 제출한 뒤 FTPS(Implicit FTP over TLS)로 내려받아야 합니다. P-band는 지면 추출에 L-band보다 유리합니다(d'Alessandro & Tebaldini 2019: 라이다와 비슷한 수준의 DTM). 다만 P-band 위상중심도 경사와 입사각에 따라 지면 위로 올라올 수 있습니다. DTM 완제품이 포함되어 있는지는 확인하지 못했습니다.",
+     "actionable_step": "시간이 남으면 https://earth.esa.int/eogateway/campaigns/afrisar-2016 에서 접근을 신청합니다(계정 생성과 신청서 제출은 사용자가 직접). 이 자료는 Lopé와 Rabi 지면 검증용 2차 기준(ALS나 P-band)으로만 고려합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://earth.esa.int/eogateway/campaigns/afrisar-2016",
+      "https://doi.org/10.1109/tgrs.2019.2908517",
+      "https://doi.org/10.1109/igarss.2018.8518092"
+     ]
+    }
+   ],
+   "recommended_use": "1577 데이터는 θ 원천이 아니라 'LVIS로 검증된 열대 강괴 DSM→DTM 보정 실험장'으로 쓰는 것이 가장 좋습니다. 3장에서는 DEM 종류가 θ, k_s, S_crit을 얼마나 왜곡하는지 보여 주는 검증 장으로 씁니다. 단계는 다음과 같습니다. 1) 받을 자료(Earthdata 로그인은 사용자가 직접): ORNL 1775의 lope/rabi l3c1_ground_elev(9.2/6.7 MB), l3d1_valid_data_mask, l3a1_RH50/RH98. AFLVIS2의 2016-03-02(Lopé, 21개 파일, 약 2.6 GB)와 03-07(Rabi, 17개, 약 2.1 GB). 로그인 없는 Copernicus GLO-30 6개 타일. FABDEM V1-2 zip 3개(48 MB + 2.10 GB + 2.38 GB). GEDTM30은 /vsicurl/로 해당 창만 읽습니다. 2) 모든 자료를 WGS84 타원체(또는 EGM2008)로 통일하고, 사바나 픽셀에서 TerrainHeight의 datum을 확인합니다. 3) 편향 모델: TerrainHeight − LVIS 지면을 LVIS RH50에 대해 회귀해 Simard 2024의 0.87·RH50+1.52 m를 현장에서 재현합니다. 4) 토모 지면: Capon HH의 '가장 낮은 강한 피크'(최대 대비 −6~−10 dB 이내, 서브빈 보간, 5×5 median과 MAD 이상치 제거)로 h_g를 구하고 Fourier HH/VV/HHVV 이중반사로 교차 확인합니다. DTM_tomo = TerrainHeight + h_g에 평면 보정 h_g/tanθ를 더합니다. TerrainHeight−LVIS 대 −h_g 진단에서 기울기가 1에 가까울 때만 채택하고, LVIS에 1~2차 다항식으로 tie한 뒤 holdout RMSE를 보고합니다. 5) 융합 DTM: LVIS 격자(유효 구역) > tie한 토모 지면(swath 안 공백) > LVIS로 검증한 최선의 전지구 bare-earth DEM(FathomDEM/FABDEM/GEDTM30) 순으로 쓰고, 경계는 feathering으로 잇습니다. 6) 수문 재실행: fill 대신 breach를 쓰고, 흐름누적은 swath보다 넓은 지역 DEM에서 계산합니다. Ogooué처럼 유역이 잘린 하천과 충적 범람원을 마스킹하고, θ는 χ 기반(LSDTopoTools)으로 구합니다. pit 비율과 θ를 SRTM, FABDEM, 융합 DTM 세 경우로 비교합니다. 7) 3장 본 적합은 여러 구조지질 환경의 사이트 세트로 합니다. 식생이 적은 곳은 GLO-30, 숲은 FABDEM/FathomDEM/GEDTM30, S_crit은 일부 라이다 사이트를 씁니다. 가봉 결과는 '열대 강괴 표본이자 DSM 편향 경고 사례'로만 인용합니다.",
+   "caveats": "- **전문을 읽지 못한 논문:** El Moussawi 2019 논문은 MDPI 페이지 본문까지 읽었습니다. 반면 El Moussawi 박사논문, Pardini 등(JSTARS), d'Alessandro & Tebaldini 2019, Urbazaev 2022, FathomDEM 논문은 접근이 막혀 초록이나 요약만 확인했습니다. 그래서 L-band UAVSAR 토모그램으로 만든 지면 DTM을 LVIS와 정량 비교한 RMSE는 1차 출처에서 찾지 못했습니다. 근접한 값은 InSAR 히스토그램 방식의 약 5 m(Shiroma & Lavalle 2020)뿐이고, Fatoyinbo 2021은 정성적으로 'UAVSAR 지면이 대체로 LVIS보다 높다'고만 씁니다.\n- **요약본으로만 확인한 수치:** FABDEM 표 2의 수관피복 50% 초과 중앙오차(검색 결과에 12.09와 12.95가 함께 나옴), FABDEM 학습 국가 목록, GEDTM30의 수관 RMSE(6.72/6.82/4.95 m), FathomDEM의 저장 단위와 용량은 WebFetch 요약본에서 나온 값이라 1차 대조가 필요합니다.\n- **기억에 의존한 부분(검증 안 됨):** NASADEM의 EGM96 기준, GEDI sensitivity ≥ 0.98과 power beam 관행, θ_ref 0.45, S_crit 관련 서술, MERIT Hydro, 10Be 침식률 DB 언급.\n- **추정·추론:** Lopé swath를 Ogooué가 지나간다는 판단은 KML 꼭짓점과 Lopé 역 좌표만으로 한 추정입니다. 기울기 잡음 하한식 적용과 Pauli 이중반사로 지면을 판별하는 방법은 제 추론입니다.\n- **datum 문제:** TerrainHeight를 타원체고로 본 근거는 가이드 Figure 3 캡션 하나뿐이고, 1775 지면 격자의 '해발' 기준 지오이드 모델도 명시되지 않았습니다. 둘 다 실측으로 확인해야 합니다.\n- **AFLVIS2 범위:** 공식 남한계가 2°S로 적혀 있지만 1775 격자 Rabi 범위는 −2.295까지입니다. 실제 범위는 파일로 확인해야 합니다.\n- **이번에 내려받은 것:** 문서를 읽으려고 공개 PDF(ORNL 1577/1775/1601/1589 가이드, AFLVIS2 가이드, NTRS의 Fatoyinbo 2021)를 scratchpad에 받았고, 텍스트 추출용으로 pypdf를 scratchpad/pylib에 설치했습니다. 데이터 파일은 받지 않았습니다(Copernicus와 FABDEM은 HEAD 요청으로 크기만 확인). 계정 생성과 로그인, 대용량 다운로드는 사용자가 직접 하거나 승인해야 합니다.\n- **라이선스:** FABDEM과 FathomDEM은 비상업·동일조건(NC-SA)이므로, 게임이나 생성기와 함께 DEM 파생 지도를 배포할 계획이면 GEDTM30(CC-BY)이나 GLO-30을 우선 고려해야 합니다."
+  }
+ },
+ {
+  "key": "robust-concavity-and-region",
+  "result": {
+   "summary": "결론부터 말하면, 지금 나온 θ≈0.07–0.13은 지형 신호로 보기 어렵고 DEM 오차가 만든 값일 가능성이 높습니다. 두 가지 원인이 겹친 것으로 봅니다. (a) 하도 경사 중앙값이 큰 A에서 ~0.04로 평탄해지는 현상은 경사의 '노이즈 바닥'입니다. 정상상태 기대치는 θ=0.45, ksn 10–20일 때 A=10^7 m²에서 0.007–0.014 정도라서 측정값이 3–15배 큽니다. (b) SRTM C-band의 캐노피 편향 때문입니다. 레이더 DEM은 지면이 아니라 수관 중간(LiDAR RH50 근처)을 따라갑니다.\n\n해결 경로는 세 가지입니다.\n1. 같은 AfriSAR 캠페인의 LVIS LiDAR bare-earth DTM(ORNL DAAC 1775)을 씁니다. 25 m, 사이트당 6–9 MB이고, bbox 기준으로 Lopé 스와스의 89%, Rabi의 98%를 덮습니다.\n2. 미분 기반 slope-area 대신 적분 기반 χ 분석을 씁니다. disorder 또는 공선성 지표를 쓰고, 잘린 유역을 마스킹하고, A0=1 m²으로 둡니다.\n3. 경사가 꼭 필요하면 Wobus식 수직구간(elev_step) 또는 CRS/quantile carving으로 평활합니다.\n\nPython 3.14 환경:\n- 그대로 설치 가능(PyPI에서 확인): landlab 2.11.0(ChiFinder, SteepnessFinder), pysheds 0.5, whitebox, whitebox-workflows\n- 3.14용 wheel 없음: pytopotoolbox 0.0.12(wheel은 cp311–313뿐)\n- 사실상 쓸 수 없음: richdem(PyPI판), lsdtopytools\n\n지역 맥락:\n- Lopé: 콩고 크라톤 북서연의 시생대 화강-편마암 위에 있는 사바나–숲 모자이크입니다. Ogooué 유역 전체의 10Be 침식률은 15 m/Ma(Regard et al. 2025)로 매우 낮습니다.\n- Rabi: 백악기–제4기 해안 퇴적분지이고 기저면에 가깝습니다.\n\nGabon(Lopé)은 B-PCG k_s 범위에서 저융기·크라톤 쪽 끝점(k_lo)으로 쓸 만합니다. 단 bare-earth DEM을 써야 하고, 사프롤라이트/충적 하천 때문에 detachment-limited 가정이 약하다는 점을 명시해야 합니다. Rabi는 θ 적합에서 빼고 호소·습지 모듈의 검증용으로 쓰는 것이 맞습니다. θ와 n, k_hi, S_crit는 활동 지역에서 정해야 합니다(San Gabriel·Himalaya, 건조 Atacama, 빙하 지역은 제외 마스크용). OCTOPUS 10Be 침식률과 묶어 E–ksn 관계로 적합하는 것을 권합니다.",
+   "findings": [
+    {
+     "topic": "진단: θ≈0.1과 경사 0.04 평탄부는 DEM 노이즈 바닥",
+     "detail": "정상상태 하천이면 S = ksn·A^-θ입니다. θ=0.45, ksn=10–20 m^0.9이라면 A=10^7 m²에서 S≈0.007–0.014, A=10^8 m²에서 0.0025–0.005가 나와야 합니다. 그런데 측정된 중앙값 0.04는 이보다 3–15배 큽니다. D8 한 스텝(30–42 m)에서 경사 0.04는 고도차 1.2–1.7 m에 해당하고, 이는 SRTM의 픽셀 단위 상대오차나 캐노피 텍스처 수준입니다. 큰 A 구간에서 S가 이 바닥값에 붙으면 log S–log A 회귀 기울기가 0으로 끌려가 θ→0이 됩니다. priority-flood+eps로 채운 웅덩이(전체 셀의 14–23%)도 S≈eps 구간을 대량으로 만들어 분포를 더 왜곡합니다. Rabi(기복 7–180 m)는 실제 하도 경사가 10^-3 이하일 가능성이 높아 거의 전부 노이즈 영역입니다.",
+     "actionable_step": "(1) 합성 검증을 한 번 돌립니다. 실제 swath 하천망의 A에 θ=0.45, ksn=15를 넣어 해석적 프로파일 z(χ)=ksn·χ를 만들고, σ=2–5 m의 공간상관 노이즈를 더한 뒤, 현재 slope-area 파이프라인으로 θ가 ~0.1로 붕괴하는지 확인합니다. 이 결과를 챕터 3의 '방법 실패 사례' 그림으로 씁니다. (2) 경사 계산 방식(픽셀, 300 m reach, Δz 구간)별로 S_floor≈σ_z/L을 계산하고, 회귀에서는 S > 3·S_floor인 bin만 씁니다. (3) 같은 검증을 χ-disorder 방법에도 돌려 노이즈 내성을 정량 비교합니다.",
+     "evidence": "memory",
+     "sources": []
+    },
+    {
+     "topic": "캐노피 편향의 크기: 레이더 DEM은 지면이 아니라 수관 중간을 본다",
+     "detail": "Simard et al. 2024(JGR Biogeosciences 129(11))에 따르면 SRTM·NASADEM·GLO-30의 숲 편향은 수관고에 선형으로 비례하고 LiDAR RH50을 가장 잘 따릅니다. 나지에서의 오차는 GLO-30이 bias<0.05 m, RMSE 0.55 m, NASADEM이 ~1.5 m입니다. Hofton et al. 2006(PE&RS)은 LVIS와 비교해 SRTM이 수관 상단보다 평균 ~14 m 아래(Costa Rica 열대림은 ~8 m)에 있고, SRTM–지면 차이가 수관 연직범위에 선형 비례한다고 보고했습니다. Gabon에서는 AfriSAR LVIS L2를 기준으로 한 평가(Geo-spatial Information Science, doi 10.1080/10095020.2023.2296010)가 있습니다. 여기서 수목피복 >70%의 밀림에서는 ASTER GDEM·NASADEM이 Copernicus보다 나았고, <40%에서는 Copernicus가 나았습니다. 즉 X-band인 Copernicus가 밀림에서는 더 '수관 위'를 봅니다. Lopé에서 수관고가 60 m를 넘는다는 점을 감안하면 RH50만큼, 즉 10–25 m 수준의 양(+) 편향을 예상할 수 있습니다. 세션에서 관측한 'Capon-HV 프로파일 반사가 SRTM 기준 −20 m까지 내려감'과도 맞습니다. 사바나와 숲, 하천변 갤러리 숲의 경계에서는 이 편향이 계단처럼 바뀌므로 하도를 따라 가짜 knickpoint와 가짜 댐이 생깁니다(추론).",
+     "actionable_step": "LVIS 그리드(아래 항목)로 ΔZ = SRTM_TerrainHeight − LVIS_ground를 계산하고, 같은 데이터셋의 RH50·RH98 래스터에 대해 회귀합니다(기대: ΔZ≈α·RH50, α≈1). 사바나 픽셀의 ΔZ 중앙값으로 수직 datum 오프셋(MSL·EGM96 차이)을 먼저 제거합니다. 이 회귀식은 LVIS가 없는 구역에서 SRTM을 경험적으로 보정하는 모델(z_ground ≈ z_SRTM − α·H_canopy)로도 쓸 수 있습니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2023JG007672",
+      "https://www.ingentaconnect.com/content/asprs/pers/2006/00000072/00000003/art00005",
+      "https://www.tandfonline.com/doi/full/10.1080/10095020.2023.2296010",
+      "https://www.researchgate.net/publication/377874550_Assessment_of_the_global_Copernicus_NASADEM_ASTER_and_AW3D_digital_elevation_models_in_Central_and_Southern_Africa"
+     ]
+    },
+    {
+     "topic": "핵심 데이터: 같은 캠페인의 LVIS LiDAR bare-earth DTM(ORNL DAAC 1775)",
+     "detail": "데이터셋은 'AfriSAR: Gridded Forest Biomass and Canopy Metrics Derived from LVIS, Gabon, 2016'(Armston et al. 2020, doi:10.3334/ORNLDAAC/1775)입니다. GeoTIFF 176개, 총 1.519 GB, 25 m 해상도, EPSG:32732(WGS84/UTM 32S), nodata −9999입니다. ground_elev 레이어는 '평균해수면 기준 m'이고, 지면 shot을 natural-neighbour(Sibson)로 보간해 만들었습니다. 필요한 파일은 lvis2_lope_2016022020160308_l3c1_ground_elev_e32732_v0301_r025m.tif(9.2 MB, 2016-03-02 비행)와 lvis2_rabi_..._l3c1_ground_elev_...tif(6.7 MB, 2016-03-07)입니다. 같은 패턴의 l3d1_valid_data_mask(0.6 MB), l3d1_shots, l3a1/l3a2_RH50·RH98(사이트별 ~10–19 MB)도 함께 받습니다. bbox는 Lopé 11.397–12.024E, 0.642S–0.016S이고 Rabi 9.595–10.277E, 2.295S–1.685S입니다. 이번 세션에서 1577 Latitude/Longitude로 계산해 보니 TomoSAR swath의 89%(Lopé), 98%(Rabi)가 이 bbox 안에 들어갑니다. 다만 구름 때문에 생긴 공백과 비행선 사이 공백은 보간된 값입니다. 원시 footprint가 필요하면 NSIDC의 'AfriSAR LVIS L2 Geolocated Surface Elevation Product V001'(AFLVIS2, doi:10.5067/A0PMUXXVUYNH)을 씁니다. ASCII 119 granule, 각 ~130 MB이고, ZG(최저 모드 고도)는 WGS84 타원체(ITRF08) 기준입니다.",
+     "actionable_step": "NASA Earthdata Login(무료)으로 로그인한 뒤 https://data.ornldaac.earthdata.nasa.gov/protected/afrisar/Afrisar_LVIS_Biomass_VProfiles/data/<파일명> 에서 ground_elev, valid_data_mask, shots, RH50, RH98을 사이트별로 받습니다(합계 <100 MB). 받은 뒤 할 일: (1) l3d1_shots==0인 셀은 '보간 셀'로 표시하고 하도 경사 계산에서 뺍니다. (2) 기존 30 m 지오코딩 격자에 bilinear로 재표본합니다. (3) SRTM, LVIS, (있으면) TomoDTM 세 DEM으로 똑같이 χ-θ 분석을 돌려 비교표를 만듭니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.3334/ORNLDAAC/1775",
+      "https://cmr.earthdata.nasa.gov/search/concepts/C2734261748-ORNL_CLOUD.umm_json",
+      "https://doi.org/10.5067/A0PMUXXVUYNH",
+      "https://www.earthdata.nasa.gov/data/projects/afrisar/data-access-tools"
+     ]
+    },
+    {
+     "topic": "LVIS 밖이나 다른 지역용 전지구 bare-earth DEM",
+     "detail": "후보는 네 가지입니다. (1) GEDTM30 v1.2(Ho et al. 2025, PeerJ doi:10.7717/peerj.19673): GEDI·ICESat-2 약 300억 점으로 학습한 앙상블 DTM입니다. CC-BY 4.0, EGM2008, Float32(m)이고, 수목피복 >50%에서 Copernicus 대비 오차가 ~27% 줄었습니다. 전지구 단일 COG(432 GB)가 HTTP range를 지원하므로 필요한 창만 읽을 수 있습니다. URL: https://s3.opengeohub.org/global/dtm/v1.2/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif (HEAD 확인: 200, Accept-Ranges). (2) FABDEM V1-2(Hawker et al. 2022): 숲 MAE를 5.15 m에서 2.88 m로 줄였습니다. CC BY-NC-SA 4.0이라 비상업 캡스톤에서는 쓸 수 있고, data.bris에서 받습니다. (3) FathomDEM v1-0(Uhe et al. 2025, ERL): Zenodo 14511570(Eurasia & Africa)에 있고, 학교 이메일로 접근 요청을 해야 합니다. CC BY-NC-SA 4.0, EGM08, 단위가 cm, 1°×1° 타일입니다. (4) 원본 레이더 DSM(COP30, NASADEM, SRTMGL1)은 OpenTopography globaldem API로 받을 수 있고 무료 API key가 필요합니다. 단, 전지구 보정 모델은 지역 편향이 남을 수 있습니다.",
+     "actionable_step": "Python 3.14 venv에서 rasterio(cp314 wheel 있음)로 rasterio.open('/vsicurl/<GEDTM30 URL>')을 열고 각 사이트 bbox에 0.3° 버퍼를 둔 window만 읽습니다(다운로드량 수십 MB). 그다음 LVIS로 GEDTM30·FABDEM 편향을 검증합니다(RMSE, bias를 수목피복 bin별로). 검증을 통과한 DEM을 '타 지역 적합'의 표준 입력으로 정합니다. 모든 DEM의 datum은 EGM2008로 통일합니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC12296579/",
+      "https://codeberg.org/openlandmap/GEDTM30",
+      "https://zenodo.org/records/14511570",
+      "https://data.bris.ac.uk/data/dataset/s5hqmjcdj8yo2ibzi9b4ew3sn",
+      "https://opentopography.org/blog/introducing-api-keys-access-opentopography-global-datasets"
+     ]
+    },
+    {
+     "topic": "χ(적분) 방법이 slope-area보다 노이즈와 비정상상태에 강하다",
+     "detail": "Perron & Royden 2013(ESPL 38:570–576, doi:10.1002/esp.3302)은 χ=∫(A0/A(x))^θ dx 변환을 제안했습니다. 이 변환을 하면 정상상태 프로파일이 z–χ 직선이 되고 지류와 본류가 같은 선 위에 놓입니다. 경사를 미분하지 않고 고도를 그대로 쓰기 때문에 DEM 노이즈가 증폭되지 않습니다. Mudd et al. 2018(ESurf 6:505–523, 'How concave are river channels?')은 slope-area, 분할 slope-area, χ 공선성(전체·bootstrap), disorder를 비교했고, 과도 융기나 공간적으로 변하는 융기·침식도 조건에서 χ 기반 방법이 부과된 m/n을 더 잘 복원한다는 결론을 냈습니다. 분할 slope-area는 불확실성이 크고 비정상적으로 큰 값을 내는 경향이 있었습니다. 사용 설정은 하천 추출 임계 9×10^5 m², 합성 실험의 유역 면적 9×10^6–4.5×10^7 m², 중첩 유역과 DEM 가장자리 유역 제외, A0=1 m²입니다. Purinton & Bookhagen 2017(ESurf 5:211)은 남부 Central Andean Plateau에서 SRTM-C, ASTER, ALOS, TanDEM-X 등 30 m DEM 종류와 해상도에 관계없이 χ 기반 m/n이 일관되게 나왔다고 보고했습니다.",
+     "actionable_step": "chi.py의 R² 최대화 방식은 그대로 두고, 아래 항목의 disorder 지표와 유역 bootstrap(1000회 재표본, θ 95% CI)을 추가합니다. θ 격자는 0.05–1.0, 간격 0.025입니다. 세 DEM(SRTM, LVIS, GEDTM30)에서 θ 분포를 상자그림으로 비교합니다. LVIS에서 θ가 0.35–0.6으로 돌아오면 '캐노피 편향 가설'이 정량적으로 입증됩니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://onlinelibrary.wiley.com/doi/abs/10.1002/esp.3302",
+      "https://esurf.copernicus.org/articles/6/505/2018/",
+      "https://esurf.copernicus.org/articles/5/211/2017/"
+     ]
+    },
+    {
+     "topic": "disorder 지표 구현(Hergarten et al. 2016; Mudd et al. 2018)",
+     "detail": "Hergarten, Robl & Stüwe 2016(ESurf 4:1–9)은 본류와 지류의 z–χ 패턴 차이를 정량화하는 disorder 통계를 도입했습니다. Mudd et al. 2018은 이를 θ 선택에 썼습니다(disorder가 최소인 θ). 구현은 다음과 같습니다(공식 세부는 기억 기반이라 원문 확인 필요). 한 유역 안의 하천 노드를 χ 오름차순으로 정렬해 고도 수열 z_s를 만들고, D(θ) = Σ|z_s(i+1) − z_s(i)| − (z_max − z_min)을 계산합니다. 정상상태에서 올바른 θ라면 χ 순서와 z 순서가 일치하므로 D→0이 됩니다. 이 지표는 회귀 잔차가 아니라 순서 기반이라서, 이상치(캐노피 댐이나 가짜 계단)에 R²보다 덜 민감합니다.",
+     "actionable_step": "numba 함수로 구현합니다. 유역마다 θ별로 χ를 계산하고, argsort(χ)로 z를 정렬한 뒤 D/(z_max−z_min)으로 정규화합니다. 유역별 최적 θ의 중앙값과 IQR을 보고합니다. 유역 수가 30개 미만이면 유역 bootstrap으로 CI를 냅니다. 같은 루프에서 R²도 함께 저장해 두 지표의 일치 여부를 표로 만듭니다.",
+     "evidence": "memory",
+     "sources": [
+      "https://esurf.copernicus.org/articles/4/1/2016/",
+      "https://esurf.copernicus.org/articles/6/505/2018/"
+     ]
+    },
+    {
+     "topic": "경사가 꼭 필요할 때: 수직구간 평활, CRS·quantile carving, sink breaching",
+     "detail": "(1) Wobus et al. 2006(GSA Special Paper 398:55–74, doi:10.1130/2006.2398(04))은 ksn 추출의 표준 절차로, 고정 수직구간(등고선 간격)마다 경사를 계산하고 이동창으로 평활하는 방식을 씁니다(구체 파라미터는 기억 기반). landlab SteepnessFinder가 이를 elev_step(>0이면 Wobus식 수직 이산화)과 discretization_length 파라미터로 구현합니다. 기본값은 reference_concavity=0.5, min_drainage_area=1e6 m²입니다. (2) Schwanghart & Scherler 2017(ESurf 5:821–839)은 quantile carving과 CRS(constrained regularized smoothing)를 제안했습니다. 하류로 단조 감소하는 제약 아래 τ-분위 회귀를 써서 수문 보정과 평활을 동시에 합니다. 이 논문은 전지구 DEM이 가파른 계곡에서 하천 고도를 과대평가하고 오차가 오른쪽으로 치우친다고 보고했습니다. pytopotoolbox의 StreamObject.crs와 StreamObject.quantcarve로 쓸 수 있습니다. (3) 웅덩이는 채우기보다 깎기(breaching)가 하도 프로파일을 덜 왜곡합니다. 캐노피나 도로가 만든 가짜 댐을 채우면 긴 평탄부(S≈eps)가 생기기 때문입니다. Lindsay 2016의 하이브리드 breach-fill(기억)은 WhiteboxTools BreachDepressionsLeastCost로 쓸 수 있습니다.",
+     "actionable_step": "Lopé는 Δz=10 m(SRTM 상대오차의 약 2배) 구간 경사와 CRS(τ=0.5) 경사를 모두 계산하고, slope-area를 다시 그린 뒤 χ 결과와 대조합니다. Rabi는 Δz=10 m를 채우는 reach가 수 km 이상이어서 점이 거의 남지 않을 것입니다. 이 사실 자체를 'Rabi는 θ 적합 불가'의 근거로 씁니다. 웅덩이 처리는 fill과 breach 두 버전을 만들어 θ 민감도를 보고합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://asu.elsevierpure.com/en/publications/tectonics-from-topography-procedures-promise-and-pitfalls/",
+      "https://landlab.csdms.io/generated/api/landlab.components.steepness_index.channel_steepness.html",
+      "https://esurf.copernicus.org/articles/5/821/2017/",
+      "https://topotoolbox.github.io/pytopotoolbox/_autosummary/topotoolbox.StreamObject.html"
+     ]
+    },
+    {
+     "topic": "swath 가장자리에서 잘린 유역 처리와 진짜 배수면적 A 복원",
+     "detail": "χ는 유역 출구를 국지 기저면으로 삼기 때문에, 출구가 swath 가장자리에 있어도 됩니다. 결정적인 조건은 상류 배수면적이 모두 swath 안에 있는 것입니다. 상류 일부가 swath 밖에 있으면 A가 과소평가되고, 그러면 χ와 ksn이 체계적으로 틀어집니다. 현재 chi.py는 출구 반경 10셀 밖의 셀이 가장자리에 닿으면 그 유역(root) 전체를 버립니다. 안전한 방식이지만 Ogooué·Offoué 같은 큰 하천과 그 하류 구간은 모두 빠집니다(Lopé 최대 A가 655 km²에 그치는 이유).",
+     "actionable_step": "(1) 오염 판정: 가장자리 셀(무효 셀과 8-이웃)에 가중치 1을 주는 weighted flow accumulation E_acc를 계산합니다. 노드 c에 대해 'E_acc(c) − edge(c) == 0'이면 c의 상류는 완전합니다. 이렇게 하면 유역 단위가 아니라 노드 단위로 쓸 수 있는 하도 구간을 남길 수 있습니다. (2) 큰 하천의 진짜 A는 사이트 bbox에 0.5–1° 버퍼를 둔 GEDTM30(또는 FABDEM) 창에서 흐름누적을 다시 계산해 swath 격자로 샘플링합니다. 대안은 MERIT Hydro 'upa' 레이어(3″, Yamazaki et al. 2019, 등록 필요, 라이선스는 기억상 CC BY-NC 4.0/ODbL 이중)입니다. (3) 출구 A 범위는 10–500 km²로 잡고 중첩 유역은 제외합니다(Mudd et al. 2018 방식).",
+     "evidence": "memory",
+     "sources": [
+      "https://esurf.copernicus.org/articles/6/505/2018/"
+     ]
+    },
+    {
+     "topic": "최소 배수면적(하천 시작 임계)의 선택",
+     "detail": "Mudd et al. 2018은 하천 추출 임계를 9×10^5 m²로 썼고, 이 값에 대해 결과가 둔감함을 확인했습니다. landlab SteepnessFinder의 기본값 1e6 m²는 Wobus et al. 2006의 권고를 따른 것입니다. 원칙적으로 임계는 slope-area 그래프에서 언덕사면·콜루비움 영역이 하천 영역으로 바뀌는 굴곡점(A_cr)에서 정합니다. 그런데 SRTM 숲 지역에서는 노이즈 때문에 이 굴곡점이 보이지 않으므로, bare-earth DEM에서 정해야 합니다.",
+     "actionable_step": "LVIS DTM의 slope-area(픽셀 단위, 10^3–10^6 m²)에서 A_cr을 찾습니다. 굴곡점이 불분명하면 0.1, 0.3, 1, 3 km² 네 값으로 χ-θ를 반복해 민감도 표를 만듭니다. 30 m 격자 기준 1 km²는 약 1100셀입니다. 기본값은 1 km²로 두기를 권합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://esurf.copernicus.org/articles/6/505/2018/",
+      "https://landlab.csdms.io/generated/api/landlab.components.steepness_index.channel_steepness.html"
+     ]
+    },
+    {
+     "topic": "Python 3.14(macOS arm64)에서 쓸 수 있는 도구(PyPI·conda API로 2026-10-01 확인)",
+     "detail": "로컬 환경은 venv Python 3.14.7 arm64에 numba 0.68, h5py 3.16, scipy 1.18이 깔려 있고, uv는 ~/.local/bin/uv에 있습니다.\n바로 설치되는 것:\n- landlab 2.11.0(MIT): cp314 wheel(macOS arm64 포함)이 있습니다. 의존성 py-richdem은 2.2.0rc3(pre-release뿐)인데 cp314 wheel이 있습니다. ChiFinder와 SteepnessFinder를 제공합니다.\n- pysheds 0.5: py3-none-any이고 numba·rasterio·pyproj·scikit-image 모두 cp314 wheel이 있어 설치됩니다. 흐름방향·누적·유역까지만 되고 χ는 없습니다.\n- whitebox 2.3.6: 순수 Python wrapper입니다. 첫 실행 때 WhiteboxTools 바이너리를 내려받으므로 네트워크가 필요합니다.\n- whitebox-workflows 2.0.6: cp39-abi3 wheel이라 3.14에서도 동작합니다. 라이선스는 MIT OR Apache-2.0이고 Pro 워크플로는 별도입니다.\n3.14 wheel이 없는 것:\n- topotoolbox 0.0.12(2026-06-01): wheel이 cp311–313뿐입니다. sdist는 scikit-build-core+pybind11 C++ 빌드라서 3.14에서는 로컬 컴파일이 필요합니다. Xcode clang은 있고 cmake는 없습니다(빌드 성공 여부는 미검증). 기능은 StreamObject.chitransform(a0 기본 1e6, mn 0.45), ksn, crs, quantcarve, knickpointfinder, klargestconncomps, trunk와 load_opentopography(api_key)입니다.\n쓰지 말 것:\n- richdem(PyPI): 최신이 0.3.4(2018, cp27–cp37)라 3.14에 설치되지 않습니다. conda-forge richdem 2.4.3에는 py314 빌드가 있습니다.\n- lsdtopytools: PyPI 0.0.4.6은 sdist뿐(2021)이고 conda는 noarch 0.0.4.5(2020)라 사실상 방치 상태입니다. C++ CLI인 conda-forge lsdtopotools 0.8(2023)은 linux-64/osx-64뿐이라 Apple Silicon에서는 Rosetta나 Docker가 필요합니다.",
+     "actionable_step": "게임·SDF 파이프라인은 3.14 venv를 그대로 씁니다. 지형 분석은 별도 환경으로 분리합니다: `uv venv -p 3.13 ~/.venvs/geo && uv pip install --python ~/.venvs/geo topotoolbox landlab pysheds rasterio`. 이 환경에서 topotoolbox의 crs, ksn, chitransform 결과로 자체 numba χ 코드를 교차검증합니다. 3.14만 써야 한다면 landlab(ChiFinder, SteepnessFinder)과 자체 numba 코드로 충분합니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://pypi.org/project/topotoolbox/",
+      "https://pypi.org/project/landlab/",
+      "https://pypi.org/project/py-richdem/",
+      "https://pypi.org/project/pysheds/",
+      "https://pypi.org/project/whitebox-workflows/",
+      "https://pypi.org/project/richdem/",
+      "https://anaconda.org/conda-forge/lsdtopotools",
+      "https://topotoolbox.github.io/pytopotoolbox/_autosummary/topotoolbox.StreamObject.html"
+     ]
+    },
+    {
+     "topic": "Lopé의 지질·지형 맥락",
+     "detail": "Gabon은 콩고 크라톤 북서연에 있습니다. 기반암은 Chaillu 및 North Gabon 지괴의 시생대(2.8–2.6 Ga) 화강암질 암석, 원생대 Francevillian 및 Ogooué 조산대입니다. Lopé 일대는 시생대 화강-편마암 돔(Lopé·Chaillu·Booué 등)과 약하게 또는 강하게 변성된 원생대 Booué 분지 퇴적층으로 이루어지며, 해발 100–300 m의 완만한 준평원 성격을 띱니다(IRD 'Esquisse géologique de l'Afrique centrale occidentale' 요약 기반). Lopé 사바나는 Chaillu 산괴의 비그늘에 놓인 소우대(少雨帶)에서 숲과 모자이크를 이룹니다. 중부 Ogooué 계곡의 Elarmékora 충적 단구는 현 Ogooué보다 175 m 높고, 이곳의 10Be/26Al 결합 모델 지표 저하율은 0–0.25 m/Ma에 불과합니다(Braucher et al. 2022, Phil. Trans. R. Soc. B). 고위 평탄면은 거의 정지해 있는데 하천은 깊게 절개되어 있다는 뜻이며, 정상상태 가정에 의문을 던집니다.",
+     "actionable_step": "챕터 3의 지역 설명에 '크라톤 기반암 + 잔존 평탄면 + 절개 하곡' 구조를 명시합니다. χ 분석에서 knickpoint가 나오면 융기 신호가 아니라 암상 경계(편마암/Booué 변성퇴적암)나 고평탄면 가장자리일 가능성을 먼저 검토합니다. 가능하면 Gabon 지질도(BRGM/DGMG 1:1,000,000) 경계와 겹쳐 봅니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://en.wikipedia.org/wiki/Geology_of_Gabon",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC8899616/",
+      "https://en.wikipedia.org/wiki/Lop%C3%A9_National_Park",
+      "https://horizon.documentation.ird.fr/exl-doc/pleins_textes/divers11-10/34764.pdf"
+     ]
+    },
+    {
+     "topic": "Rabi의 지질·지형 맥락: 해안 퇴적분지, 기저면 근처",
+     "detail": "Rabi는 Gamba 보호구역 복합지역의 북중부, Rabi 강 상류의 성숙림 지역입니다. 지하에는 남 Gabon 해안분지(염 테크토닉스 수동형 대륙연변 분지)가 있습니다. 전기 백악기 열개분지의 Dentale·Gamba층 사암 위를 Aptian Ezanga 증발암이 덮고 있고, 여기에 Rabi-Kounga 거대 유전(1985년 발견)이 있습니다. 지표는 백악기–제4기 해성·대륙 퇴적물과 Mio-Pliocene 사층('Série des Cirques'), 사질 점토의 철알루미나질·수성 토양입니다. 기복은 7–180 m이고 웅덩이 비율은 23%로, 퇴적·습지 환경에서 기대되는 모습입니다.",
+     "actionable_step": "Rabi는 θ·k_s 적합에서 뺍니다. 대신 B-PCG의 호소·습지·지하수 모듈 검증에 씁니다. 구체적으로는 LVIS DTM 기준의 실제 웅덩이 비율과 깊이 분포를 SRTM 기준 값(23%, 평균 4 m)과 비교해 캐노피가 만든 가짜 웅덩이 비율을 추정하고, 저지대 습지 생성 규칙의 파라미터로 씁니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.osti.gov/biblio/6921225-rabi-kounga-field-southern-gabon",
+      "https://en.wikipedia.org/wiki/Rabi_Kounga_oil_field",
+      "https://www.researchgate.net/publication/237071459_The_Gamba_Complex_of_Protected_Areas_an_illustration_of_Gabon's_Biodiversity",
+      "https://earthwise.bgs.ac.uk/index.php/Hydrogeology_of_Gabon",
+      "https://www.researchgate.net/publication/271661771_Salt_tectonics_and_basin_evolution_in_the_Gabon_Coastal_Basin_West_Africa"
+     ]
+    },
+    {
+     "topic": "Gabon의 침식률·융기 자료와 '발표된 ksn/θ 없음'",
+     "detail": "Regard et al. 2025(Gondwana Research 138:192–209, 'Contrasting physical erosion rates in cratonic catchments: the Ogooué and Mbei rivers')는 Ogooué 유역의 10Be 기반 장기 물리적 삭박률을 38 t/km²/a(≈15 m/Ma)로 보고했습니다. 적도 서아프리카 평균(26 t/km²/a, 10 m/Ma)보다 약간 높습니다. 유역 내 범위는 10–60 t/km²/a이고, 남부가 북부의 약 2배인데 African Superswell 융기와의 관련 가능성이 제기됐습니다. 화학 풍화는 총 삭박의 30% 이상이고, 패턴은 ~100 ka 동안 안정적이었습니다. Guillocheau et al. 2015('Cenozoic Landscape Evolution in and Around the Congo Basin')는 평탄면과 퇴적물 기록에서 콩고분지 대서양 쪽의 신생대 융기를 보고했습니다(지난 11.5 Ma 동안의 고기복화라는 요약은 2차 자료). 이번 검색에서 Gabon·Ogooué에 대해 발표된 ksn이나 θ 값은 찾지 못했습니다.",
+     "actionable_step": "Regard et al. 2025의 보충자료에서 시료 좌표와 하위유역별 삭박률을 확보합니다. HAL 원문은 이번 세션에서 접근이 차단됐으므로 학교 도서관 경로를 이용합니다. 그 하위유역들에 대해 GEDTM30 기반 유역평균 ksn(θ_ref=0.45)을 계산해 Gabon 자체의 E–ksn 점을 몇 개라도 만듭니다. 이 점들이 B-PCG의 k_lo를 실측으로 고정하는 앵커가 됩니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://meetingorganizer.copernicus.org/EGU24/EGU24-8170.html",
+      "https://univ-reunion.hal.science/CNES/hal-04765180v2",
+      "https://insu.hal.science/insu-04647683v1",
+      "https://www.researchgate.net/publication/277713691_Cenozoic_Landscape_Evolution_in_and_Around_the_Congo_Basin_Constraints_from_Sediments_and_Planation_Surfaces"
+     ]
+    },
+    {
+     "topic": "Gabon을 k_s 범위의 저융기·크라톤 끝점(k_lo)으로 쓰는 근거와 한계",
+     "detail": "근거: (1) 삭박률 ~15 m/Ma(0.015 mm/yr)는 Hilley et al. 2019 전지구 자료 범위(4.7×10^-3–7.1 mm/yr)의 하단이고, San Gabriel의 최대 1100 m/Ma(DiBiase et al. 2010)보다 약 70배 낮습니다. (2) 크라톤 기반암이고 지진·단층 활동이 미미합니다. (3) 같은 swath에 LiDAR DTM, TomoSAR, 수관 구조 자료가 함께 있어 'DEM 편향 보정' 사례로서 방법론적 가치가 큽니다. 한계: (a) 두꺼운 사프롤라이트 위의 하천은 충적·운반제한형일 수 있어 detachment-limited stream-power 가정이 약합니다. (b) 고평탄면 잔존, 175 m 단구, 남북 침식률 차이를 보면 정상상태가 아닙니다. (c) swath 안의 A 범위가 약 2.5 decade(최대 655 km²)로 좁습니다. (d) 강수가 사이트별로 다릅니다(Lopé 비그늘). 정량적으로 보면 k 범위의 폭은 n에 달려 있습니다. ksn ∝ E^(1/n)이므로 n=1이면 Gabon과 San Gabriel의 ksn 비가 ~70배, DiBiase 2010처럼 ksn ∝ E^0.5(n≈2)이면 √73≈8.6배입니다.",
+     "actionable_step": "B-PCG 문서에 'k_lo = Lopé bare-earth 유역평균 ksn(θ_ref=0.45, m^0.9), E=15 m/Ma에 대응'으로 정의합니다. k_lo는 θ를 정하는 데 쓰지 말고 저융기 끝점 값으로만 씁니다. n과 θ는 다지역 적합에서 받아옵니다. WorldClim으로 유량 환산을 할 계획이면 ksn 대신 강수 가중 A(ksn-q)도 함께 계산해 Lopé와 Rabi의 강수 차이를 제거합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.nature.com/articles/s41561-019-0442-3",
+      "https://pure.psu.edu/en/publications/landscape-form-and-millennial-erosion-rates-in-the-san-gabriel-mo/",
+      "https://meetingorganizer.copernicus.org/EGU24/EGU24-8170.html",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC8899616/"
+     ]
+    },
+    {
+     "topic": "S_crit(임계 사면경사)는 Gabon에서 정할 수 없다",
+     "detail": "DiBiase et al. 2010(EPSL 289:134–144)에 따르면 유역평균 사면경사는 침식률 ~300 m/Ma까지는 증가하고, 그 이상에서는 침식률과 무관하게 일정해집니다. 이것이 임계 사면입니다. Gabon의 삭박률(~15 m/Ma)은 이 문턱보다 20배 낮으므로, Lopé 사면경사 p95 0.39(~21°)와 Rabi 0.26은 '임계 이하 토양피복 사면'의 값입니다. 게다가 SRTM은 캐노피 때문에 사면을 평활하거나 거칠게 만들 수 있습니다.",
+     "actionable_step": "S_crit는 빠르게 침식되는 지역(San Gabriel의 E>300 m/Ma 유역, 대만, 히말라야)의 사면경사 포화값으로 정합니다. Gabon의 p95는 B-PCG에서 '저융기 시 사면경사 상한'의 검증값으로만 씁니다. LVIS DTM에서 p95를 다시 계산해 SRTM과의 차이를 보고합니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://pure.psu.edu/en/publications/landscape-form-and-millennial-erosion-rates-in-the-san-gabriel-mo/"
+     ]
+    },
+    {
+     "topic": "보완 지역과 E–ksn 보정용 전지구 데이터",
+     "detail": "(1) 활동적·습윤 지역: San Gabriel Mtns(DiBiase 2010, E 35–1100 m/Ma, 10Be, ksn이 E에 대해 단조 증가하지만 비선형). OpenTopography에서 LiDAR도 받을 수 있습니다. Himalaya·Bhutan은 'Climate controls on erosion in tectonically active landscapes'(Science Advances 2020)가 강수와 ksn-E 관계를 다룹니다(저자는 기억상 Adams et al.). (2) 상한: Hilley et al. 2019(Nat. Geosci. 12:828–832)는 급속 침식 지형에서 ksn이 E에 더 이상 비례하지 않고 문턱값에 도달한다고 보고했고, 이것이 k_hi의 근거가 됩니다. (3) 건조 지역: Chen et al. 2019(Nature 573:573–577)는 건조할수록 하천 프로파일이 체계적으로 곧아진다(오목도 감소)고 보고했습니다. 후보는 Atacama와 남부 Central Andean Plateau입니다(Purinton & Bookhagen 2017의 DEM 검증 지역). (4) 반론: Seybold et al. 2021(Nat. Geosci. 14:503–507)은 전지구 오목도의 주 지배요인이 기후가 아니라 지구조이며, 판 경계 활동 지역에서 더 오목하다고 보고했습니다. Chen 측의 'Reply'(Nature 2022)가 있어 아직 논쟁 중입니다. (5) 빙하 지역(Alps, Southern Alps, Patagonia)은 stream-power가 성립하지 않으므로 θ 적합에서 빼고, B-PCG의 '빙하 마스크' 규칙을 정의하는 데만 씁니다. (6) 데이터: OCTOPUS v2(Codilean et al. 2022, ESSD 14:3695)는 10Be 4,425점과 26Al 403점의 유역평균 삭박률을 CAIRN으로 일관되게 재계산했습니다. CC-BY 4.0이고 https://octopusdata.org 웹 또는 WFS(http://geoserver.octopusdata.org/geoserver/wfs)로 Shapefile·JSON을 받을 수 있습니다. 저경사·수동형 지역과 아프리카는 공백이 큽니다. Harel et al. 2016(Geomorphology 268:184–196)은 59개 지역에서 χ 방법으로 m/n=0.5 정규화 K와 n을 산출했습니다.",
+     "actionable_step": "챕터 3의 적합은 다음과 같이 설계합니다. OCTOPUS에서 Gabon(저), Appalachians 또는 수동형 연변(중-저), San Gabriel(중-고), Himalaya·Taiwan(고), Atacama(건조) 유역 폴리곤을 내려받습니다. 각 유역에 대해 GEDTM30(또는 COP30)으로 유역평균 ksn(θ_ref=0.45)을 계산하고, log E = log K + n·log ksn으로 회귀해 K와 n을 구합니다. θ는 지역별 χ-disorder 분포로 정하고, 빙하 유역은 제외합니다. 결과로 B-PCG의 [k_lo, k_hi], n, θ±σ를 표로 고정합니다.",
+     "evidence": "verified",
+     "sources": [
+      "https://pure.psu.edu/en/publications/landscape-form-and-millennial-erosion-rates-in-the-san-gabriel-mo/",
+      "https://www.nature.com/articles/s41561-019-0442-3",
+      "https://www.science.org/doi/abs/10.1126/sciadv.aaz3166",
+      "https://www.nature.com/articles/s41586-019-1558-8",
+      "https://www.nature.com/articles/s41561-021-00720-5",
+      "https://www.nature.com/articles/s41586-022-05419-0",
+      "https://essd.copernicus.org/articles/14/3695/2022/",
+      "https://www.research.ed.ac.uk/en/publications/global-analysis-of-the-stream-power-law-parameters-based-on-world/"
+     ]
+    },
+    {
+     "topic": "TomoSAR(1577)로 지면 고도 추출하기: LVIS로 검증할 것",
+     "detail": "L-band UAVSAR TomoSAR를 Lopé에 적용한 연구('L-Band UAVSAR tomographic imaging in dense forests: Gabon forests', Remote Sensing 2019; 저자는 기억상 El Moussawi, Ho Tong Minh 외)는 수관층과 지면층을 모두 검출했다고 보고했습니다. P-band 토모그래피로는 열대림 지형을 LiDAR에 준하는 정확도로 복원한 사례가 있습니다(IGARSS 2018, 'Retrieval of Terrain Topography in Tropical Forests Using P-Band SAR Tomography'). 이번 세션에서 이미 만든 lopeTomoDTM은 1577 데이터만으로 DEM을 보정하는 독자적 경로입니다. 다만 L-band는 밀림에서 지면 신호가 약할 수 있으므로 반드시 독립적으로 검증해야 합니다.",
+     "actionable_step": "TomoDTM − LVIS ground_elev의 편향과 RMSE를 수목피복과 RH98 bin별로 계산합니다. TomoDTM으로도 χ-θ를 돌려, 'SRTM → TomoDTM → LVIS' 순으로 θ가 0.45 쪽으로 회복되는지 보여줍니다. 이 결과는 '같은 데이터 안에서 캐노피 편향을 보정할 수 있다'는 캡스톤의 독창적 기여로 쓸 수 있습니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.researchgate.net/publication/331356801_L-Band_UAVSAR_tomographic_imaging_in_dense_forests_Gabon_forests",
+      "https://ieeexplore.ieee.org/document/8518092/",
+      "https://doi.org/10.3390/rs11161934"
+     ]
+    }
+   ],
+   "recommended_use": "B-PCG 챕터 3에 권하는 활용법은 'Gabon을 캐노피 편향 보정과 χ 방법을 검증하는 사례로 삼고, Lopé 값을 k_lo의 실측 앵커로 쓰고, θ·n·k_hi·S_crit는 다지역 OCTOPUS E–ksn 적합으로 정하는 것'입니다. 단계는 다음과 같습니다.\n\n1. 데이터 확보(반나절): Earthdata Login으로 ORNL DAAC 1775에서 받습니다.\n   - lope/rabi의 l3c1_ground_elev, l3d1_valid_data_mask, l3d1_shots, RH50, RH98 GeoTIFF(EPSG:32732, 합계 <100 MB)\n   - GEDTM30 v1.2 COG를 rasterio /vsicurl/로 두 사이트 bbox에 0.5° 버퍼를 둔 창만 읽습니다(CC-BY, EGM2008).\n\n2. 편향 모델: 사바나 픽셀로 datum 오프셋을 제거한 뒤 ΔZ = SRTM − LVIS를 RH50에 대해 회귀합니다(Simard 2024의 기대 기울기는 약 1). ΔZ 지도와 회귀를 '캐노피 편향' 그림으로 만듭니다.\n\n3. 흐름 해석: 버퍼 GEDTM30에서 흐름누적을 계산해 진짜 A를 swath로 가져옵니다. 웅덩이는 fill과 breach 두 버전을 만듭니다. 가장자리 셀 가중 누적 E_acc가 0인 노드만 남겨 잘린 상류를 제거합니다. 하천 임계 A는 LVIS slope-area 굴곡점에서 고르거나, 기본값 1 km²로 두고 0.1–3 km² 민감도를 봅니다.\n\n4. θ 추정: 출구 A가 10–500 km²인 비중첩 유역마다 θ=0.05–1.0(간격 0.025)에 대해 χ를 계산합니다(A0=1 m²). disorder D(θ)와 z–χ R²를 함께 기록하고, 유역 bootstrap으로 95% CI를 냅니다. 이를 SRTM, TomoDTM, LVIS, GEDTM30 네 DEM에 반복해 'θ 회복' 표를 만듭니다. 기대 결과는 SRTM ~0.1, bare-earth 0.35–0.6입니다. 합성 노이즈 실험(θ=0.45 프로파일에 σ=2–5 m 노이즈)으로 slope-area가 무너지고 χ는 버틴다는 것도 보여줍니다.\n\n5. ksn·k_lo: θ_ref=0.45로 ksn을 구합니다. 방법은 z–χ 구간 기울기, 또는 Δz=10 m 수직구간이나 CRS(τ=0.5) 경사입니다. Lopé bare-earth 유역평균 ksn의 중앙값과 IQR을 k_lo로 정의하고, E≈15 m/Ma(Regard et al. 2025)와 짝지어 둡니다. Rabi는 적합에서 빼고, LVIS 기준 웅덩이와 습지 통계를 호소 모듈 검증에 씁니다.\n\n6. 다지역 적합: OCTOPUS v2(WFS, CC-BY)에서 San Gabriel, Himalaya·Taiwan, Appalachians, Atacama 유역을 받아 GEDTM30이나 COP30(OpenTopography API key 필요)으로 유역 ksn을 계산하고, log E = log K + n·log ksn을 적합합니다. k_hi는 Hilley et al. 2019의 ksn 포화로, S_crit는 DiBiase 2010의 E>300 m/Ma 사면 포화로 정합니다. 빙하 유역은 제외 마스크로 처리합니다.\n\n7. 도구: 3.14 venv에서는 자체 numba 코드와 landlab 2.11(SteepnessFinder elev_step, ChiFinder)을 씁니다. 교차검증은 `uv venv -p 3.13` 환경에 topotoolbox(crs, ksn, chitransform)를 설치해서 합니다.",
+   "caveats": "1. 이번 세션에서 직접 확인한 것: PyPI와 conda-forge의 wheel·버전 정보, CMR 메타데이터, 1775 사용자 가이드 본문, GEDTM30 COG 접근성(HEAD 200), FathomDEM Zenodo 조건, Mudd 2018과 landlab 문서 내용, TomoSAR swath와 LVIS bbox의 중첩률(89%/98%). 다만 중첩률은 bbox 기준이라 실제 LVIS 유효 셀 비율은 valid_data_mask로 다시 확인해야 합니다.\n2. 기억이나 추론에 기댄 것: Wobus 2006의 구체 파라미터(창 길이, 등고선 간격), disorder 공식의 정확한 정규화, MERIT Hydro 라이선스, Lindsay 2016 breaching, Adams·El Moussawi 저자명, 노이즈 바닥 정량 논증(내가 계산한 값). 원문으로 확인한 뒤 인용하세요.\n3. 실행해 보지 않은 것: topotoolbox sdist가 Python 3.14에서 빌드되는지, pip가 landlab 의존성인 py-richdem pre-release를 자동으로 고르는지. 막히면 각각 3.13 환경과 `pip install --pre py-richdem`으로 해결하면 됩니다.\n4. LVIS 1775의 ground_elev 관련:\n   - 비행선 사이와 구름 공백은 natural-neighbour로 보간된 값이라 하도 경사를 인위적으로 평탄하게 만들 수 있습니다.\n   - 밀도 >90%인 수관 아래에서는 지면 shot 자체가 적습니다.\n   - '평균해수면' 기준이고, SRTM(EGM96)·GEDTM30(EGM2008)과 datum이 다릅니다. 사바나 픽셀로 오프셋을 반드시 제거해야 합니다.\n5. Regard et al. 2025:\n   - 하위유역별 값과 시료 좌표는 HAL 접근이 차단돼 확보하지 못했습니다. 수치는 EGU24 초록과 HAL 목록에 근거합니다.\n   - t/km²/a를 m/Ma로 바꾸는 환산은 저자들이 쓴 밀도(~2.5–2.65 g/cm³)에 따라 달라집니다.\n6. 검색 범위 안에서는 Gabon·Ogooué에 대해 발표된 ksn이나 θ 값을 찾지 못했습니다. Lopé k_lo는 이 프로젝트의 새 측정값이 됩니다.\n7. 오목도의 지배요인은 기후(Chen 2019)와 지구조(Seybold 2021) 사이에서 아직 논쟁 중입니다. θ를 하나의 상수로 고정할지 지역별 분포로 둘지는 설계상 결정해야 합니다.\n8. Lopé의 정상상태 가정은 약합니다(고평탄면 잔존, 175 m 단구, 남북 침식률 차이). k_lo는 '정상상태 등가값'이라는 단서를 달아야 합니다."
+  }
+ },
+ {
+  "key": "ecohydrology-vegetation",
+  "result": {
+   "summary": "AfriSAR TomoSAR(1577)는 B-PCG에서 세 가지로 쓸 수 있습니다. (a) SRTM 아래 실제 지면 추정, (b) 수관고, (c) 복셀 식생 밀도에 쓸 수직 프로파일 예제입니다. 이 중 가장 가치 있는 쓰임은 'HAND·경사·지하수위·강수 → 숲/사바나 확률·수관고·프로파일 유형' 전이함수를 Lope/Rabi에서 보정하는 것입니다. 이 세션에서 이미 풀어둔 Lope Capon HH/HV와 Fourier HV(Lope·Rabi)로 파일럿을 직접 돌렸고, 결과는 다음과 같습니다.\n(1) Capon 기반 수관고(HV RH95 − HH 지면)는 인공물이 큽니다. 레인지에 따라 중앙값이 44 m(근거리)에서 26–30 m(원거리)로 바뀌고, 레인지 방향 경사가 |s|>0.3이면 28 m가 38–40 m로 부풉니다. 따라서 원시값을 그대로 회귀하면 HAND·경사와 양의 상관(Spearman +0.32/+0.36, OLS R² 0.18)이 나오는데, 이는 대부분 인공물입니다.\n(2) 레인지 열별 추세를 빼고 평탄지(경사<0.05)만 남겨도 패턴이 유지됩니다. Lope에서 저-HV(숲이 아닌 곳, 사바나 후보) 비율은 HAND<6 m에서 43–48%이고 HAND>80 m에서 12%로 떨어집니다. 공간적으로는 북부 위도 띠(−0.15~−0.05°)에 몰려 있는데, 문헌에 나오는 Lopé 북부 사바나 모자이크와 맞습니다. 사바나가 없는 남부 숲(lat<−0.2, 숲 화소, 평탄지)에서도 추세를 뺀 수관고가 HAND 0–1 m에서 −4 m, HAND>80 m에서 +8 m로 올라갑니다. 즉 이 지역에서는 계곡 바닥 숲이 낮게 나옵니다(보르네오 Jucker 2018과 반대 방향). Rabi는 저-HV가 모든 HAND 구간에서 2–4%뿐이라 연속된 숲으로 보입니다.\n(3) 토모 지면으로 SRTM을 보정해도(중앙 −0.2 m, p5/p95 −8/+7 m) 기울기-면적 θ는 0.07–0.08 그대로입니다. 따라서 θ가 낮은 원인은 캐노피 편향보다 30 m DEM의 1스텝 경사 잡음일 가능성이 큽니다.\n(4) 지면을 기준으로 정렬한 Capon HV 프로파일을 k-means로 5개 유형으로 나누면, 지면 집중형(RH95 +18 m, HAND 중앙 8 m)부터 키 큰 숲형(RH50 +12, RH95 +42 m, HAND 중앙 19 m)까지 깔끔한 예제 라이브러리가 나옵니다.\n결론은 '형태'(유형·상대 높이)는 쓸 만하지만, 절대 높이와 지면은 반드시 LVIS 격자 제품(ORNL 1775, 1.5 GB, Earthdata 로그인)으로 보정해야 한다는 것입니다.",
+   "findings": [
+    {
+     "topic": "데이터셋 1577의 물리적 한계 (사용 전 반드시 알아야 할 것)",
+     "detail": "이 세션에서 받은 가이드 내용입니다. 지상 간격은 15 m이고, 높이 간격은 Fourier 8 m(20단, −56..96 m), Capon 2 m(80단)입니다. 수직 해상도는 스와스에 따라 달라집니다(가이드 Fig.2). Fourier는 상대 방사보정과 편파보정이 보존되지만, Capon은 화소별 국소 통계를 써서 방사보정이 보존되지 않을 수 있습니다. Latitude/Longitude는 H=0(DEM 위) 표적에서만 오차 1 m 미만이고, 높이 H인 표적은 H/tanθ만큼 평면 위치가 밀립니다. 촬영 조건은 고도 12.5 km, 수직 합성 개구 약 120 m, Lope 2016-02-25, Rabi 2016-02-28입니다. 제가 계산한 레일리 수직 해상도 근사 δz≈λR/(2B_v)(λ≈0.238 m, B_v≈120 m)는 슬랜트 레인지 13.2–29.6 km에서 약 13 m(근거리)~30 m(원거리)입니다. 그래서 사바나·관목처럼 8 m보다 낮은 식생은 수관고로 분해되지 않습니다. 실제로 Capon 수관고의 p5가 13.7 m로, 바닥이 막혀 있습니다. Fourier 상단 높이는 8 m 단위로 양자화돼서 높이 통계에는 쓸모가 없습니다(파일럿에서 확인). 전체 용량은 14.095 GB, 파일 18개(HDF5)이며 Earthdata 로그인이 필요합니다.",
+     "actionable_step": "높이 지표는 Capon(HH=지면, HV=체적)으로, 방사 지표(숲/비숲 구분)는 Fourier HV 총전력으로 역할을 나누세요. 정확한 기하가 필요하면 가이드 권고대로 레이더 좌표에서 계산한 뒤 결과 지도만 지오코딩하세요(30 m 비닝 검증 결과: |T−DEM| 중앙 0.22 m, p95 1.09 m). Rabi Capon은 아직 압축을 풀지 않았으니 unzip -j로 rabi-tomo-capon-hh.h5와 rabi-tomo-capon-hv.h5만 꺼내세요(각 약 1.4 GB).",
+     "evidence": "verified",
+     "sources": [
+      "<scratchpad>/afrisar/guide_1577.txt",
+      "https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-polarimetric-height-profile-1577-1",
+      "https://doi.org/10.3334/ORNLDAAC/1577"
+     ]
+    },
+    {
+     "topic": "파일럿 A: Capon 수관고의 레인지·경사 인공물 (Lope)",
+     "detail": "수관고 CH는 HV 누적 에너지 95% 높이에서 HH 최저 강한 피크를 뺀 값입니다(afrisar/ground.py). 30 m 격자 863 km²에서 p5/p50/p95 = 13.7/32.7/67.5 m인데, 가이드가 말하는 Lope 최고 수관고는 약 50 m라서 p95가 비현실적입니다. 레인지 십분위별 중앙값은 근거리에서 원거리로 44, 38, 34, 32, 30, 28, 26, 28, 28, 30 m입니다. 레인지 방향 지형경사별로는 |s|<0.05에서 28 m, −0.3 이하에서 38 m, +0.3 이상에서 40 m로, 양쪽 사면 모두 부풉니다. 경사면에서는 한 해상도 셀 안에 높이 차가 섞여 프로파일이 퍼지기 때문으로 보입니다. 원시 CH를 90 m 블록에서 상관을 보면 HAND +0.32, 경사 +0.36, TWI −0.31, 고도 +0.46이고, OLS(log1p HAND+경사+TWI+고도)의 R²는 0.18입니다. HAND가 경사와 상관돼 있으므로 이 양의 관계는 상당 부분 인공물입니다.",
+     "actionable_step": "회귀하기 전에 반드시 (1) 레인지 열별 중앙값을 빼서 추세를 없애거나 LVIS로 레인지 의존 보정식 CH_true = a(range) + b·CH를 맞추고, (2) 경사<0.05~0.15 셀만 쓰고, (3) 레인지 방향 경사를 공변량으로 넣으세요. 스크립트: veg/pilot_lope.py, veg/diag_lope.py",
+     "evidence": "verified",
+     "sources": [
+      "<scratchpad>/veg/pilot_lope.py",
+      "<scratchpad>/veg/diag_lope.py",
+      "<scratchpad>/veg/lope_veg_pilot.npz"
+     ]
+    },
+    {
+     "topic": "파일럿 B: HAND와 숲/사바나, 수관고 (추세 제거 후, Lope vs Rabi)",
+     "detail": "HAND는 D8로 하류를 따라가 처음 만나는 채널 셀(A≥1 km²)과의 고도차로 계산했고, 채널 문턱을 0.25 km²로 바꿔도 결과가 거의 같습니다(Spearman 0.33 vs 0.32). Fourier HV 총전력에서 레인지 열별 중앙값을 뺀 값을 HVd라 합니다. Lope 평탄지에서 HVd<−6 dB(비숲 후보) 비율은 HAND 구간 0–1/1–3/3–6/6–10/10–20/20–40/40–80/>80 m에서 0.43/0.47/0.44/0.41/0.35/0.24/0.18/0.12입니다. 위도 띠별로는 −0.15~−0.05°가 약 0.41이고 −0.25° 이남은 0.06 이하라서, 북부 사바나 모자이크와 맞습니다. 숲 화소(HVd>−3), 평탄지, 남부(lat<−0.2) 조건에서 추세를 뺀 CH는 HAND 0–1:−4, 1–3:0, 3–6:0, 6–10:+2, 10–20:+2, 20–40:+4, 40–80:+4, >80:+8 m입니다(원시 중앙값 30→46 m). 경사<0.15로 넓혀도 −2→+6 m입니다. 토모 지면의 SRTM 대비 오프셋은 HAND 0–1에서 +2.0 m, HAND>6 m에서 −2~−4 m이고, CH와는 Spearman −0.31입니다(CH>30 m인 곳 중앙 −1.5 m). Rabi는 비숲 비율이 모든 HAND 구간에서 0.015–0.037이고 HVd~HAND 상관이 +0.01이라 연속된 숲입니다. 해석: Lope에서 '낮은 HAND = 비숲·낮은 숲'은 맞지만, 사바나 쪽은 북부 Ogooué 계곡의 지리, 우영(rain shadow), 화재관리와 교란돼 있습니다. 반면 남부 숲 안의 HAND 효과(+12 m 폭)는 수문 효과의 후보로 볼 수 있지만, LVIS로 확인하기 전까지는 잠정 결과입니다.",
+     "actionable_step": "생성기의 HAND 수정자 m(HAND) = m_min + (1−m_min)/(1+exp(−(HAND−h0)/w))를 남부 숲 데이터에 맞추세요. 초기값은 m_min≈0.75, h0≈5–10 m 정도로 시작하되, LVIS RH98로 다시 맞추기 전에는 확정하지 마세요. 숲/사바나 확률은 HAND만이 아니라 강수·건기와 화재 상태(아래 CA)로 결정하세요. 스크립트: veg/pilot2_lope.py, veg/pilot3.py(두 사이트 공통)",
+     "evidence": "verified",
+     "sources": [
+      "<scratchpad>/veg/pilot2_lope.py",
+      "<scratchpad>/veg/pilot3.py",
+      "<scratchpad>/veg/lope_radar_detr.npz",
+      "<scratchpad>/veg/rabi_fourier_metrics.npz"
+     ]
+    },
+    {
+     "topic": "파일럿 C: 토모 지면 보정 DTM으로 다시 맞춘 θ (설계문서 3장에 주는 시사점)",
+     "detail": "SRTM에 토모 지면 오프셋(5×5 셀, 150 m로 평활, 커버리지>30%)을 더해 lopeTomoDTM을 만들고 같은 hydro.py를 돌렸습니다. 원본 Lope는 logA 5–7.5 구간 θ=0.099(R² 0.86), 5.5–8 구간 θ=0.070입니다. 보정본은 각각 0.083(R² 0.87), 0.067로 사실상 같습니다. 적용된 보정량은 p5 −8.4, p50 −0.2, p95 +6.7 m입니다. 따라서 θ가 0.07–0.13으로 낮게 나오는 것은 캐노피 편향만으로 설명되지 않습니다. 30 m DEM에서 한 스텝(D8) 경사를 쓰면 수 m 수직잡음이 S≈0.04 바닥을 만드는 것이 더 유력한 원인입니다. (참고: 이 과정에서 hydro.py lope를 다시 실행해 out/lope_hydro.npz를 같은 입력으로 다시 썼고, 결정적 계산이라 내용은 같습니다.)",
+     "actionable_step": "θ 피팅은 한 스텝 경사 대신 χ-분석(Perron & Royden 2013, 적분형, 기억 기반 인용)이나 하천 종단을 따라 고정 수직낙차/길이로 평활한 경사로 바꾸세요. 지면은 LVIS ground(1775)나 FABDEM으로 교체해 비교하세요. 출력: afrisar/out/lopeTomoDTM_dem_30m.npz, lopeTomoDTM_hydro.npz",
+     "evidence": "verified",
+     "sources": [
+      "<scratchpad>/afrisar/out/lopeTomoDTM_dem_30m.npz",
+      "<scratchpad>/afrisar/hydro.py"
+     ]
+    },
+    {
+     "topic": "파일럿 D: 토모 프로파일 → 복셀용 '구조 유형' 예제 라이브러리",
+     "detail": "대상은 Lope Capon HV의 중간 레인지(열 400–1300), 경사<0.15, 4행마다 표본을 뽑은 프로파일 42.6만 개입니다. 각 프로파일을 HH 지면 기준 −10..70 m(2 m 격자)로 재표본하고, 잡음바닥(p10)을 빼고, 합이 1이 되게 정규화한 뒤 k-means(K=5)로 묶었습니다. 결과(점유율 | RH50/RH95 | HAND 중앙 | HVd)는 다음과 같습니다. C0 14% | 0/+18 m | 8.4 m | −8.1 dB, C1 16% | 0/+20 | 8.2 | −8.4, C2 21% | 0/+26 | 9.5 | −0.5, C3 29% | +4/+34 | 17.9 | +2.0, C4 20% | +12/+42 | 18.8 | +2.0. 저층·저전력 유형(C0–1)은 낮은 HAND와, 키 큰 숲형(C4)은 높은 HAND와 연관됩니다. 다만 레이더 반사도는 엽면적 밀도가 아닙니다. 지면 이중산란과 감쇠가 섞여 있고, 13–30 m 해상도로 흐려진 값입니다.",
+     "actionable_step": "centroid를 ζ=z/H로 정규화해 JSON 프로파일 라이브러리(유형 5개 × 41개 높이)로 내보내세요. 그다음 LVIS PAVD(1591)나 GEDI L2B pavd_z와 분위수 매칭해 '반사도 → PAVD' 변환표를 만들고, 그 결과를 복셀 밀도 목표로 쓰세요. 스크립트와 출력: veg/exemplars.py, veg/lope_exemplar_profiles.npz(Z, C)",
+     "evidence": "verified",
+     "sources": [
+      "<scratchpad>/veg/exemplars.py",
+      "<scratchpad>/veg/lope_exemplar_profiles.npz"
+     ]
+    },
+    {
+     "topic": "검증·보정용 필수 동반 데이터: AfriSAR LVIS 및 PolInSAR 제품",
+     "detail": "(1) ORNL 1775 'AfriSAR: Gridded Forest Biomass and Canopy Metrics Derived from LVIS, Gabon, 2016'(Armston et al. 2020, doi:10.3334/ORNLDAAC/1775): Lope·Rabi를 포함한 5개 사이트, 25 m 격자로 canopy cover, canopy heights(RH), bare ground elevation, PAI, FHD와 불확실도를 제공하고, AGBD는 50/100 m입니다. 1.519 GB이며 Earthdata 로그인이 필요하고, 취득 기간은 2016-02-20~03-08로 토모그램과 거의 같은 시기입니다. (2) ORNL 1591 'AfriSAR: Canopy Cover and Vertical Profile Metrics Derived from LVIS'(Tang et al. 2018): 20 m 풋프린트 수직 커버/PAI 프로파일이 CSV 273개, 35.241 GB입니다. 카탈로그는 1 m bin이라고 하고 검색 요약은 5 m PAVD라고 해서, 직접 확인이 필요합니다. (3) ORNL 1589 PolInSAR canopy height(Denbina et al. 2018): Lope·Pongara만 있고 Rabi는 없으며, GeoTIFF 231 MB입니다.",
+     "actionable_step": "1775를 먼저 받으세요(Lope·Rabi 파일만이면 수백 MB 수준일 것). 이것으로 ① 토모 CH의 레인지별 보정식, ② 토모 지면 대비 LVIS 지면 편향, ③ LVIS 지면 DTM으로 HAND와 θ 재계산, ④ 수관고~HAND 회귀의 기준값을 얻을 수 있습니다. 프로파일 예제 보정용으로 1591은 Lope 일부 파일만 받으세요.",
+     "evidence": "verified",
+     "sources": [
+      "https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-afrisar-lvis-biomass-vprofiles-1775-1",
+      "https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-afrisar-lvis-footprint-cover-1591-1",
+      "https://www.earthdata.nasa.gov/data/catalog/ornl-cloud-polinsar-canopy-height-1589-1",
+      "https://daac.ornl.gov/cgi-bin/dataset_lister.pl?p=38"
+     ]
+    },
+    {
+     "topic": "AfriSAR TomoSAR 선행연구 (같은 데이터로 무엇이 확인됐나)",
+     "detail": "El Moussawi et al. 2019(Remote Sensing 11(5):475): 같은 UAVSAR AfriSAR Lope 데이터로 Capon HH/HV 프로파일이 LVIS L1B 파형과 강하게 상관했고, 수관 상단 높이 RMSE 3 m, R² 0.92를 얻었습니다. 다만 UAVSAR가 잡은 지면은 LVIS보다 대체로 높았습니다. 즉 토모 지면도 위로 편향돼 있을 수 있습니다. Pardini et al. 2018(IEEE JSTARS 11(10):3386–3401): DLR F-SAR L/P 밴드 토모 프로파일과 LVIS 파형으로 숲 구조 유형을 구분하는 능력과 지면 가시성을 비교했습니다. Pardini et al. 2019(Surveys in Geophysics): Lope의 천이 단계 기울기를 따라 lidar와 다중기선 SAR를 결합했습니다. Ho Tong Minh et al. 2016(RSE 175:138–147): 프랑스령 기아나에서 '30 m 층' 토모 전력이 AGB와 높게 상관했고 500 Mg/ha까지 포화가 없었습니다.",
+     "actionable_step": "El Moussawi 2019의 방법(Capon 프로파일 상단 문턱, LVIS 대비 검증)을 기준선으로 그대로 재현하세요. 우리 RH95 수관고가 LVIS 대비 RMSE 3–5 m 안에 들어오는지를 '데이터 사용 가능' 기준으로 삼으면 됩니다. 수관고 대신 '고정 높이층 전력(예: 지면+20~30 m 층의 HV 전력)'을 바이오매스·숲 성숙도 지표로 쓰는 것도 고려하세요.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.mdpi.com/2072-4292/11/5/475",
+      "https://ieeexplore.ieee.org/document/8424006/",
+      "https://link.springer.com/article/10.1007/s10712-019-09553-9",
+      "https://www.researchgate.net/publication/353104303_The_NASA_AfriSAR_campaign_Airborne_SAR_and_lidar_measurements_of_tropical_forest_structure_and_biomass_in_support_of_current_and_future_space_missions"
+     ]
+    },
+    {
+     "topic": "지형·수문 → 수관고 관계 문헌 (방향이 지역마다 다름)",
+     "detail": "Jucker et al. 2018(Ecology Letters, doi:10.1111/ele.12964): 보르네오 Sepilok 약 4500 ha, 1 m CHM입니다. 수관 상단 높이(TCH)의 최대 도달값이 고도 10 m 상승마다 1.5 m 감소했고, 충적 계곡이 가장 높았으며, 능선 heath 숲은 평균 4.7 m 낮았습니다. ACD는 중간 고도에서 최대였고 계곡-능선 차는 13%입니다(PMC 원문 확인). Detto et al. 2013(PLoS ONE, doi:10.1371/journal.pone.0076296): 파나마 4930 ha에서 LiDAR 평균 캐노피 높이가 약 30–600 m 스케일에서 프랙탈적이고, 고도와 약 250 m 스케일에서 상관이 최대이며, 20–300 m 스케일 볼록도(수계 위치의 대리변수)와 가장 강하게 연관됐습니다. Schietti et al. 2014(Plant Ecol. Divers. 7:241–253): 아마존에서 배수로로부터의 수직거리(HAND)가 종조성과 구조를 바꿉니다. Liu et al. 2025(PNAS, doi:10.1073/pnas.2401755122): GEDI 기반 열대림 수관고 변동의 75%를 기후·지형·토양으로 설명했고, 핵심 변수는 고도, 건기 길이, 일사였습니다(OSTI 초록 확인). 우리 Lope 파일럿은 '계곡 바닥 숲이 더 낮다'로, Sabah와 반대 방향입니다. 따라서 생성기는 부호까지 맞출 수 있는 매개형 곡선을 써야 합니다.",
+     "actionable_step": "생성기 수관고를 H = H_pot(강수, 건기 길이, 고도) × m(HAND) × g(경사, 볼록도)의 곱으로 만드세요. m과 g의 매개변수는 'Lope 보정', 'Sabah형(계곡 최고)' 같은 프리셋으로 노출해 행성 지역마다 다르게 쓰면 됩니다. 볼록도는 Detto 2013처럼 여러 스케일(20–300 m)에서 계산해 넣으세요.",
+     "evidence": "verified",
+     "sources": [
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC6849614/",
+      "https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0076296",
+      "https://www.osti.gov/pages/biblio/3676658-environmental-drivers-spatial-variation-tropical-forest-canopy-height-insights-from-nasas-gedi-spaceborne-lidar",
+      "https://www.pnas.org/doi/10.1073/pnas.2401755122"
+     ]
+    },
+    {
+     "topic": "지하수위·뿌리깊이 프레임 (Fan 2017) → B-PCG 지하수 지도와 직결",
+     "detail": "Fan, Miguez-Macho, Jobbágy, Jackson, Otero-Casal 2017(PNAS 114(40):10572–10577, doi:10.1073/pnas.1712381114)는 뿌리 관측 2,200건(1,000종 이상)을 종합했습니다. 결론은 다음과 같습니다. 배수가 좋은 고지대에서는 뿌리깊이가 강수 침투깊이를 따르고, 과습한 저지대에서는 지하수면 아래 산소 스트레스를 피해 뿌리가 얕으며, 그 사이 구간에서는 생산성과 가뭄 때문에 뿌리가 수 m 아래 모세관대까지 내려갑니다. Costa et al. 2023(New Phytologist 237:714–733, doi:10.1111/nph.17914)에 따르면 아마존의 약 50%가 얕은 지하수위 숲이며, 이 숲이 중간 가뭄에서는 수문적 피난처로 작동할 수 있지만 극한 가뭄에는 취약할 수 있습니다. Fan, Li, Miguez-Macho 2013(Science 339:940–943)은 전구 지하수위 깊이 지도입니다.",
+     "actionable_step": "B-PCG 지하수위 깊이(WTD) 지도에서 3구간 규칙을 만드세요. ① WTD 매우 얕음 → 습지림/초지 범람원, 뿌리층 얇음, 수관 낮음, 물 복셀. ② 중간 → 최대 수관고, 깊은 뿌리 복셀(지층 datum까지). ③ 깊음(고지대) → 침투깊이로 결정, 강수가 적으면 사바나 경향. 구간 경계(m)는 문헌 수치를 확인하지 못했으므로 LVIS 파일럿에서 맞출 매개변수로 남겨두세요. 지하 '뿌리 밀도' 복셀층은 시각 요소로도 쓸 수 있습니다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.pnas.org/doi/pdf/10.1073/pnas.1712381114",
+      "https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.17914",
+      "https://www.mindat.org/reference.php?id=2707896"
+     ]
+    },
+    {
+     "topic": "Lopé 숲–사바나 모자이크의 통제요인: 지형보다 화재·기후",
+     "detail": "Cuni-Sanchez et al. 2016(PLoS ONE 11(6):e0156934, 원문 확인): 연강수는 공원 북부 약 1500 mm, 남부 약 2500 mm이고, 사바나는 북부에 있습니다. 사바나는 LGM 이후 잔존한 것으로 인간 방화와 Massif du Chaillu의 우영이 함께 유지합니다. 1993년부터 화재관리를 했고, 사바나 플롯은 1995–2013년에 5–19회 탔습니다. 20년간 다음 천이단계로 넘어간 플롯은 없었습니다. 천이 순서는 S → F1(개방 colonising) → F2(Okoumé 단우점, 수관 15–20 m) → F3(young Marantaceae) → F4(mixed Marantaceae)입니다. 지상 LiDAR PAVD는 F1이 약 20 m 단봉, F2/F3가 3 m와 약 38.5 m의 이봉, F4가 약 26.5 m와 3 m입니다. 유형 간 토양 차이는 작았고, 플롯은 비슷한 고도와 지형에서 골랐습니다. Staver, Archibald, Levin 2011(Science, doi:10.1126/science.1210465): 강수 1000–2500 mm이고 계절성이 7개월 미만이면 수목피복이 이봉이며, 화재만이 사바나와 숲을 가릅니다. Sagang et al. 2024(Proc. R. Soc. B, 카메룬): 목본 바이오매스 약 40 Mg/ha를 넘으면 초본-화재 되먹임이 무력화되고, 초본 4 Mg/ha 이상에서 화재빈도가 연 0.8회를 넘으며, 토양 질감(점토)이 중요합니다.",
+     "actionable_step": "생성기에 '화재 상태 셀룰러 오토마타'를 넣으세요. 셀 상태는 숲/사바나이고, 사바나 셀은 초본 연료(강수·건기 함수)로 불이 번지며, 숲 셀은 불을 막습니다. 무화재 기간이 N년을 넘고 숲과 인접하면 숲으로 전환합니다. 1000–2500 mm 구간에서만 쌍안정을 허용하세요. 초기 씨앗은 낮은 HAND·우영 지역에 사바나를 두면 Lopé 같은 모자이크가 나옵니다. 천이단계 F1–F4는 그대로 수직 프로파일 유형(파일럿 D)에 대응시키세요.",
+     "evidence": "verified",
+     "sources": [
+      "https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0156934",
+      "https://www.science.org/doi/10.1126/science.1210465",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC11521620"
+     ]
+    },
+    {
+     "topic": "스와스 밖으로 일반화하기 위한 전구 데이터 (HAND·나지 DEM·수관고·수직 프로파일)",
+     "detail": "MERIT Hydro(Yamazaki et al. 2019, WRR 55:5053–5073): 3″(약 90 m) 해상도이고 HAND(hnd) 레이어가 있습니다. 다운로드는 등록이 필요할 수 있고 GEE에도 있습니다. MERIT DEM은 수목 편향을 보정한 DEM입니다. FABDEM(Hawker et al. 2022 ERL): Copernicus DEM에서 숲과 건물을 제거했고, 숲 MAE가 5.15 m에서 2.88 m로 줄었습니다. 라이선스는 CC BY-NC-SA 4.0입니다(Bristol 페이지 확인, 비상업 학부 과제는 가능). doi:10.5523/bris.25wfy0f9ukoge2gs7a5mqpq2j7. 수관고 지도는 Lang et al. 2023(Nat. Ecol. Evol. 7:1778–1789, 10 m, 2020년, CC BY 4.0, doi:10.3929/ethz-b-000609802), Potapov et al. 2021(RSE 253:112165, GEDI+Landsat 30 m, 2019년), Tolan et al. 2024(RSE 300, Meta/WRI 1 m, MAE 2.8 m)가 있습니다. GEDI L2B(GEDI02_B, LP DAAC, Earthdata 로그인, 51.6°S–51.6°N)는 pavd_z(m²/m³, 수직 간격 dZ), pai_z, cover_z, rh100, l2b_quality_flag를 제공합니다. dZ=5 m는 제 기억이고 사전 문서에는 수치가 없으니 dz 필드를 읽어서 확인하세요.",
+     "actionable_step": "Gabon 전체(또는 Ogooué 유역)에서 Lang 2023 수관고, FABDEM이나 MERIT HAND, WorldClim 강수를 같은 90 m 격자로 묶고 H~HAND+경사+강수를 회귀하세요. 두 사이트에서 얻은 곡선이 지역 규모에서도 유지되는지 확인하는 단계이고, 하루 안에 끝납니다. 프로파일 예제는 Lope·Rabi 상공의 GEDI L2B 풋프린트(quality_flag=1)로 독립 검증하세요.",
+     "evidence": "secondary",
+     "sources": [
+      "https://global-hydrodynamics.github.io/MERIT_Hydro/",
+      "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2019wr024873",
+      "https://research-information.bris.ac.uk/en/datasets/fabdem-2/",
+      "https://www.nature.com/articles/s41559-023-02206-6",
+      "https://github.com/langnico/global-canopy-height-model",
+      "https://www.researchgate.net/publication/345686925_Mapping_global_forest_canopy_height_through_integration_of_GEDI_and_Landsat_data",
+      "https://datasets.wri.org/datasets/meta-tree-canopy-height",
+      "https://lpdaac.usgs.gov/documents/980/gedi_l2b_dictionary_P003_v2.html",
+      "https://www.earthdata.nasa.gov/data/catalog/lpcloud-gedi02-b-002"
+     ]
+    },
+    {
+     "topic": "그래픽스·게임 선행작업: 실측 수관고/생태 시뮬레이션 → 식생 배치",
+     "detail": "Kapp, Gain, Guérin, Galin, Peytavie 2020(ACM TOG 39(6), doi:10.1145/3414685.3417848): 실측 데이터와 ML로 새 지형의 CHM(수관고 모형)을 예측하고, 종 분포 제약 아래 반복 최적화로 수관층 나무를 CHM에 맞춘 뒤, 생물군계별 하층 시뮬레이션 분포로 하층을 합성합니다. B-PCG가 그대로 따라갈 수 있는 구조입니다. Cordonnier et al. 2017(ACM TOG 36(4), doi:10.1145/3072959.3073667): 침식과 생태계 시뮬레이션을 양방향으로 결합했습니다. Gain, Long, Cordonnier, Cani 2017(EcoBrush, CGF 36(2):63–73): 최대 5×5 km² 생태계를 대화형으로 만들고 천이·자기솎음·하층을 재현합니다. Makowski et al. 2019(Synthetic Silviculture, TOG 38(4)), Pałubicki et al. 2022(Ecoclimates, TOG 41(4)): 물·온도·빛 기울기에 대한 성장과 숲 가장자리 효과를 다룹니다. Runions, Lane, Prusinkiewicz 2007(space colonization): 빈 공간 점유 경쟁으로 수관 안의 가지를 생성합니다. Guerrilla GDC 2017(Jaap van Muijden, Horizon Zero Dawn): GPU 런타임 절차적 배치를 다뤘습니다. Jucker et al. 2017(GCB 23(1):177–190): 수고와 수관폭 알로메트리를 108,753그루로 만들었습니다.",
+     "actionable_step": "Kapp 2020의 2단계 구조를 채택하세요. ① B-PCG 수문 지도 → CHM(우리 전이함수). ② CHM에 Poisson-disk로 나무를 배치하고, 수관폭은 Jucker 2017 알로메트리 CD(H)로 정하고, 프로파일 유형으로 수관 형태를 정합니다. 침식과 식생의 양방향 결합(Cordonnier 2017, 식생이 사면 확산계수와 S_crit를 높이는 것)은 확장 과제로 남기세요.",
+     "evidence": "secondary",
+     "sources": [
+      "https://dl.acm.org/doi/10.1145/3414685.3417848",
+      "https://dl.acm.org/doi/10.1145/3072959.3073667",
+      "https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.13107",
+      "https://dl.acm.org/doi/10.1145/3528223.3530146",
+      "https://research.google/pubs/pub49196/",
+      "https://algorithmicbotany.org/papers/colonization.egwnp2007.large.pdf",
+      "https://gdcvault.com/play/1024700/GPU-Based-Run-Time-Procedural",
+      "https://onlinelibrary.wiley.com/doi/10.1111/gcb.13388"
+     ]
+    },
+    {
+     "topic": "복셀 수관 생성 알고리즘 제안: 프로파일 정합 노이즈 문턱법",
+     "detail": "설계 제안이며 개별 단계는 표준 기법입니다. 열(column)마다 수관고 H, 프로파일 유형 c, 총 PAI L이 주어지면 목표 엽면적 밀도는 ρ(z) = L·p_c(z/H)/H [m²/m³]입니다. Beer–Lambert(G≈0.5, 구형 잎각 가정, 기억 기반)로 복셀 점유율 φ(z) = 1 − exp(−G·ρ(z)·Δ)를 구합니다(Δ = 복셀 크기). 나무는 Poisson-disk 위치에 CD(H) 알로메트리로 타원체 수관 SDF를 놓습니다. 수관 안에서는 높이 층마다 3D 노이즈 n(x)의 분위수 문턱 τ(z) = F⁻¹(φ(z))를 잡아 n<τ인 곳만 잎 복셀로 채웁니다. 이렇게 하면 층별 채움 비율이 실측 프로파일과 정확히 맞습니다. 줄기와 가지는 SDF 실린더로 만들고, 선택적으로 space colonization의 유인점을 ρ(z)에 비례해 표본합니다. 사바나 셀은 초본층(0–2 m)과 드문 관목으로 처리합니다.",
+     "actionable_step": "Godot에서 식생을 지형 SDF와 별개인 밀도 볼륨(청크별 3D 텍스처나 복셀)으로 두세요. LOD 원거리에서는 ρ(z)를 그대로 볼륨 렌더링(감쇠)하고, 근거리에서만 개별 나무 SDF를 만듭니다. 검증으로 생성 결과의 층별 φ(z)를 다시 측정해 입력 프로파일과 비교하는 단위테스트를 만드세요.",
+     "evidence": "memory",
+     "sources": [
+      "<scratchpad>/veg/lope_exemplar_profiles.npz"
+     ]
+    },
+    {
+     "topic": "데모 구성 (실측 vs 생성 비교를 보여주는 방법)",
+     "detail": "구성 요소는 네 가지입니다. ① 실측 단면: Lope Capon HV 한 방위 라인의 (레인지 × 높이) 영상에 SRTM 선과 HH 토모 지면 선을 겹쳐 '레이더가 본 숲 속'을 보여줍니다. 바로 옆에 같은 HAND 단면을 가진 B-PCG 복셀 단면을 둡니다. ② 지도: HAND 색상 위에 수관고와 숲/사바나를 표시하고, Lope 북부 사바나 띠(lat −0.15~−0.05°)를 생성기의 화재 CA 결과와 나란히 놓습니다. ③ 그래프: HAND 구간별 수관고(실측, LVIS 보정 후)와 생성기 곡선 m(HAND)을 겹치고, Rabi(평탄·연속 숲)와 Lope(대비 큼)를 대조합니다. ④ 프로파일 라이브러리: 5개 유형 곡선과 각각의 복셀 렌더를 나란히 보여줍니다.",
+     "actionable_step": "데모 데이터는 파이썬에서 미리 PNG/JSON으로 굽고(veg/*.npz → JSON), Godot에서는 슬라이더(HAND 수정자 h0·w, 강수, 화재빈도)로 행성 식생이 실시간으로 바뀌는 것을 보여주세요. 슬라이드에는 'Capon 원시값은 레인지 인공물이 있어 LVIS로 보정했다'는 정직한 한 줄을 넣는 것이 평가에 유리합니다.",
+     "evidence": "memory",
+     "sources": []
+    },
+    {
+     "topic": "향후: ESA BIOMASS P-밴드 우주 토모그래피",
+     "detail": "ESA BIOMASS(Earth Explorer 7)는 2025-04-29에 발사됐고, 2026년 초 상업운용 전환과 함께 Level-1 공개 데이터가 MAAP를 통해 열렸습니다. Level-2 제품은 단계적으로 공개 중입니다. 임무 초기에 토모그래피 단계가 있어 열대림 3D 구조를 관측합니다. 검색 요약에서 공개 시점이 2025년 12월과 2026년 1월로 엇갈립니다.",
+     "actionable_step": "범위를 넘는 확장안입니다. 발표에서 '같은 파이프라인을 우주 P-밴드 토모로 전구 확장 가능'이라는 근거로만 언급하고, 학기 내 구현 대상으로는 삼지 마세요.",
+     "evidence": "secondary",
+     "sources": [
+      "https://www.esa.int/Applications/Observing_the_Earth/FutureEO/Biomass/ESA_s_Biomass_goes_live_with_data_now_open_to_all",
+      "https://earth.esa.int/eogateway/news/biomass-level-2-product-release-schedule"
+     ]
+    }
+   ],
+   "recommended_use": "가장 좋은 쓰임은 'B-PCG 수문 지도 → 식생 전이함수'를 Lope/Rabi에서 보정하고, 토모 프로파일을 복셀 밀도 예제로 쓰는 것입니다. 단계는 다음과 같습니다.\n1) 지면과 수관고 보정: ORNL 1775(LVIS 격자, 25 m, 1.5 GB, Earthdata 로그인)에서 Lope·Rabi의 RH98과 지면고를 받습니다. 기존 veg/lope_veg_pilot.npz 격자에 리샘플한 뒤, 토모 CH와 LVIS RH98을 비교해 레인지·경사 의존 보정식을 맞추고, 토모 지면과 LVIS 지면의 편향도 확인합니다.\n2) Rabi Capon 추출: zip에서 rabi-tomo-capon-hh.h5와 rabi-tomo-capon-hv.h5만 풀고(각 약 1.4 GB) afrisar/ground.py를 돌립니다.\n3) 지형변수 계산: LVIS 지면 DTM(없으면 FABDEM)으로 HAND(D8, 채널 A≥0.25/1 km², 낮은 곳부터 순회하며 base[c]=base[rec[c]]), 경사, 다중스케일 볼록도, TWI=ln(a/tanβ)를 계산합니다.\n4) 회귀: 수관고(LVIS 또는 보정 토모)를 HAND, 경사, 볼록도, 레인지에 대해 회귀합니다. 90 m 블록 집계와 2 km 공간블록 교차검증을 쓰고, 숲 확률은 HV 전력이나 LVIS cover로 로지스틱 회귀합니다. Lope 북부 사바나 띠는 화재관리 효과이므로 따로 계층화합니다.\n5) 생성기 함수: H = H_pot(강수, 건기, 고도) × m(HAND; m_min, h0, w) × g(경사)로 두고, 쌍안정 구간(1000–2500 mm)에서는 화재 CA로 숲/사바나를 정합니다.\n6) 프로파일 라이브러리: Capon HV k-means 5유형(veg/exemplars.py)을 ζ=z/H로 정규화하고, LVIS 1591 또는 GEDI L2B PAVD와 분위수 매칭해 PAVD 라이브러리로 만듭니다. 복셀 수관은 '프로파일 정합 노이즈 문턱법'과 Jucker 2017 알로메트리로 생성합니다.\n7) 데모: 실측 토모 단면과 생성 복셀 단면을 나란히 놓고, HAND 구간별 수관고 실측-모형 그래프와 슬라이더로 실시간 변화를 보여줍니다.\n1)–4)는 2–3일, 5)–7)은 1–2주 규모로 예상합니다.",
+   "caveats": "- 파일럿 수치는 Capon 원시 수관고 기반입니다. 이 값은 레인지(근거리 44 m, 원거리 26–30 m)와 지형경사(±0.3 이상에서 +10 m)에 강하게 오염돼 있습니다. 추세 제거와 평탄지 제한 후의 HAND 효과(남부 숲에서 −4→+8 m)도 LVIS로 확인하기 전까지는 잠정 결과입니다.\n- HAND는 SRTM 유래 TerrainHeight(캐노피가 섞인 표면모델)로 계산했습니다. 토모 지면 자체도 LVIS보다 높게 편향될 수 있다는 보고가 있습니다(El Moussawi 2019, 2차 출처).\n- Lope의 '낮은 HAND = 사바나'는 북부 Ogooué 계곡의 지리, 우영(약 1500 mm vs 남부 2500 mm), 1993년 이후 인위적 화재관리와 교란돼 있습니다. 수문 인과로 단정하면 안 됩니다.\n- 사이트가 두 곳뿐이라 전이함수의 부호와 크기가 기후대마다 다를 수 있습니다. 보르네오(Jucker 2018)에서는 계곡이 가장 높아서 우리 결과와 방향이 반대입니다.\n- 화소 회귀는 공간자기상관 때문에 유의성이 과장됩니다. 상관계수만 보고했고 p값은 쓰지 않았습니다.\n- 레이더 반사도 프로파일은 엽면적 밀도가 아닙니다(지면 이중산란, 감쇠, 13–30 m 수직 해상도). Capon은 방사보정이 보존되지 않을 수 있습니다.\n- 높이가 있는 표적은 H/tanθ만큼 평면 위치가 밀립니다.\n- 토모 지면으로 SRTM을 보정해도 θ는 0.07–0.08로 그대로라서 3장의 θ 문제는 따로 풀어야 합니다(χ-분석은 기억 기반 제안).\n- 확인하지 못한 수치: GEDI L2B dZ=5 m(기억), LVIS 1591의 bin 크기(카탈로그 1 m vs 검색 요약 5 m), MERIT HAND 채널 문턱 0.5 km²(검색 스니펫), ESA BIOMASS 공개 시점(2025-12 vs 2026-01).\n- Kapp 2020, Cordonnier 2017 등 그래픽스 문헌과 Fan 2017, Staver 2011, Costa 2023은 원문 접근이 막혀 초록·검색 요약 수준(secondary)입니다.\n- 접근 조건: ORNL·LP DAAC 데이터는 Earthdata 로그인이 필요합니다. FABDEM은 CC BY-NC-SA 4.0(비상업)입니다.\n- 이 세션에서 afrisar/out/lope_hydro.npz를 같은 입력으로 다시 생성했습니다(결정적이라 내용은 같음). 새 파일은 scratchpad/veg/ 아래와 afrisar/out/lopeTomoDTM_*에 있습니다."
+  }
+ },
+ {
+  "key": "integration-tooling",
+  "result": {
+   "summary": "AfriSAR 1577 데이터를 B-PCG 저장소와 파이프라인에 넣는 실무 방안을 조사하고 로컬에서 직접 확인했다.\n\n(1) 라이선스: CMR 메타데이터의 UseConstraints가 NASA Earth science 데이터 정책을 가리킨다. NASA Data Use Guidance는 대부분 CC0이라고 하고, SPD-41a는 다른 제약이 없으면 CC0로 공개하라고 한다. 따라서 파생물은 공개 GitHub에 올려도 된다. 인용은 법적 의무는 아니지만 강하게 권고되고, NASA 출처 표기와 보증 암시 금지(로고 사용 주의)를 지켜야 한다.\n\n(2) 저장 구조: 15 GB zip은 git 밖에 두고, 파생물만 직접 커밋한다. 크기를 실측한 결과 DEM은 약 3.5 MB, 512² 픽스처는 0.87 MB로 합계 약 25 MB 미만이므로 LFS가 필요 없다. 큰 파일은 Release 자산(파일당 2 GiB 미만)으로, 학기 말에는 Zenodo DOI로 보관한다.\n\n(3) 스트리밍 측정: zip 안의 HDF5를 h5py로 바로 열면 TerrainHeight/Lat/Lon 읽기가 1.7–2.5 s로 충분하다. 반면 전체 높이 블록은 128줄당 37.6 s여서, 볼륨 처리 전에는 멤버를 압축 해제해야 한다(380 MB에 1.6 s).\n\n(4) 지오코딩: 가이드가 권하는 GDAL VRT+gdalwarp -geoloc 방식, 같은 GDAL 변환기를 쓰는 rasterio.warp.reproject(src_geoloc_array), scipy 폴백을 비교했다. Python 3.14용 rasterio 1.5.2와 pyproj 3.8.0은 macOS arm64 cp314 휠이 있다. topotoolbox는 cp313까지만 있어 별도 3.13 환경이 필요하다. 좌표계는 두 사이트 모두 EPSG:32732로 처리할 수 있고, 수평 길이 오차는 약 0.08%다. TerrainHeight는 가이드상 타원체고다.\n\n(5) 2장/4장 픽스처와 피치 구성을 구체화했다. Lopé 512×512(30 m) 무결측 타일, 4장 비교 기준값, pysheds/TopoToolbox(둘 다 GPL-3.0) 대비 비교 지표, 10/23 피치용 'Real → Fit → Generate → Validate' 4패널 슬라이드를 제안한다. 원시 SRTM의 θ≈0.1 결과는 숨기지 말고 함정을 발견한 근거로 보여 주는 것을 권한다.",
+   "findings": [
+    {
+     "topic": "(1) 라이선스/이용 조건: 공개 레포 커밋 가능",
+     "detail": "NASA CMR의 컬렉션 메타데이터(C2734257089-ORNL_CLOUD, ShortName Polarimetric_height_profile_1577)에서 UseConstraints.LicenseURL이 NASA Earth science data information policy를 가리킨다. NASA Earthdata 'Data Use and Citation Guidance'는 대부분의 NASA 주도 미션 데이터가 CC0로 라이선스되어 사용 제한이 없다고 하고, 인용은 법적 의무는 아니지만 강하게 권고한다. 그 밖의 조건은 NASA를 출처로 표기할 것, NASA의 보증을 암시하지 말 것(로고 사용 주의), NASA 자료에 저작권을 허위로 주장하지 말 것이다. SPD-41a 원문은 'If there are no other restrictions, SMD scientific data should be released with a Creative Commons Zero license'라고 명시한다. ORNL DAAC도 NASA Data Use Guidance에 따라 데이터를 제한 없이 공개하되 서지 인용을 요청한다(검색 요약으로 확인한 2차 근거). 결론: 지오코딩한 DEM, 프로파일 통계 맵, 픽스처 같은 파생물은 공개 GitHub에 커밋하거나 재배포해도 된다. TerrainHeight의 원천인 SRTM도 미국 정부 공개 자료다(이 부분은 기억에 근거).",
+     "actionable_step": "data/derived/afrisar/LICENSE.md를 만들어 다음 세 가지를 적는다. ① 원자료: NASA ORNL DAAC, NASA Earth science data policy(CC0 수준, 제한 없음), 원자료에 대한 저작권 주장 없음. ② 우리가 만든 파생 파일은 CC0-1.0(또는 CC-BY-4.0)으로 공개. ③ 코드 라이선스(MIT 또는 Apache-2.0)는 저장소 루트 LICENSE로 분리.",
+     "evidence": "verified",
+     "sources": [
+      "https://cmr.earthdata.nasa.gov/search/collections.umm_json?doi=10.3334/ORNLDAAC/1577",
+      "https://earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-policy",
+      "https://soma.larc.nasa.gov/STP/DYNAMIC/pdf_files/SMD-information-policy-SPD-41a.pdf",
+      "https://www.earthdata.nasa.gov/news/updated-science-information-policy-strengthens-nasa-open-science-practices"
+     ]
+    },
+    {
+     "topic": "(1) 필수 인용 문구와 피치·문서 표기",
+     "detail": "가이드 PDF(zip 안의 comp/Polarimetric_height_profile.pdf)와 CMR CollectionCitations에 같은 문구가 있다: 'Hawkins, B.P., N. Pinto, M. Lavalle, and S. Hensley. 2018. AfriSAR: Polarimetric Height Profiles by TomoSAR, Lope and Rabi Forests, Gabon, 2016. ORNL DAAC, Oak Ridge, Tennessee, USA. https://doi.org/10.3334/ORNLDAAC/1577'. 방법론을 설명할 때는 가이드가 제시한 Lavalle, Hawkins & Hensley (2017) IGARSS, doi:10.1109/IGARSS.2017.8127498을 함께 인용하면 좋다. 가이드 PDF에서 추출한 텍스트는 scratchpad/afrisar/guide_1577.txt에 있다.",
+     "actionable_step": "README, 설계 문서 3장, 피치 슬라이드 각주에 위 인용을 그대로 넣는다. 슬라이드 각주 예: 'Data: Hawkins et al. (2018), NASA ORNL DAAC, doi:10.3334/ORNLDAAC/1577'. NASA 로고(meatball)나 가이드의 Figure 1은 쓰지 말고, 그림은 모두 우리가 데이터에서 직접 렌더링한다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.3334/ORNLDAAC/1577",
+      "https://data.ornldaac.earthdata.nasa.gov/public/afrisar/Polarimetric_height_profile/comp/Polarimetric_height_profile.pdf",
+      "https://doi.org/10.1109/IGARSS.2017.8127498"
+     ]
+    },
+    {
+     "topic": "(2) 원본 zip의 구조와 '필요한 멤버만' 읽는 방법 (로컬 실측)",
+     "detail": "zip 크기는 15,105,133,110 B, SHA-256은 65fb4f1a0f2b923efc4039559008d3808e8a8f4e7000dac44a652357262707fe(계산 34 s)이고, 모든 멤버가 deflate로 압축되어 있다. 각 HDF5 파일에는 Azimuths, Heights, Ranges, Latitude, Longitude, TerrainHeight, Tomogram이 들어 있고 float32, 128×128 청크, gzip 압축이다. 격자는 Lope 2872×1640, Rabi 2871×1650이며 Azimuths 간격 14.4 m, Ranges(slant) 간격 9.993 m, 가이드상 지상 간격은 약 15 m다. 같은 사이트 안에서는 편파가 달라도 TerrainHeight와 Latitude가 완전히 같다(Rabi HH와 HV의 array_equal이 True). 따라서 DEM 작업에는 사이트당 가장 작은 Fourier 단일편파 파일(약 380 MB) 하나면 된다. 읽기 성능 실측: 압축을 풀지 않고 zipfile.open()을 h5py.File()에 넘겨 TerrainHeight를 읽으면 Fourier 파일(378 MB) 1.7 s, Capon 파일(1.4 GB) 2.5 s가 걸린다. 높이 슬라이스 하나는 5.8 s다. 그러나 전체 높이를 포함한 128줄 방위 블록을 zip 안에서 읽으면 37.6 s가 걸려, 볼륨 전체 처리에 약 15분 이상이 든다. 반면 `unzip -j`로 멤버 하나(378 MB)를 푸는 데는 1.6 s면 된다.",
+     "actionable_step": "tools/data/afrisar_fetch.py에 서브커맨드 네 개를 둔다. `list`는 멤버 목록을 출력한다. `verify`는 sha256을 data/README.md에 기록된 값과 비교한다. `aux --site lope rabi`는 zip 안에서 h5py로 TerrainHeight/Latitude/Longitude만 바로 읽어 data/cache/afrisar/{site}_aux_radar.npz로 저장한다. `extract --site lope --algo capon --pol hv`는 shutil.copyfileobj를 16 MB 버퍼로 돌려 data/cache/afrisar/에 멤버를 풀고, 크기가 같으면 건너뛰며, 처리 후 `--clean`으로 삭제한다. 셸에서 직접 할 때: `unzip -j -o data/raw/Polarimetric_height_profile_1577.zip 'Polarimetric_height_profile_1577/data/lope-tomo-capon-hv.h5' -d data/cache/afrisar/`.",
+     "evidence": "verified",
+     "sources": [
+      "local: <repo>/data/Polarimetric_height_profile_1577.zip",
+      "local: <scratchpad>/ztest/inzip2.py"
+     ]
+    },
+    {
+     "topic": "(2) 저장소 데이터 레이아웃, .gitignore, README 출처 기록",
+     "detail": "현재 <repo>은 git 저장소가 아니다. 루트에는 main.py, venv/, Godot.app/, data/(zip만 있음)가 있다. 실측 크기: 30 m DEM npz는 Lope 3.47 MB, Rabi 3.56 MB이다. 레이더 좌표계 Capon HV 프로파일 통계 npz는 10.4 MB, 512² 픽스처 npz는 0.87 MB다. hydro npz(A, S, zt, fill)는 8.4 MB인데 다시 계산할 수 있으므로 커밋하지 않는다. 파생물을 모두 합쳐도 약 25 MB 미만으로, GitHub 경고 기준(50 MiB)과 차단 기준(100 MiB) 아래다.",
+     "actionable_step": "폴더 구조: `data/raw/`(zip을 여기로 `mv`, git 제외), `data/cache/afrisar/`(풀어 둔 h5와 중간 산출물, git 제외), `data/derived/afrisar/`(커밋 대상: lope_srtm_dem_utm32s_30m.tif, rabi_srtm_dem_utm32s_30m.tif, lope_capon_hv_profile_utm32s_30m.tif[bands: ground_offset, peak, canopy_top], {site}_slope_area_bins.csv, {site}_ch4_reference.npz, fit_params.json, SHA256SUMS, LICENSE.md), `data/fixtures/`(lope_tile512_30m.npz, rabi_tile512_30m.npz), `tools/data/`(afrisar_fetch.py, afrisar_geocode.py, afrisar_profile_stats.py, build_afrisar.sh), `tests/`(test_flow_reference.py, test_terrain_stats.py).\n.gitignore에 넣을 항목: `venv/`, `.venv*/`, `__pycache__/`, `Godot.app/`, `.godot/`, `.DS_Store`, `data/raw/`, `data/cache/`, `data/**/*.zip`, `data/**/*.h5`.\ndata/README.md에 적을 항목: 데이터셋명, DOI, 위 인용 문구, 접근 방법(Earthdata Login 계정, bundle URL https://data.ornldaac.earthdata.nasa.gov/protected/bundle/Polarimetric_height_profile_1577.zip), 받은 날짜, 크기, sha256, 사용한 멤버(lope/rabi-tomo-fourier-hv.h5, *-capon-hv.h5), 파생물 생성 명령, 좌표계(EPSG:32732), 수직 기준(WGS84 타원체고), 파생물 라이선스.",
+     "evidence": "verified",
+     "sources": [
+      "https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github"
+     ]
+    },
+    {
+     "topic": "(2) 큰 파생물 보관 수단: LFS, Release, Zenodo",
+     "detail": "GitHub 기준: 50 MiB 초과 시 경고, 100 MiB 초과 시 차단되며, 저장소는 1 GB 미만을 권장하고 5 GB 미만을 강하게 권장한다. Git LFS 무료 할당은 Free/Pro 모두 저장 10 GiB와 월 대역폭 10 GiB다. 결제수단이 없을 때 초과하면 clone 시 포인터 파일만 받게 되고 push가 막힌다. Release 자산은 파일당 2 GiB 미만, 릴리스당 1000개까지이고 전체 크기와 대역폭에는 제한이 없다. Zenodo는 레코드당 파일 100개, 총 50 GB까지 올릴 수 있고 200 GB까지 증량을 요청할 수 있다.",
+     "actionable_step": "25 MB 이하 파생물은 LFS 없이 바로 커밋한다(팀원 clone과 CI가 LFS 할당을 쓰지 않음). 30 m로 지오코딩한 Capon 80층 큐브처럼 50 MB를 넘는 파일은 `gh release create data-v1 data/derived/afrisar/*.tif --notes 'derived from doi:10.3334/ORNLDAAC/1577'`로 올리고, tools/data/fetch_derived.py가 sha256을 확인하며 내려받게 한다. 12월 최종 제출 때 GitHub-Zenodo 연동으로 코드와 파생 데이터 스냅샷에 DOI를 받는다. 원본 15 GB zip은 재배포하지 말고 DOI만 가리킨다. 라이선스상 재배포는 가능하지만, 그러면 원천의 버전 관리와 이용 통계가 끊긴다.",
+     "evidence": "verified",
+     "sources": [
+      "https://docs.github.com/en/billing/concepts/product-billing/git-lfs",
+      "https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases",
+      "https://help.zenodo.org/docs/deposit/manage-files"
+     ]
+    },
+    {
+     "topic": "(3) 지오코딩 방법 비교: GDAL VRT+gdalwarp -geoloc, rasterio, scipy",
+     "detail": "가이드 원문에 따르면 Lat/Lon 룩업은 DEM 위 목표(Heights=0)에서 정확도가 1 m 미만이다. 높이 H인 목표는 평면 오차 X=H/tan(θ)만큼 밀린다. 즉 TerrainHeight 자체는 Lat/Lon으로 정확히 지오코딩할 수 있지만, 지면 오프셋이나 수관 높이 맵을 같은 Lat/Lon으로 옮기면 10 m 오프셋에 약 10 m 규모(입사각 45° 가정)의 수평 오차가 생긴다. 가이드는 VRT의 GEOLOCATION 메타데이터(X_DATASET=HDF5:\"file\"://Longitude, Y_DATASET=//Latitude)와 `gdalwarp -geoloc -t_srs EPSG:4326 -of GTiff x.h5.vrt out.tif` 예시를 주고, '-geoloc'이 정확도에 필수라고 적고 있다. rasterio.warp.reproject에는 src_geoloc_array 인자(x, y 2D 배열 쌍)가 있어 같은 GDAL geoloc 변환기를 Python에서 쓸 수 있다. 이 세션의 이전 방식(geocode.py)은 stride=2 데시메이션, 국지 등장방형 좌표, LinearNDInterpolator 조합이다. 의존성이 추가로 필요 없다는 장점이 있지만 GeoTIFF/CRS가 없어 pysheds나 다른 DEM과 겹쳐 볼 수 없고, stride 2 때문에 거리 방향 해상도도 손해 본다.",
+     "actionable_step": "[A안, 권장] h5py로 TerrainHeight/Lat/Lon을 읽은 뒤 다음과 같이 처리한다(rasterio 미설치로 아직 미검증): `reproject(T, dst, src_crs='EPSG:4326', src_geoloc_array=(lon, lat), dst_transform=from_origin(x0, y1, 30, 30), dst_crs='EPSG:32732', resampling=Resampling.bilinear, dst_nodata=np.nan)`. 결과는 rasterio로 GTiff(compress='deflate', predictor=3, tiled=True)에 쓴다. x0와 y1은 30의 배수로 내림/올림해 모든 레이어의 격자를 정렬한다.\n[B안, CLI] `brew install gdal`로 GDAL 3.13.3을 설치한다(hdf5 의존성 포함). 가이드 VRT에서 SourceFilename을 HDF5:\"lope-tomo-fourier-hv.h5\"://TerrainHeight, SourceBand를 1로 바꿔 lope_terrain.vrt를 만들고 다음을 실행한다: `gdalwarp -geoloc -t_srs EPSG:32732 -tr 30 30 -tap -r bilinear -dstnodata -9999 -co COMPRESS=DEFLATE -co PREDICTOR=3 -co TILED=YES lope_terrain.vrt data/derived/afrisar/lope_srtm_dem_utm32s_30m.tif`. h5는 먼저 data/cache에 압축을 풀어 둔다.\n[C안, 폴백] 기존 scipy 방식을 stride=1과 pyproj UTM 좌표로 바꾼다.\n검증: A안과 C안 결과의 RMS 차이(1 m 안팎 예상)를 확인하고, 결측 경계가 comp/lope_forest.kml 다각형과 일치하는지 본다.",
+     "evidence": "verified",
+     "sources": [
+      "https://data.ornldaac.earthdata.nasa.gov/public/afrisar/Polarimetric_height_profile/comp/Polarimetric_height_profile.pdf",
+      "https://rasterio.readthedocs.io/en/stable/api/rasterio.warp.html"
+     ]
+    },
+    {
+     "topic": "(3) Python 3.14 환경에서 쓸 수 있는 패키지 (PyPI JSON으로 확인, 설치 테스트는 안 함)",
+     "detail": "사용자 venv는 Python 3.14.7(arm64, macOS 27.0)에 numpy 2.5.3, scipy 1.18.1, h5py 3.16.0, numba 0.68.0, matplotlib 3.11.2가 설치되어 있고 rasterio와 pyproj는 없다. PyPI에는 rasterio 1.5.2(2026-09-30, cp314 macosx_15_0_arm64 휠, GDAL 번들)와 pyproj 3.8.0(cp314 macosx_14_0_arm64)이 있다. pysheds 0.5는 py3-none-any 휠이고 numba, scikit-image, pandas, rasterio에 의존하는데, 이들 모두 cp314 휠이 있다. topotoolbox 0.0.12(pytopotoolbox)는 cp311–cp313 휠만 있고 cp314 휠은 없다. Homebrew에는 python@3.14만 설치되어 있다. 라이선스는 pysheds가 GPLv3+, pytopotoolbox가 GPL-3.0이다.",
+     "actionable_step": "메인 환경: `venv/bin/pip install rasterio==1.5.2 pyproj==3.8.0`. 레퍼런스 환경은 따로 둔다: `brew install uv && uv venv -p 3.13 .venv-ref && uv pip install -p .venv-ref topotoolbox==0.0.12 pysheds==0.5 rasterio h5py`. 버전은 requirements-data.txt와 requirements-ref.txt에 고정한다. GPL 코드는 tools/ref/ 스크립트에서 import만 하고, B-PCG 코어(MIT)에는 복사하지 않는다.",
+     "evidence": "verified",
+     "sources": [
+      "https://pypi.org/pypi/rasterio/json",
+      "https://pypi.org/pypi/pyproj/json",
+      "https://pypi.org/pypi/pysheds/json",
+      "https://pypi.org/pypi/topotoolbox/json",
+      "https://github.com/TopoToolbox/pytopotoolbox"
+     ]
+    },
+    {
+     "topic": "(3) 좌표계 EPSG:32732 선택과 수직 기준",
+     "detail": "UTM 32 존은 6–12°E를 덮는다. Lope(11.43–11.83°E, 0.345°S–0.067°N)와 Rabi(9.70–10.11°E, 2.05–1.65°S)가 모두 여기에 들어가므로 한 좌표계를 공유할 수 있다. Lope 동쪽 끝은 중앙자오선(9°E)에서 약 2.8° 떨어져 있어 축척계수가 약 1.0008(길이 오차 0.08%)이다. 경사, 면적, θ 추정에는 무시할 수 있는 수준이다(직접 계산). Lope 북쪽 일부는 적도 이북이어서 32S에서 northing이 10,000,000 m를 넘지만 수학적으로 유효하다. 가이드 Figure 3 설명에 따르면 TerrainHeight는 '타원체 위 지형 높이'다. 따라서 EGM96/EGM2008 기준 DEM(SRTM 타일, Copernicus GLO-30)과 비교할 때는 지오이드 보정이 필요하다. 유역 분석에서는 지오이드 기울기가 매우 작아 영향이 없다.",
+     "actionable_step": "모든 파생 GeoTIFF는 EPSG:32732, 30 m, -tap 정렬로 통일하고 data/README.md에 'vertical: WGS84 ellipsoidal height (per guide Fig. 3)'를 명시한다. 다른 DEM과 비교할 때만 pyproj로 EPSG:4979 → EPSG:4326+3855(EGM2008) 변환을 적용한다(PROJ 지오이드 그리드가 필요하므로 PROJ_NETWORK=ON).",
+     "evidence": "verified",
+     "sources": [
+      "https://data.ornldaac.earthdata.nasa.gov/public/afrisar/Polarimetric_height_profile/comp/Polarimetric_height_profile.pdf"
+     ]
+    },
+    {
+     "topic": "(4) 2장 '레퍼런스 비교' 테스트 픽스처 (Lope DEM)",
+     "detail": "30 m Lope 격자(1527×1458)에서 결측 없는 가장 큰 정사각형은 532셀(16 km)이다. 그 중앙에서 자른 512×512 타일은 결측이 없고 기복이 537 m이며 npz 크기는 0.87 MB다. Rabi 512 타일은 기복 112 m, 0.88 MB다. 커밋하기 좋은 크기이고, 결측 경계 처리 차이 없이 알고리즘끼리 비교할 수 있다. 전체 스와스(925 km², 결측 경계 포함)는 두 번째 테스트로 쓴다. 측정 결과 웅덩이가 Lope 14%, Rabi 23%이므로, 평탄면 처리 방식(B-PCG의 priority-flood+ε, pysheds의 fill_depressions→resolve_flats, TopoToolbox FlowObject의 내부 처리)에 따라 차이가 웅덩이 안에 몰릴 것으로 예상된다. pysheds README의 API 순서는 Grid.from_raster → read_raster → fill_pits → fill_depressions → resolve_flats → flowdir(dirmap=(64,128,1,2,4,8,16,32)) → accumulation이다. Priority-flood의 근거 논문은 Barnes et al. 2014(doi:10.1016/j.cageo.2013.04.024)다.",
+     "actionable_step": "1) B-PCG 라우팅 함수가 큐브스피어 Grid가 아니라 일반 그래프(neighbors (N,8), dist (N,8), area (N,), z (N,), outlet_mask)를 받도록 만들고, 평면 어댑터 `planar_graph(z2d, dx)`를 추가한다. main.py의 Grid(n, R, pos, area)와 같은 인터페이스다.\n2) tests/test_flow_reference.py에서 data/fixtures/lope_tile512_30m.npz로 다음 지표를 계산한다. (a) 채움 영역 밖 셀의 D8 수신 셀 일치율(목표 99% 이상), (b) A ≥ 1 km² 하도 마스크의 Jaccard(목표 0.95 이상), (c) 상위 10개 출구 유역 면적 ±1%, (d) 채움 DEM 차이를 웅덩이 안팎으로 나눠 보고(ε=1e-3 경로 누적 때문에 웅덩이 안은 수 m까지 허용).\n3) 레퍼런스 결과는 .venv-ref에서 tools/ref/run_pysheds.py와 run_topotoolbox.py로 만들어 data/fixtures/lope_tile512_ref_acc.npz로 캐시한다. 그러면 메인 테스트는 GPL 패키지 없이 돈다.",
+     "evidence": "verified",
+     "sources": [
+      "https://raw.githubusercontent.com/mdbartos/pysheds/master/README.md",
+      "https://doi.org/10.1016/j.cageo.2013.04.024",
+      "https://topotoolbox.github.io/pytopotoolbox/_autosummary/topotoolbox.StreamObject.html"
+     ]
+    },
+    {
+     "topic": "(4) 4장 생성 지형과 실제 지형 비교용 기준값 (실측)",
+     "detail": "30 m 격자, 중앙차분 경사 |∇z| 기준. Lope: 평균 0.153, p50 0.121, p90 0.297, p95 0.373, p99 0.522, 스와스 HI 0.292. Rabi: 평균 0.104, p50 0.087, p90 0.200, p95 0.241, p99 0.335, 스와스 HI 0.342. 경계 접촉이 적은 5 km² 이상 유역(약식 기준이며 n=8씩)의 HI 중앙값은 Lope 0.355(IQR 0.278–0.407), Rabi 0.356이다. 사면(A<1e5 m²) D8 경사는 p95 0.386/0.263, p99 0.554/0.366이다. 경사 히스토그램(0–1, 100구간), 0–100 백분위 고도곡선, 유역 HI는 scratchpad/afrisar/out/{site}_ch4_reference.npz에 저장했다. 다만 SRTM의 수관 거칠기 때문에 소규모 경사가 부풀려졌을 수 있다. 그래서 S_crit≈0.39는 상한으로 봐야 한다. HI 정의는 Strahler 1952(doi:10.1130/0016-7606(1952)63[1117:HAAOET]2.0.CO;2)를 따른다.",
+     "actionable_step": "tests/test_terrain_stats.py에서 생성 행성의 한 패치를 같은 30 m 간격으로 리샘플한 뒤 다음을 비교한다. 경사: scipy.stats.ks_2samp의 D 통계량과 wasserstein_distance. 공간 자기상관 때문에 p값 대신 효과크기를 쓰고, 10셀 간격으로 부표본을 뽑는다. 고도: 정규화 고도곡선 간 L1 거리와 HI 차이. 경사-면적: binned median 곡선을 겹쳐 그린다. 행성 스케일이 다르면 S/S_crit와 정규화 고도처럼 무차원량으로 비교한다. 기준값 파일은 data/derived/afrisar/{site}_ch4_reference.npz로 옮겨 커밋한다.",
+     "evidence": "verified",
+     "sources": [
+      "local: <scratchpad>/afrisar/ch4_stats.py",
+      "https://doi.org/10.1130/0016-7606(1952)63[1117:HAAOET]2.0.CO;2"
+     ]
+    },
+    {
+     "topic": "θ 적합 문제의 실무 보정 경로 (파이프라인에 넣을 도구)",
+     "detail": "원시 SRTM으로 구한 θ는 0.07–0.13으로, 하도 경사가 수관이나 잡음에 지배된다는 가설과 맞는다. 쓸 수 있는 도구는 다음과 같다. (a) pytopotoolbox StreamObject에 quantcarve(하천 종단을 τ 분위로 단조 보정), crs, chitransform(a0, mn), ksn(theta 기본값 0.45), removeedgeeffects, knickpointfinder가 있다. quantcarve와 CRS의 근거는 Schwanghart & Scherler 2017(doi:10.5194/esurf-5-821-2017)로, 식생 등으로 생긴 종단 범프를 보정하는 방법이다. (b) χ 적분법(Perron & Royden 2013, doi:10.1002/esp.3302)은 경사를 미분하지 않아 기울기-면적 회귀보다 잡음에 강하다. (c) θ를 θ_ref=0.45로 고정하고 k_sn만 적합하는 관행이 있다(Wobus et al. 2006, doi:10.1130/2006.2398(04); Kirby & Whipple 2012, doi:10.1016/j.jsg.2012.07.009). (d) 수관 아래 지면 정보는 두 가지가 있다. 하나는 TomoSAR 최저 유의 반사 높이로, 평면 오차 H/tan θ에 주의해야 한다. 다른 하나는 NSIDC의 AfriSAR LVIS L2(AFLVIS2 V001)로, CMR 조회 결과 Lope bbox 21 granule(약 2.7 GB), Rabi 13 granule(약 1.7 GB)이며 Earthdata 로그인이 필요하다.",
+     "actionable_step": "tools/analysis/fit_stream_power.py에 `--method {slope_area, chi}`와 `--condition {none, quantcarve:tau=0.1, tomo_ground}` 옵션을 둔다. 결과는 같은 JSON 스키마로 data/derived/afrisar/fit_params.json에 누적해, 보정 전후 θ와 k_sn 비교표를 자동으로 만든다. 10/23 이전에는 θ_ref=0.45로 고정한 k_sn만 사용한다.",
+     "evidence": "verified",
+     "sources": [
+      "https://doi.org/10.5194/esurf-5-821-2017",
+      "https://doi.org/10.1002/esp.3302",
+      "https://doi.org/10.1130/2006.2398(04)",
+      "https://doi.org/10.1016/j.jsg.2012.07.009",
+      "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=AFLVIS2&version=1"
+     ]
+    },
+    {
+     "topic": "파라미터 출처(provenance) 체인: 실측 → 파라미터 → 행성",
+     "detail": "'실제 데이터에서 맞췄다'는 주장을 검증할 수 있게 하려면, 생성된 행성마다 어떤 입력 파일과 방법, 해시에서 파라미터가 나왔는지 기록해야 한다. 실측한 sha256과 파일명이 이미 있으므로 지금 바로 구현할 수 있다.",
+     "actionable_step": "configs/terrain_params.json의 스키마 예: {\"source\":{\"doi\":\"10.3334/ORNLDAAC/1577\",\"member\":\"lope-tomo-fourier-hv.h5\",\"zip_sha256\":\"65fb4f1a…07fe\"},\"dem\":{\"file\":\"data/derived/afrisar/lope_srtm_dem_utm32s_30m.tif\",\"sha256\":\"…\",\"epsg\":32732,\"dx\":30,\"vertical\":\"WGS84 ellipsoid\"},\"fit\":{\"method\":\"slope_area_binned_median\",\"condition\":\"none\",\"theta_ref\":0.45,\"ksn_median\":…,\"ksn_iqr\":[…],\"S_crit\":0.39,\"S_crit_note\":\"p95 hillslope, canopy-biased upper bound\"},\"git_commit\":\"…\"}. 행성 생성기는 이 파일의 해시를 행성 메타데이터와 Godot 씬에 기록한다.",
+     "evidence": "verified",
+     "sources": [
+      "local: <repo>/data/Polarimetric_height_profile_1577.zip (sha256 computed)"
+     ]
+    },
+    {
+     "topic": "(5) 10/23 피치용 '실제 데이터 → 적합 파라미터 → 생성 행성' 슬라이드",
+     "detail": "이미 확보한 수치만으로 4패널을 만들 수 있다. ① Real: Lopé 925 km² 스와스의 30 m 음영기복도, A≥1 km² 하천망, Capon HV 단면 인셋(SRTM 면 위로 수관 +30–40 m, 아래로 −20 m까지 반사). 메시지는 'SRTM은 숲의 윗면을 본다'. ② Fit: slope–area 산점도와 binned median. 원시 SRTM의 θ≈0.1(R²≈0.8)과 문헌 범위 0.35–0.6을 대비하고, 웅덩이 14%/23%와 하도 경사 고원 ≈0.04를 함께 보여 준다. 메시지는 '그대로 맞추면 틀린다, 그래서 보정한다(θ_ref=0.45 고정, k_sn 적합, quantcarve/TomoSAR 지면 보정 예정)'. ③ Generate: 파라미터 카드(θ_ref, k_sn 범위, S_crit≤0.39)에서 큐브스피어 행성 렌더로 이어지는 화살표. ④ Validate: 실제와 생성 지형의 경사 CDF, 정규화 고도곡선 겹침, KS D와 HI(실측 Lope 0.29/0.36). 이 구성에서는 단점으로 보일 수 있는 θ 결과가 지구과학적으로 엄밀하다는 근거가 된다.",
+     "actionable_step": "tools/pitch/make_pitch_figs.py에서 matplotlib로 pitch/fig_real.png, fig_fit.png, fig_validate.png를 만든다. Godot에는 실제 512² 타일을 float32 little-endian raw(godot/data/real/lope_tile512.bin)와 메타 JSON(dx, EPSG, 원점)으로 내보낸다. Godot 4에서 FileAccess.get_buffer()로 읽고 PackedByteArray.to_float32_array()로 변환한다(API 이름은 기억에 근거). 같은 스케일의 생성 패치와 나란히 복셀로 렌더한다. 슬라이드 각주에는 데이터 인용을 넣고 NASA 로고는 쓰지 않는다. 10/15까지 패널 ①②④, 10/20까지 ③을 완성하는 일정을 제안한다.",
+     "evidence": "secondary",
+     "sources": [
+      "https://doi.org/10.3334/ORNLDAAC/1577",
+      "https://doi.org/10.1130/2006.2398(04)"
+     ]
+    }
+   ],
+   "recommended_use": "가장 효과적인 활용: Lopé TerrainHeight를 저장소의 '실제 지형 기준 픽스처'로 표준화한다. 하나의 출처 체인으로 2장(라우팅 검증), 3장(파라미터 적합), 4장(통계 검증), 피치를 모두 먹인다.\n\n1) 정리: `mkdir -p data/raw data/cache/afrisar data/derived/afrisar data/fixtures tools/data tests`. 이어서 `mv data/Polarimetric_height_profile_1577.zip data/raw/`를 하고, .gitignore에 venv/, Godot.app/, .godot/, data/raw/, data/cache/, *.h5, *.zip을 추가한다. git init은 사용자가 직접 한다.\n\n2) 출처 기록: data/README.md에 인용, DOI, Earthdata 접근 방법, sha256(65fb4f1a…07fe), 사용한 멤버, EPSG:32732, '타원체고', 라이선스(CC0 수준 원자료, 파생물 CC0)를 적는다.\n\n3) 의존성: `venv/bin/pip install rasterio==1.5.2 pyproj==3.8.0`. 레퍼런스용으로 `uv venv -p 3.13 .venv-ref` 환경에 topotoolbox와 pysheds를 설치한다.\n\n4) 추출/지오코딩: tools/data/afrisar_fetch.py aux로 zip 안에서 TerrainHeight/Lat/Lon을 사이트당 약 2 s에 읽는다. tools/data/afrisar_geocode.py는 rasterio reproject(src_geoloc_array, bilinear, 30 m, -tap 정렬)로 data/derived/afrisar/{lope,rabi}_srtm_dem_utm32s_30m.tif를 만든다. 결과는 기존 scipy 결과와 RMS로 교차검증한다.\n\n5) 픽스처: 최대 무결측 정사각형 중앙에서 512² 타일을 잘라 data/fixtures/lope_tile512_30m.npz(0.87 MB)로 저장한다. .venv-ref에서 pysheds와 TopoToolbox의 누적유량을 계산해 lope_tile512_ref_acc.npz로 캐시한다. 그다음 tests/test_flow_reference.py에서 D8 일치율 99% 이상, 하도 Jaccard 0.95 이상, 유역 면적 ±1%를 검사한다.\n\n6) 적합: θ_ref=0.45로 고정하고 k_sn과 S_crit를 적합해 configs/terrain_params.json(provenance 포함)에 쓴다. 보정 실험(quantcarve, χ, TomoSAR 지면)은 같은 스키마로 덧붙인다.\n\n7) 검증과 피치: {site}_ch4_reference.npz(Lope 경사 p95 0.373, HI 0.29)와 생성 패치의 KS D, 고도곡선 L1을 비교하는 테스트를 만들고, 같은 그림을 10/23 슬라이드의 'Real → Fit → Generate → Validate' 4패널에 재사용한다.",
+   "caveats": "- rasterio, pyproj, pysheds, topotoolbox는 이 세션에서 설치하지 않았다. 휠이 있는지와 라이선스만 PyPI JSON으로 확인했으므로, 설치와 reproject(src_geoloc_array) 코드는 아직 실행 검증이 안 됐다. GDAL CLI도 설치되어 있지 않다(brew info에서 3.13.3 bottle만 확인).\n- ORNL DAAC의 '제한 없이 공개, 인용 요청' 문구는 검색 요약으로만 확인했다(2차 근거). 원 정책 페이지 URL은 404였다. CMR UseConstraints, NASA Data Use Guidance, SPD-41a 원문은 직접 확인했다.\n- bundle URL에 인증 없이 HEAD 요청을 보냈더니 서명된 URL로 303 리다이렉트되었다. 따라서 GET 다운로드에 Earthdata Login이 필요한지는 확정하지 못했다(/protected/ 경로인 점으로 보아 필요할 가능성이 높다).\n- 4장 기준값은 수관 편향이 있는 SRTM 기반이고, 이전 단계의 stride 2 국지 등장방형 지오코딩 결과에서 계산했다. 완전 유역 판정(경계 접촉 셀이 최대 10개 또는 1% 이하)은 약식이라, Lope 655 km² 유역처럼 실제로는 잘린 유역이 포함됐을 수 있다.\n- 2장 비교 목표치(99%, 0.95, ±1%)는 제안값이다. pytopotoolbox의 평탄면 처리 세부와 pysheds의 결측 경계 처리 방식은 확인하지 않았다.\n- SRTM이 공개 자료라는 점, Godot API 이름, 지오이드 변환 EPSG(3855), Copernicus GLO-30/FABDEM 라이선스(FABDEM은 CC BY-NC-SA로 기억함; 파생물에 NC-SA가 전파될 수 있음)는 기억에 근거하므로 쓰기 전에 확인해야 한다.\n- 로컬 프로젝트 폴더는 아직 git 저장소가 아니며, 이 세션에서 프로젝트 파일은 하나도 수정하지 않았다. 산출물은 scratchpad에만 있다: <scratchpad>/afrisar/ch4_stats.py, …/afrisar/out/{lope,rabi}_ch4_reference.npz, …/afrisar/guide_1577.txt, …/ztest/rabi-tomo-fourier-hh.h5(시험 추출본, 378 MB, 삭제해도 됨)."
+  }
+ }
+]

@@ -1,0 +1,16 @@
+# 연구실 PC 프로필: 보고용 고해상도 실행만 (데모에는 쓰지 않음).
+
+[grid]
+coarse_n_per_face = 256
+l0_n_per_face = 1024           # 약 9.8 km, 629만 칸 (보고용)
+
+[hero]
+spacing_m = 25.0
+basin_size_km = [30, 40]
+
+[corridor]
+voxel_m = 1.0
+size_km = [1.0, 8.0]
+
+[compute]
+numba_threads = 0

@@ -1,0 +1,5 @@
+copernicus-dem-90m pages 424 objects 423602 total GB 185.2 (GiB 172.5)
+ tif 291225 DEM tif 26475 DEM GB 71.1
+ DEM tile size MB: min 0.05 median 2.58 mean 2.68 p90 5.21 max 6.09
+ ext counts {'kml': 79425, 'tif': 291225, 'xml': 26475, 'pdf': 26475, 'html': 1, 'txt': 1}
+ sample keys ['Copernicus_DSM_COG_30_N00_00_E006_00_DEM/AUXFILES/Copernicus_DSM_30_N00_00_E006_00_ACM.kml', 'Copernicus_DSM_COG_30_N00_00_E006_00_DEM/AUXFILES/Copernicus_DSM_COG_30_N00_00_E006_00_EDM.tif', 'Copernicus_DSM_COG_30_N00_00_E006_00_DEM/AUXFILES/Copernicus_DSM_COG_30_N00_00_E006_00_FLM.tif']

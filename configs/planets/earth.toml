@@ -1,0 +1,16 @@
+# 지구 크기 행성 기본값 (설계도 1·3장). 단위: m, kg, s, yr.
+# 중력은 여기 적지 않고 반지름과 밀도에서 계산합니다 (g = 4/3·π·G·ρ·R ≈ 9.82 m/s²).
+
+[planet]
+name = "earth"
+radius_m = 6_371_000.0
+mean_density_kg_m3 = 5514.0
+rotation_period_s = 86_164.1   # 항성일
+seed = 0                       # 히어로 유역과 함께 6주차에 고정합니다
+
+[landscape]
+theta = 0.45                   # 강이 하류로 갈수록 완만해지는 정도 (생성기에서는 고정)
+s_crit_default = 0.6           # 산비탈이 버티는 가장 가파른 경사 [m/m], 암석별 값은 geology 가 정함
+slope_exponent_n = 1.0         # 1.5~2 도 시험 (설계도 5장 6번)
+max_flow_iterations = 200      # 물길 방향 맞추기 반복 상한 (설정값)
+stop_dz_m = 0.1                # 멈춤: 방향 변화 0 그리고 고도 변화 < 0.1 m

@@ -1,0 +1,84 @@
+[project]
+name = "b-pcg"
+version = "0.1.0"
+description = "판·비·강이 만든 지구 크기 행성과 그 땅속을 함께 만드는 절차적 행성 생성기"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "numpy>=2.5",
+    "scipy>=1.18",
+    "numba>=0.68",
+]
+
+# 패키지 묶음. 설치: uv sync (기본 = dev, data, mesh) / uv sync --group analysis / uv sync --all-groups
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "ruff>=0.16",
+    "hypothesis>=6.168",
+    "matplotlib>=3.11",
+]
+data = [
+    "h5py>=3.16",
+    "h5netcdf>=1.8",
+    "xarray>=2026.9",
+    "rasterio>=1.5",
+    "pyogrio>=0.13",
+    "geopandas>=1.2",
+    "pyarrow>=25",
+]
+mesh = [
+    "scikit-image>=0.26",
+    "trimesh>=5.1",
+]
+# 비교·분석 도구 (MIT). analysis/ 와 tests/ 에서만 씁니다.
+analysis = [
+    "pyflwdir>=0.5.12",
+    "landlab>=2.11",
+]
+# GPL-3.0 도구. analysis/ 에서만 import 합니다 (ruff TID251 로 막음). 결과는 미리 계산해 저장합니다.
+gpl = [
+    "fastscapelib>=0.3",
+    "topotoolbox>=0.0.12",
+]
+notebook = [
+    "jupyterlab>=4.6",
+    "ipykernel>=7.4",
+]
+
+[tool.uv]
+default-groups = ["dev", "data", "mesh"]
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bpcg"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["analysis/legacy", "engine", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "TID"]
+ignore = ["E741"]  # 수식 기호 l, I, O 를 변수 이름으로 쓸 수 있게
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"fastscapelib".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
+"topotoolbox".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
+"pysheds".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
+"richdem".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
+
+[tool.ruff.lint.per-file-ignores]
+"analysis/**" = ["TID251", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: 오래 걸리는 검사 (빼려면 -m 'not slow')",
+    "data: data/pilot 이 있어야 도는 검사 (없으면 건너뜀)",
+    "godot: Godot 4.7.2 실행 파일이 있어야 도는 검사 (없으면 건너뜀)",
+]

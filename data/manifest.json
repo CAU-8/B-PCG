@@ -1,0 +1,636 @@
+{
+  "version": 1,
+  "generated": "2026-10-02",
+  "files": [
+    {
+      "path": "external/afrisar/Polarimetric_height_profile_1577.zip",
+      "bytes": 15105133110,
+      "sha256": "65fb4f1a0f2b923efc4039559008d3808e8a8f4e7000dac44a652357262707fe",
+      "group": "external",
+      "source_url": "https://daac.ornl.gov/AFRISAR/guides/Polarimetric_height_profile.html",
+      "license": "NASA EOSDIS / ORNL DAAC 공개 자료 (이용 제한 없음, 인용 요청). 인용: Hawkins, Pinto, Lavalle, Hensley 2018, AfriSAR: Polarimetric Height Profiles by TomoSAR, Lope and Rabi Forests, Gabon, 2016, ORNL DAAC, doi:10.3334/ORNLDAAC/1577",
+      "redownload": "manual",
+      "note": "AfriSAR TomoSAR 숲 높이 단면 (Gabon Lope·Rabi, HDF5 18개, 레이더 경사 거리 좌표에 칸마다 위경도). NASA Earthdata 로그인이 필요해 손으로 받습니다. 지금 파이프라인에서는 쓰지 않습니다 (식생 구조 참고 후보)."
+    },
+    {
+      "path": "pilot/aridity/Global-AI_ET0__annual_v3_1.zip",
+      "bytes": 645783906,
+      "sha256": "a661a94f1c69077a9673d370288297de453dadd6b797ee72ac8a46c450021a09",
+      "group": "pilot",
+      "source_url": "https://ndownloader.figshare.com/files/56300327",
+      "license": "figshare 표기는 CC BY 4.0, 그러나 동봉 Readme 는 '비상업 이용' 이라고 적음 (두 표기가 다름). 인용: Zomer, Xu, Trabucco 2022 Sci Data 9:409",
+      "redownload": "script",
+      "note": "Global Aridity Index v3.1 연간 (ai_v31_yr.tif 등, /vsizip/ 으로 바로 읽음). AI 는 0.0001 을 곱함, 바다 0, 65535 는 매우 습한 칸. 기간 1970-2000."
+    },
+    {
+      "path": "pilot/chelsa/CHELSA_bio12_1981-2010_V.2.1.tif",
+      "bytes": 349254899,
+      "sha256": "918441cac0b633227d2a6dcc0ddcfb5efd40e015a426951a01cfbf9ba2f7a22c",
+      "group": "pilot",
+      "source_url": "https://os.unil.cloud.switch.ch/chelsa02/chelsa/global/bioclim/bio12/1981-2010/CHELSA_bio12_1981-2010_V.2.1.tif",
+      "license": "CC0 (예전 스크립트 기준, 온라인 확인 안 됨). 인용: Karger et al. 2017 Sci Data 4:170122; Karger et al. 2021 EnviDat doi:10.16904/envidat.228.v2.1",
+      "redownload": "script",
+      "note": "1981-2010 연강수. 값이 이미 mm/yr (kg m-2 yr-1). 84°N 까지. nodata 65535."
+    },
+    {
+      "path": "pilot/etopo/ETOPO_2022_v1_60s_N90W180_surface.nc",
+      "bytes": 478290125,
+      "sha256": "74bbc5c23e85188d93f0beba8116babf69e1a8f160e8dc9f053bf8df01b197b6",
+      "group": "pilot",
+      "source_url": "https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/60s/60s_surface_elev_netcdf/ETOPO_2022_v1_60s_N90W180_surface.nc",
+      "license": "퍼블릭 도메인 (NOAA NCEI, 예전 스크립트에는 CC0). 인용: NOAA NCEI 2022, ETOPO 2022 Global Relief Model, doi:10.25921/fd45-gt74",
+      "redownload": "script",
+      "note": "60초(약 1.8 km) 지표 고도, 육지+해저, m (EGM2008). 빙상은 윗면 고도. 위도가 남->북 순서 (0번 행 = 남쪽)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N00_00_E030_00_DEM.tif",
+      "bytes": 4888670,
+      "sha256": "3689f130c35d5947ea53e472bec4f715e044e9edc2e1add93009802f608ce1c0",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N00_00_E030_00_DEM/Copernicus_DSM_COG_30_N00_00_E030_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N13_00_E075_00_DEM.tif",
+      "bytes": 5219857,
+      "sha256": "297d3b38932819f80657eaefd8803c6e102fbe8b48ce6aa4c7fe8eef747e188a",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N13_00_E075_00_DEM/Copernicus_DSM_COG_30_N13_00_E075_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N14_00_W091_00_DEM.tif",
+      "bytes": 5388336,
+      "sha256": "2d784b26b039cfcf1403c91d8b382b42b9a8478224a3f61df132b4f7e2f279d8",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N14_00_W091_00_DEM/Copernicus_DSM_COG_30_N14_00_W091_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N15_00_W062_00_DEM.tif",
+      "bytes": 587827,
+      "sha256": "c87a78083a3a4b11979b7ddec7f9a1b5e00355745091151e375c1572dbfbf825",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N15_00_W062_00_DEM/Copernicus_DSM_COG_30_N15_00_W062_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N15_00_W091_00_DEM.tif",
+      "bytes": 5493642,
+      "sha256": "a9aeb4896b8fbfed80aad470882cd4e806b11143710c8bf1fb473025a076cb33",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N15_00_W091_00_DEM/Copernicus_DSM_COG_30_N15_00_W091_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N21_00_E100_00_DEM.tif",
+      "bytes": 5435070,
+      "sha256": "795e2b5e1902ee141de2bd584361113d1eff1123b5add15b7002beb8b18a7a3a",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N21_00_E100_00_DEM/Copernicus_DSM_COG_30_N21_00_E100_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N22_00_E120_00_DEM.tif",
+      "bytes": 3108049,
+      "sha256": "a4b7746ca97304382e2b31498e344a873104b19edbbc0e2d0feb39647e5ba386",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N22_00_E120_00_DEM/Copernicus_DSM_COG_30_N22_00_E120_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N23_00_E120_00_DEM.tif",
+      "bytes": 4874239,
+      "sha256": "ce7758a10637e24f9da5dc1292811fb3eafcc63b680b31fc06d7869eaf063161",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N23_00_E120_00_DEM/Copernicus_DSM_COG_30_N23_00_E120_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N23_00_E121_00_DEM.tif",
+      "bytes": 2889228,
+      "sha256": "22c6fd971e6a9a4f9ab1be575eef811b906421bc8d19f6e64c59ff38bcb9b6bf",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N23_00_E121_00_DEM/Copernicus_DSM_COG_30_N23_00_E121_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N24_00_E120_00_DEM.tif",
+      "bytes": 1960522,
+      "sha256": "6d7a4640f4ef90315772bef3a3ef85856cc63d00af1041c7440be745b95c85e2",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N24_00_E120_00_DEM/Copernicus_DSM_COG_30_N24_00_E120_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N24_00_E121_00_DEM.tif",
+      "bytes": 4531670,
+      "sha256": "8c068e707cf10df1462faa5c3eed1c3be7a1de409ee4c0b8c08f6c43d9205697",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N24_00_E121_00_DEM/Copernicus_DSM_COG_30_N24_00_E121_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N27_00_E090_00_DEM.tif",
+      "bytes": 5176337,
+      "sha256": "54740a8441dfd58c6ed644b125d52e9e3d27b52c5ac1497e542241158cf801ec",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N27_00_E090_00_DEM/Copernicus_DSM_COG_30_N27_00_E090_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N30_00_E097_00_DEM.tif",
+      "bytes": 4892259,
+      "sha256": "47f3c07217a1c7c59fecaac99e0a905194b8021e4c7351b9f9eeb0ad3d64fbe5",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N30_00_E097_00_DEM/Copernicus_DSM_COG_30_N30_00_E097_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N30_00_E101_00_DEM.tif",
+      "bytes": 4987365,
+      "sha256": "6455279f86a0edfea1bc91dc8b07e0ffacb5cbe6399c5a6f055ce962dd13eab9",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N30_00_E101_00_DEM/Copernicus_DSM_COG_30_N30_00_E101_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N30_00_E102_00_DEM.tif",
+      "bytes": 5228577,
+      "sha256": "4c82f297117504cbe69366f63f047854b0eeadf515b50a7ace8394dc9fd3ae7f",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N30_00_E102_00_DEM/Copernicus_DSM_COG_30_N30_00_E102_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N30_00_E103_00_DEM.tif",
+      "bytes": 5169591,
+      "sha256": "2009766e446d6a33537e013dc0fa1944ce51857b0574182583e2d35eca2a8ab8",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N30_00_E103_00_DEM/Copernicus_DSM_COG_30_N30_00_E103_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N31_00_E103_00_DEM.tif",
+      "bytes": 5256040,
+      "sha256": "8ac838093f914969aa004f0900d4bd4b660428ebb362c9e21f071fb343ed26c0",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N31_00_E103_00_DEM/Copernicus_DSM_COG_30_N31_00_E103_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N31_00_E104_00_DEM.tif",
+      "bytes": 5287087,
+      "sha256": "d8d2c420aed4763ced1c11a5b8dfa16487ccc522cd2ed0652412e0af7162c5ea",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N31_00_E104_00_DEM/Copernicus_DSM_COG_30_N31_00_E104_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N33_00_E109_00_DEM.tif",
+      "bytes": 5537127,
+      "sha256": "2f32ba28bbd5b43759687e3c199b5c8c00113a174b881b6274efea2d8e005358",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N33_00_E109_00_DEM/Copernicus_DSM_COG_30_N33_00_E109_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N33_00_W115_00_DEM.tif",
+      "bytes": 5142559,
+      "sha256": "c69ff5f74d4463b6c7bf9afed420e8522f46fb0be8ca0ef63c709d76515ddfc1",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N33_00_W115_00_DEM/Copernicus_DSM_COG_30_N33_00_W115_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N34_00_E109_00_DEM.tif",
+      "bytes": 4975422,
+      "sha256": "81862980d1c806a514d383f04b5091cb1077abb6b70ddef1258e02b923092da6",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N34_00_E109_00_DEM/Copernicus_DSM_COG_30_N34_00_E109_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N35_00_W084_00_DEM.tif",
+      "bytes": 5401359,
+      "sha256": "89b9d4c345db48c682ca47bc74faa3ed75647f03f7d921ff734c3c6353db7438",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N35_00_W084_00_DEM/Copernicus_DSM_COG_30_N35_00_W084_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N36_00_W122_00_DEM.tif",
+      "bytes": 4707229,
+      "sha256": "45b61f8fd8ae783387163faab2994ccf6177d9ebc2711cfb4cfe87ee7af1d36c",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N36_00_W122_00_DEM/Copernicus_DSM_COG_30_N36_00_W122_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N36_00_W123_00_DEM.tif",
+      "bytes": 94789,
+      "sha256": "025247657558a85278dba8a5fac81da58e2ff1c2f2f85ac881dc04661d062996",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N36_00_W123_00_DEM/Copernicus_DSM_COG_30_N36_00_W123_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N37_00_W122_00_DEM.tif",
+      "bytes": 5663243,
+      "sha256": "d4679c8be50fa7f9ef5f6e6ac20fd6609f9c5ac4271868d1db8da4ad11364a05",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N37_00_W122_00_DEM/Copernicus_DSM_COG_30_N37_00_W122_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N37_00_W123_00_DEM.tif",
+      "bytes": 2432905,
+      "sha256": "977e99bc16ecdc9d65e0d2bc0920ffe483f554ee4c8659d95b4189e377924787",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N37_00_W123_00_DEM/Copernicus_DSM_COG_30_N37_00_W123_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N38_00_E015_00_DEM.tif",
+      "bytes": 1580985,
+      "sha256": "05763e23b268ccf77411e7f7961ffaa2804ecb9e58045dd95bb9b69e60105493",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N38_00_E015_00_DEM/Copernicus_DSM_COG_30_N38_00_E015_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N38_00_E016_00_DEM.tif",
+      "bytes": 2640368,
+      "sha256": "202ee4376509d44c5aa553a0a8e13074a4da3fa25ca57ba1a4aa914aa6290817",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N38_00_E016_00_DEM/Copernicus_DSM_COG_30_N38_00_E016_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N38_00_E028_00_DEM.tif",
+      "bytes": 5373722,
+      "sha256": "1e0f8df3a3a2667144b367ea159266173bbb5b4630b94ae6dc89ffcf93d2a4fd",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N38_00_E028_00_DEM/Copernicus_DSM_COG_30_N38_00_E028_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N38_00_E100_00_DEM.tif",
+      "bytes": 4728967,
+      "sha256": "5ce94f7c801366a7215055694cdbb82794e9badd1bf99e05e740349ea3a575d2",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N38_00_E100_00_DEM/Copernicus_DSM_COG_30_N38_00_E100_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N39_00_E016_00_DEM.tif",
+      "bytes": 4406967,
+      "sha256": "40f6a8535e58bd7ca6ce141e2d870ca576587b7eb25a256ea1d2864e191e54a3",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N39_00_E016_00_DEM/Copernicus_DSM_COG_30_N39_00_E016_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N39_00_E100_00_DEM.tif",
+      "bytes": 4406766,
+      "sha256": "aad04b679ee83b19869608f571bfc0e84fd73defc2fdeef2db253216a86c97f8",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N39_00_E100_00_DEM/Copernicus_DSM_COG_30_N39_00_E100_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N39_00_W078_00_DEM.tif",
+      "bytes": 5551579,
+      "sha256": "1257d5d2185dd6efc2e4d31b51d953e7ead6a00fa01583716b887c5184f763c1",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N39_00_W078_00_DEM/Copernicus_DSM_COG_30_N39_00_W078_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N40_00_W124_00_DEM.tif",
+      "bytes": 5517349,
+      "sha256": "b1fc855f21e0842696dd2f6375f2cfe11e6c9223f80bf0ba3c49f2630469c35e",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N40_00_W124_00_DEM/Copernicus_DSM_COG_30_N40_00_W124_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N40_00_W125_00_DEM.tif",
+      "bytes": 1600180,
+      "sha256": "e910a02cabd02da602b8402eed73cc046799e3759a50bdb0bf760e0424923250",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N40_00_W125_00_DEM/Copernicus_DSM_COG_30_N40_00_W125_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N41_00_E048_00_DEM.tif",
+      "bytes": 4516044,
+      "sha256": "bbebc70f6499dec35d7b6cbf2eecbb75063ba24d0e2b2b547ea2ca162fe3d448",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N41_00_E048_00_DEM/Copernicus_DSM_COG_30_N41_00_E048_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N41_00_E072_00_DEM.tif",
+      "bytes": 5100762,
+      "sha256": "112485bf9c5c7c79c3e9f7c41fcb638460fa58d648eb611b0c3f6a9c23af6548",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N41_00_E072_00_DEM/Copernicus_DSM_COG_30_N41_00_E072_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N41_00_W124_00_DEM.tif",
+      "bytes": 5520855,
+      "sha256": "fa944d217aefa428f0b335776c0b78d968d18537125321a5d17bbdf39c1af040",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N41_00_W124_00_DEM/Copernicus_DSM_COG_30_N41_00_W124_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N41_00_W125_00_DEM.tif",
+      "bytes": 912776,
+      "sha256": "b0a328b607b8cb1d1e4aafb02eb802f2b2d23cf03f2113b1906a8f4bfa30fad7",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N41_00_W125_00_DEM/Copernicus_DSM_COG_30_N41_00_W125_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_N44_00_E011_00_DEM.tif",
+      "bytes": 5740774,
+      "sha256": "393e90c584572eb43c59b9171c26bc39184370aa54151a6fc9ef43ae9dc52df9",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_N44_00_E011_00_DEM/Copernicus_DSM_COG_30_N44_00_E011_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S03_00_W079_00_DEM.tif",
+      "bytes": 5229424,
+      "sha256": "4de3241b647ab72fab9ef155fb7c794b15bebdfba020efdcfe0bd62d3089c755",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S03_00_W079_00_DEM/Copernicus_DSM_COG_30_S03_00_W079_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S13_00_E133_00_DEM.tif",
+      "bytes": 5538485,
+      "sha256": "b2f179a3b146c3ee469de17e0cb31a5aa5f12fc58497c1cb70f53b803839f88b",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S13_00_E133_00_DEM/Copernicus_DSM_COG_30_S13_00_E133_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S17_00_W068_00_DEM.tif",
+      "bytes": 5303834,
+      "sha256": "2d3decc81322fff053f8fc3ac19e33540804c3a43b41b01fd6c02ca757582aa7",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S17_00_W068_00_DEM/Copernicus_DSM_COG_30_S17_00_W068_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S17_00_W069_00_DEM.tif",
+      "bytes": 4063149,
+      "sha256": "1b3d6c1fd0e7510031d70a8a89c991f76a5e694afe8c474b20a6d55c4147a994",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S17_00_W069_00_DEM/Copernicus_DSM_COG_30_S17_00_W069_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S18_00_E145_00_DEM.tif",
+      "bytes": 5333595,
+      "sha256": "c0e416b26cb4375b7d45cb81ae04c677f632b6378a714ac0c3e5a7dc5708abd6",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S18_00_E145_00_DEM/Copernicus_DSM_COG_30_S18_00_E145_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S19_00_E145_00_DEM.tif",
+      "bytes": 5235840,
+      "sha256": "9c1b9125ec1bee9880a2691d63054f9f7adbc4610d8b7b41e143c39a03cf3fb1",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S19_00_E145_00_DEM/Copernicus_DSM_COG_30_S19_00_E145_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S19_00_W044_00_DEM.tif",
+      "bytes": 5300690,
+      "sha256": "7d40f131bf9fcb3c4a864355402781d7a4cde8d070f90902f627a6e88f3b0142",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S19_00_W044_00_DEM/Copernicus_DSM_COG_30_S19_00_W044_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S22_00_E017_00_DEM.tif",
+      "bytes": 3932734,
+      "sha256": "180b26c9d89c74fbeae3dc666106e28c7f147c51a761bc6b0bf8c4c8084ae4ca",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S22_00_E017_00_DEM/Copernicus_DSM_COG_30_S22_00_E017_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S23_00_E017_00_DEM.tif",
+      "bytes": 4633218,
+      "sha256": "834bde042d533f84a3bf274f7f0199968c62ee47144875d419c469e47f2c7456",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S23_00_E017_00_DEM/Copernicus_DSM_COG_30_S23_00_E017_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S24_00_E016_00_DEM.tif",
+      "bytes": 4813819,
+      "sha256": "5c56c6edae920090a668a5dd7e128c226f91c735099668a0549222723846540d",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S24_00_E016_00_DEM/Copernicus_DSM_COG_30_S24_00_E016_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S24_00_E031_00_DEM.tif",
+      "bytes": 4860649,
+      "sha256": "9176f147fae5be2fbb547e166fab7141fc9ecc472b0252bb7acedfe578c2624a",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S24_00_E031_00_DEM/Copernicus_DSM_COG_30_S24_00_E031_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S24_00_E134_00_DEM.tif",
+      "bytes": 5025175,
+      "sha256": "6acf1a886ba038cd3615c51330daed65b67eac388388f617ede258e5e962e5bf",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S24_00_E134_00_DEM/Copernicus_DSM_COG_30_S24_00_E134_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S24_00_W066_00_DEM.tif",
+      "bytes": 4822988,
+      "sha256": "4358135c8fede5b78ad3728653255577c8a47e4bacb8eb5e1755b8b5c85825c9",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S24_00_W066_00_DEM/Copernicus_DSM_COG_30_S24_00_W066_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S32_00_W068_00_DEM.tif",
+      "bytes": 4735887,
+      "sha256": "aabac141ba1c0ec3be1cdfad1c3d7b09fb05348dd579cba4989e3691ecaa0d30",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S32_00_W068_00_DEM/Copernicus_DSM_COG_30_S32_00_W068_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/glo90/Copernicus_DSM_COG_30_S37_00_E148_00_DEM.tif",
+      "bytes": 5192223,
+      "sha256": "140768e252cfb9bb470e5e67b241f13e68060b2060cc7580bab6bf2e77a4af7d",
+      "group": "pilot",
+      "source_url": "https://copernicus-dem-90m.s3.amazonaws.com/Copernicus_DSM_COG_30_S37_00_E148_00_DEM/Copernicus_DSM_COG_30_S37_00_E148_00_DEM.tif",
+      "license": "Copernicus WorldDEM-90 라이선스 (무료, 출처 문구와 면책 문장 의무, data/README.md 참고)",
+      "redownload": "script",
+      "note": "1°x1° 타일, 3초, float32, m (EGM2008). nodata 없음, 바다 = 0, pixel-is-point (경계가 반 칸 밀림)."
+    },
+    {
+      "path": "pilot/octopus/crn_aus_basins.geojson",
+      "bytes": 53766585,
+      "sha256": "1b81ccc51ae281996042a29342e1f209aa30f4ec24215a801884b65340ae0fc0",
+      "group": "pilot",
+      "source_url": "http://geoserver.octopusdata.org/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=be10-denude:crn_aus_basins&outputFormat=application/json&srsName=EPSG:4326&sortBy=OBSID1",
+      "license": "미해결: 예전 스크립트는 CC BY-NC-SA 4.0, octopusdata.org 바닥글과 Zenodo 기록은 CC BY 4.0. 확인 전까지 CC BY-NC-SA 4.0 으로 취급. 인용: Codilean et al. 2022 ESSD 14:3695-3713, doi:10.5194/essd-14-3695-2022",
+      "redownload": "script",
+      "note": "10Be 유역 평균 침식률 (EBE_MMKYR, mm/kyr). WFS 에서 500개씩 받아 합친 파일. 결측값 -9999.99 / -99.99, 고쳐야 할 도형이 있음 (make_valid). WFS 내용이 바뀌면 다시 받았을 때 크기와 해시가 달라질 수 있음."
+    },
+    {
+      "path": "pilot/octopus/crn_int_basins.geojson",
+      "bytes": 227813884,
+      "sha256": "decb76fd8309e670741ab9388f82453e90b2e232608968e86c62ee49d61b68cb",
+      "group": "pilot",
+      "source_url": "http://geoserver.octopusdata.org/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=be10-denude:crn_int_basins&outputFormat=application/json&srsName=EPSG:4326&sortBy=OBSID1",
+      "license": "미해결: 예전 스크립트는 CC BY-NC-SA 4.0, octopusdata.org 바닥글과 Zenodo 기록은 CC BY 4.0. 확인 전까지 CC BY-NC-SA 4.0 으로 취급. 인용: Codilean et al. 2022 ESSD 14:3695-3713, doi:10.5194/essd-14-3695-2022",
+      "redownload": "script",
+      "note": "10Be 유역 평균 침식률 (EBE_MMKYR, mm/kyr). WFS 에서 500개씩 받아 합친 파일. 결측값 -9999.99 / -99.99, 고쳐야 할 도형이 있음 (make_valid). WFS 내용이 바뀌면 다시 받았을 때 크기와 해시가 달라질 수 있음."
+    },
+    {
+      "path": "pilot/octopus/pilot_basins.csv",
+      "bytes": 6656,
+      "sha256": "ba96aa106387a286d6a62da30f404a2379d4e90d02b0e3d06e216475fd1526c0",
+      "group": "pilot",
+      "license": "OCTOPUS 에서 골라낸 자료라 OCTOPUS 조건을 따름",
+      "redownload": "script",
+      "note": "configs/pilot_basins.csv 의 사본 (줄바꿈 CRLF). 파일럿 유역 40개와 GLO-90 타일 목록. 기준은 configs 쪽."
+    },
+    {
+      "path": "pilot/riveratlas/RiverATLAS_Data_v10.gdb.zip",
+      "bytes": 2506480742,
+      "sha256": "b0cce3819c995a7c8cf62be4102626415b799d84bdea37d38b56da2248e9dc4d",
+      "group": "pilot",
+      "source_url": "https://ndownloader.figshare.com/files/20087321",
+      "license": "CC BY 4.0 (일부 열은 ODbL 1.0, HydroATLAS TechDoc 4.1절). 인용: Linke et al. 2019 Sci Data 6:283",
+      "redownload": "script",
+      "note": "하천 구간 8,477,883개 (gdb, 풀면 약 7 GB). sgr_dk_rav 는 dm/km, slp_dg_* 는 도x10. 경사는 EarthEnv-DEM90 에서 계산된 값."
+    }
+  ],
+  "glo90_no_tile": []
+}

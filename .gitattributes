@@ -1,0 +1,17 @@
+# 줄바꿈: 저장소 안에서는 LF. Windows 스크립트만 CRLF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 바이너리
+*.png binary
+*.jpg binary
+*.pdf binary
+*.npz binary
+*.npy binary
+*.glb binary
+*.tif binary
+*.bin binary
+*.f32 binary
+*.u8 binary
