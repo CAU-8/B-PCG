@@ -420,7 +420,7 @@
 | 모듈 | 함수 | 계약 |
 |---|---|---|
 | `hero/finder.py` | `find_hero(planet, cfg) -> HeroSite` | L0 육지 칸에 점수를 매기고 가장 높은 칸을 고릅니다. 점수 = 0.3·융기 기울기(정규화) + 0.4·지표 탄산염 + 0.15·기복(정규화) + 0.15·200 km 안 건조 칸 비율. 동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다. 위도 55° 넘으면 0점. HeroSite: 중심 단위 벡터, 동·북 단위 벡터, L0 칸, 점수 내역 |
-| `hero/domain.py` | `hero_graph(site, cfg) -> (graph, unit_points)` | 접평면 평면 격자(한 변 `profile.hero.size_m`, 간격 `spacing_m`, 노드 흔들기). 국소 (동, 북)를 구면 점으로 바꿔 L0 값을 표본합니다 |
+| `hero/domain.py` | `hero_graph(site, cfg) -> (graph, unit_points)` | 접평면 평면 격자(한 변 `profile.hero.size_m`, 간격 `spacing_m`, 노드 흔들기). 국소 (동, 북)를 구면 점으로 바꿔 L0 값을 표본합니다. 영역은 이 두 값으로 늘리고 줄입니다(`--set profile.hero.size_m=40000.0`). 한 변은 간격의 가장 가까운 정수배로 맞추고(실제 값은 `diag['grid']`), 칸 수가 5000²를 넘으면 오류입니다. 영역이 클수록 바다에서 먼 후보 칸이 필요하고, 회랑은 영역 안으로 줄여 맞춥니다. 거친 격자 한 변이 16칸보다 작으면 먼저 풀기를 건너뜁니다 |
 | `hero/refine.py` | `refine_hero(planet, site, cfg) -> HeroState` | L0 값 보간(U, 유출, 기온, 강수, 깎인 두께, 습곡 위상, 템플릿은 nearest) → 지질 기둥 → 경계조건 → 2~4단계를 같은 함수로 |
 | `hero/flat.py` | `flat_hero(cfg) -> HeroState` | L0 없이 가짜 경계조건: 남북 방향 섭입 단면 U(y) = 0.1 mm/yr + 2 mm/yr·exp(−((y − 0.3L)/0.25L)²), 템플릿 1, 유출 0.5 m/yr, 기온 15 °C, 출구는 남쪽 가장자리 가운데 5칸(z = 200 m) |
 

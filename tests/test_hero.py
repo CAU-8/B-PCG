@@ -17,10 +17,12 @@ from bpcg.geology.model import (
     rock_at,
 )
 from bpcg.hero.domain import (
+    MAX_HERO_CELLS,
     edge_cells,
     edge_hit,
     hero_flat_graph,
     hero_graph,
+    hero_grid_info,
     hero_grid_size,
     local_to_unit,
     tangent_frame,
@@ -468,3 +470,41 @@ def test_run_stages_validation(cfg):
     assert set(st.fields) == STAGE_FIELDS
     # 솔버는 융기를 바꾸지 않으므로 돌려준 융기는 넣은 값과 같습니다.
     np.testing.assert_array_equal(st.fields["uplift_m_per_yr"], args[3])
+
+
+# ---------------------------------------------------------------- 히어로 영역 크기
+def test_hero_size_rounds_to_spacing_and_caps():
+    """히어로 한 변은 간격의 가장 가까운 정수배로 맞추고, 칸 수 상한을 넘으면 알려 줍니다."""
+    cfg = load_config("earth", "tiny", overrides={"profile.hero.size_m": 6_460.0})
+    assert hero_grid_size(cfg) == (65, 100.0)
+    info = hero_grid_info(cfg)
+    assert info["size_m"] == 6_500.0 and info["requested_size_m"] == 6_460.0
+    assert info["n_cells"] == 65 * 65
+    side = math.isqrt(MAX_HERO_CELLS)
+    big = load_config("earth", "tiny", overrides={"profile.hero.size_m": (side + 1) * 100.0})
+    with pytest.raises(ValueError, match="상한"):
+        hero_grid_size(big)
+    ok = load_config("earth", "tiny", overrides={"profile.hero.size_m": side * 100.0})
+    assert hero_grid_size(ok)[0] == side
+
+
+@pytest.mark.parametrize("size_m", [1_500.0, 12_800.0])
+def test_flat_hero_size_is_adjustable(size_m):
+    """영역을 줄이거나 늘려도 평면 히어로가 수렴하고, 회랑은 영역 안에 맞춰집니다.
+
+    1.5 km (15칸) 는 거친 격자 먼저 풀기를 건너뛰고, 12.8 km (128칸) 는 씁니다.
+    """
+    from bpcg.bake.corridor import choose_corridor
+
+    cfg = load_config("earth", "tiny", overrides={"profile.hero.size_m": size_m})
+    hero = flat_hero(cfg)
+    n, dx = hero_grid_size(cfg)
+    assert hero.graph.shape == (n, n)
+    assert hero.diag["grid"]["size_m"] == n * dx
+    assert hero.diag["solver"]["converged"]
+    assert hero.diag["stages"]["warm_start"].get("skipped", False) == (n // 4 < 16)
+    cor = choose_corridor(hero, cfg)
+    x0, x1, y0, y1 = cor["rect"]
+    half = 0.5 * n * dx
+    assert -half <= x0 < x1 <= half and -half <= y0 < y1 <= half
+    assert cor["length_m"] <= n * dx and cor["width_m"] <= n * dx

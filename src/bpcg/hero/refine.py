@@ -29,6 +29,7 @@ from bpcg.hero.domain import (
     edge_cells,
     edge_hit,
     hero_graph,
+    hero_grid_info,
     hero_grid_size,
     local_to_unit,
 )
@@ -248,6 +249,7 @@ def refine_hero(planet: PlanetState, site, cfg, log: Log = None) -> HeroState:
     diag = {
         "seconds": {**sec, "stages_detail": st.diag["seconds"]},
         "boundary": boundary,
+        "grid": hero_grid_info(cfg),
         "solver": sd,
         "stages": {k: v for k, v in st.diag.items() if k not in ("seconds", "solver")},
         "scorecard": card,

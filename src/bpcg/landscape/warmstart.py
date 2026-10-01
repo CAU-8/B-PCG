@@ -18,6 +18,7 @@ from bpcg.geology.model import LayerColumns
 from bpcg.landscape.solver import solve_steady_state
 
 MIN_COARSE_CELLS = 64  # 거친 격자 한 변이 이보다 작아지면 더 거칠게 하지 않습니다
+MIN_WARM_START_CELLS = 16  # 거친 격자 한 변이 이보다 작으면 먼저 풀기를 건너뜁니다 (작은 히어로)
 
 
 def _block_index(graph: CellGraph, factor: int) -> tuple[np.ndarray, int, int]:
@@ -42,7 +43,7 @@ def coarse_warm_start(
     factor: int = 4,
     max_iter: int | None = None,
     log=None,
-) -> tuple[np.ndarray, dict]:
+) -> tuple[np.ndarray | None, dict]:
     """평면 그래프의 시작 지형 [m] (N,) 을 거친 격자 풀이로 만듭니다.
 
     graph: 평면 CellGraph. is_outlet: (N,) bool. z_outlet: 스칼라 또는 (N,) [m].
@@ -50,10 +51,13 @@ def coarse_warm_start(
     extra_inflow: (N,) [m³/yr] 또는 None.
     거친 칸 값: 융기·유출은 칸 평균, 들어오는 물은 합, 출구는 고운 출구가 하나라도 있으면 출구
     (높이는 그 중 최솟값), 지질 기둥은 거친 칸 가운데 고운 칸의 기둥.
-    반환: (시작 지형, 진단 dict: 단계별 칸 수·반복 수·수렴·시간).
+    반환: (시작 지형, 진단 dict: 단계별 칸 수·반복 수·수렴·시간). 거친 격자 한 변이
+    MIN_WARM_START_CELLS 보다 작으면 (작은 히어로) 먼저 풀지 않고 (None, {"skipped": True, …}).
     """
     if graph.kind != "flat":
         raise ValueError("coarse_warm_start 는 평면 그래프에서만 씁니다")
+    if min(graph.shape) // factor < MIN_WARM_START_CELLS:
+        return None, {"levels": [], "seconds": 0.0, "skipped": True}
     t0 = time.perf_counter()
     n = graph.n_cells
     outlet = np.asarray(is_outlet, dtype=bool)

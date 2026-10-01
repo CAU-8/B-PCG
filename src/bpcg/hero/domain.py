@@ -21,6 +21,9 @@ _STREAM_HERO_JITTER = 9101  # 히어로 노드 흔들기 시드 갈래 (다른 �
 EDGES = ("north", "south", "east", "west")
 
 
+MAX_HERO_CELLS = 5_000 * 5_000  # 히어로 칸 수 상한 (노트북 기준 laptop 기본 1280² 의 약 15 배)
+
+
 @dataclass(frozen=True)
 class EdgeHit:
     """영역 가운데에서 한 방향으로 그은 반직선이 가장자리와 만나는 곳.
@@ -36,7 +39,12 @@ class EdgeHit:
 
 
 def hero_grid_size(cfg) -> tuple[int, float]:
-    """(한 변 칸 수 n, 간격 [m]). n = round(size_m / spacing_m)."""
+    """(한 변 칸 수 n, 간격 [m]). n = round(size_m / spacing_m).
+
+    히어로 영역은 profile.hero.size_m (한 변) 과 spacing_m (칸 간격) 으로 늘리거나 줄입니다.
+    size_m 이 spacing_m 의 정수배가 아니면 가장 가까운 정수배로 맞춥니다 (실제 한 변 = n·간격).
+    n² 가 MAX_HERO_CELLS 를 넘으면 메모리·시간이 감당되지 않으므로 ValueError 입니다.
+    """
     hero = cfg.profile.hero
     size = float(hero.size_m)
     dx = float(hero.spacing_m)
@@ -45,9 +53,25 @@ def hero_grid_size(cfg) -> tuple[int, float]:
             f"profile.hero 는 spacing_m > 0, size_m ≥ 3·spacing_m 이어야 합니다: {size}, {dx}"
         )
     n = int(round(size / dx))
-    if abs(n * dx - size) > 1e-6 * size:
-        raise ValueError(f"profile.hero.size_m {size} 이 spacing_m {dx} 의 정수배가 아닙니다")
+    if n * n > MAX_HERO_CELLS:
+        side = math.isqrt(MAX_HERO_CELLS)
+        raise ValueError(
+            f"히어로 {n}² = {n * n:,} 칸은 상한 {side}² 를 넘습니다. profile.hero.size_m 을 "
+            f"{side * dx:.0f} m 이하로 줄이거나 spacing_m 을 {size / side:.1f} m 이상으로 늘리세요"
+        )
     return n, dx
+
+
+def hero_grid_info(cfg) -> dict:
+    """히어로 격자 진단값: 한 변 칸 수, 간격, 실제 한 변, 설정한 한 변, 칸 수 [m]."""
+    n, dx = hero_grid_size(cfg)
+    return {
+        "n_side": n,
+        "spacing_m": dx,
+        "size_m": n * dx,
+        "requested_size_m": float(cfg.profile.hero.size_m),
+        "n_cells": n * n,
+    }
 
 
 def hero_jitter_seed(cfg) -> int:

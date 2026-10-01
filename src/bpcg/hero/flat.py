@@ -34,7 +34,7 @@ from bpcg.geology.model import (
     build_columns,
     fold_displacement,
 )
-from bpcg.hero.domain import edge_cells, hero_flat_graph, hero_grid_size
+from bpcg.hero.domain import edge_cells, hero_flat_graph, hero_grid_info, hero_grid_size
 from bpcg.landscape.solver import solve_steady_state
 from bpcg.landscape.warmstart import coarse_warm_start
 from bpcg.pipeline import (
@@ -253,6 +253,7 @@ def flat_hero(cfg, log: Log = None) -> HeroState:
             "erosion_period_yr": erosion_period_yr(U),
             "presolve_z_max_m": float(z_pre.max()),
         },
+        "grid": hero_grid_info(cfg),
         "solver": sd,
         "stages": {k: v for k, v in st.diag.items() if k not in ("seconds", "solver")},
         "scorecard": card,
