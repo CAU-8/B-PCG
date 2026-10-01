@@ -281,6 +281,7 @@ def run_stages_2_to_4(
     z_seafloor: np.ndarray | None = None,
     temperature_sea_c: float | np.ndarray | None = None,
     max_iter: int | None = None,
+    z_init: np.ndarray | None = None,
 ) -> StageResult:
     """2~4단계를 한 경로로 돌립니다 (pipeline.md 1장, L0 와 히어로가 같은 코드).
 
@@ -297,6 +298,7 @@ def run_stages_2_to_4(
     temperature_sea_c: 해수면 기온 [°C] (스칼라 또는 (N,)). 주면 T = 이 값 − lapse·max(z, 0),
       없으면 planet.climate.surface_temperature(위도, z) 입니다.
     max_iter: 솔버 반복 상한 (None 이면 landscape.max_flow_iterations).
+    z_init: (N,) 솔버 시작 지형 [m] 또는 None (지각 세기 한계의 두 번째 풀이에서 첫 결과를 넘김).
 
     순서: 솔버 → 선상지(꼭짓점이 있으면 reroute_after_fans 로 물길만 다시, Qs 도 새 물길로)
     → 바다 칸 수심 → 기복 보정(구면만) → 최종 고도 기온 → 물 → 지표 암석 → 흙 → 지하수면 → 동굴.
@@ -353,11 +355,15 @@ def run_stages_2_to_4(
         R_eff,
         columns,
         cfg,
+        z_init=z_init,
         extra_inflow=inflow,
         max_iter=max_iter,
         log=_every(log, SOLVER_LOG_EVERY),
     )
     sec["solver"] = time.perf_counter() - t
+    if res.uplift_effective is not None:
+        # 솔버가 실제로 쓴 융기. 지금은 넣은 U 와 같습니다(지각 세기 한계는 바깥 두 번 풀기).
+        U = np.asarray(res.uplift_effective, dtype=np.float64)
     sd = res.diag()
     _say(
         log,
@@ -396,7 +402,7 @@ def run_stages_2_to_4(
         z[ocean] = zs[ocean]
 
     # --- 3단계: 기복 보정 (L0 만)
-    out: dict[str, np.ndarray] = {}
+    out: dict[str, np.ndarray] = {"uplift_m_per_yr": U}
     z_air = z
     if sphere:
         t = time.perf_counter()
@@ -520,6 +526,65 @@ def run_stages_2_to_4(
 
 
 # ---------------------------------------------------------------- 행성
+def l0_config(cfg):
+    """L0 에서 쓰는 설정. L0 칸(19.5 km)은 모두 큰 강이라 퇴적 항(G)이 물길 방향을 진동시켜
+    수렴하지 않으므로(보정 실험: 200회 미수렴, 동결 26%), landscape.deposition_g_l0 로 바꿉니다.
+    히어로(L2)는 원래 deposition_g 를 씁니다."""
+    g_l0 = cfg.landscape.get("deposition_g_l0", None)
+    if g_l0 is None:
+        return cfg
+    return cfg.with_overrides({"landscape.deposition_g": float(g_l0)})
+
+
+def strength_limited_uplift(graph, ocean, fields, columns, cfg, log: Log = None):
+    """지각 세기 한계로 줄인 융기 (pipeline.md 7.1 추가).
+
+    지각은 무한히 높은 산을 버티지 못해 고원이 약 5 km 위로는 거의 오르지 않습니다
+    (티베트 평균 약 5 km). 한계가 없으면 넓은 충돌대에서 강이 1,500 km 를 흐르며 높이를 쌓아
+    L0 골짜기 바닥이 10 km 를 넘습니다.
+    그래서 한 번 풀어 평균 지표(골짜기 바닥 + 기복 보정)를 구하고,
+    U' = max(U·max(0, 1 − (z_mean/z_lim)^p), 기본 깎임) 으로 줄인 뒤 같은 지형에서 다시 풉니다.
+    반복 안에 되먹임을 넣으면 융기와 높이가 진동하므로(실험: 진폭 2.7 km) 바깥에서 한 번만 고칩니다.
+
+    cfg: uplift.elevation_limit_m (없으면 그대로), uplift.elevation_limit_power,
+    uplift.craton_erosion_m_per_myr.
+    반환: (U' (N,) [m/yr], 첫 풀이 지형 또는 None, 진단 dict).
+    """
+    U = np.asarray(fields["uplift_m_per_yr"], dtype=np.float64)
+    z_lim = cfg.uplift.get("elevation_limit_m", None)
+    if z_lim is None:
+        return U, None, {"applied": False}
+    power = float(cfg.uplift.get("elevation_limit_power", 4.0))
+    t = time.perf_counter()
+    res = solve_steady_state(
+        graph, ocean, 0.0, U, fields["runoff_eff_m_per_yr"], columns, cfg,
+        max_iter=solver_max_iter(cfg, "planet"), log=None,
+    )  # fmt: skip
+    _, z_mean = subgrid_relief(
+        graph, res.z, res.k_s, res.s_crit_surface, fields["runoff_eff_m_per_yr"], U, ocean, cfg
+    )
+    taper = np.clip(1.0 - (np.maximum(z_mean, 0.0) / float(z_lim)) ** power, 0.0, 1.0)
+    base = float(cfg.uplift.craton_erosion_m_per_myr) * 1e-6
+    U2 = np.where(U > 0.0, np.maximum(U * taper, np.minimum(U, base)), U)
+    land = ~ocean
+    diag = {
+        "applied": True,
+        "elevation_limit_m": float(z_lim),
+        "first_pass_iterations": res.iterations,
+        "first_pass_converged": res.converged,
+        "first_pass_z_mean_max_m": float(z_mean[land].max()) if land.any() else 0.0,
+        "reduced_cells": int(((U2 < U) & land).sum()),
+        "seconds": time.perf_counter() - t,
+    }
+    _say(
+        log,
+        f"[2단계] 지각 세기 한계 {float(z_lim):.0f} m: 첫 풀이 평균 지표 최고 "
+        f"{diag['first_pass_z_mean_max_m']:.0f} m, 융기를 줄인 칸 {diag['reduced_cells']}, "
+        f"{diag['seconds']:.1f} s",
+    )
+    return U2, res.z, diag
+
+
 def generate_planet(cfg, log: Log = print) -> PlanetState:
     """행성 하나를 1~4단계로 만듭니다 (pipeline.md 1·13장, `bpcg planet`).
 
@@ -570,16 +635,23 @@ def generate_planet(cfg, log: Log = print) -> PlanetState:
     _say(log, f"[1단계] 지질 템플릿 칸 수 {geo_diag['template_counts']}, {sec['geology']:.2f} s")
 
     ocean = np.asarray(fields["is_ocean"], dtype=bool)
+    cfg_l0 = l0_config(cfg)
+    t = time.perf_counter()
+    uplift, z_start, limit_diag = strength_limited_uplift(
+        l0, ocean, fields, columns, cfg_l0, log=log
+    )
+    sec["strength_limit"] = time.perf_counter() - t
     t = time.perf_counter()
     st = run_stages_2_to_4(
         l0,
         ocean,
         0.0,
-        fields["uplift_m_per_yr"],
+        uplift,
         fields["runoff_eff_m_per_yr"],
         fields["precip_m_per_yr"],
         columns,
-        cfg,
+        cfg_l0,
+        z_init=z_start,
         log=log,
         runoff=fields["runoff_m_per_yr"],
         is_ocean=ocean,
@@ -587,6 +659,7 @@ def generate_planet(cfg, log: Log = print) -> PlanetState:
         max_iter=solver_max_iter(cfg, "planet"),
     )
     fields.update(st.fields)
+    st.diag["strength_limit"] = limit_diag
     sec["stages"] = time.perf_counter() - t
     check_fields(fields)
 

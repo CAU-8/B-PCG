@@ -32,6 +32,7 @@ from bpcg.hero.domain import (
     hero_grid_size,
     local_to_unit,
 )
+from bpcg.landscape.warmstart import coarse_warm_start
 from bpcg.pipeline import (
     HeroState,
     Log,
@@ -194,6 +195,11 @@ def refine_hero(planet: PlanetState, site, cfg, log: Log = None) -> HeroState:
 
     t = time.perf_counter()
     inflow = bc["extra_inflow"] if bc["inflow_m3_per_yr"] > 0 else None
+    z_init, warm = coarse_warm_start(
+        graph, bc["is_outlet"], bc["z_outlet_m"], sampled["uplift_m_per_yr"],
+        sampled["runoff_eff_m_per_yr"], columns, cfg,
+        extra_inflow=inflow, max_iter=solver_max_iter(cfg, "hero"), log=log,
+    )  # fmt: skip
     st = run_stages_2_to_4(
         graph,
         bc["is_outlet"],
@@ -208,7 +214,9 @@ def refine_hero(planet: PlanetState, site, cfg, log: Log = None) -> HeroState:
         log=log,
         runoff=sampled["runoff_m_per_yr"],
         max_iter=solver_max_iter(cfg, "hero"),
+        z_init=z_init,
     )
+    st.diag["warm_start"] = warm
     sec["stages"] = time.perf_counter() - t
 
     fields = {

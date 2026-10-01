@@ -5,6 +5,7 @@ coarse_n_per_face = 128        # 거친 격자 약 78 km (판·기후)
 l0_n_per_face = 512            # L0 약 19.5 km, 157만 칸
 
 [hero]
+max_flow_iterations = 800      # 히어로는 칸이 많아 반복이 더 필요 (1280² 에서 약 450~600회)
 spacing_m = 25.0               # L2 히어로 유역
 size_m = 32_000.0              # 한 변 (30~40 km)
 

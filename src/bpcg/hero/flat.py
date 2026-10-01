@@ -36,6 +36,7 @@ from bpcg.geology.model import (
 )
 from bpcg.hero.domain import edge_cells, hero_flat_graph, hero_grid_size
 from bpcg.landscape.solver import solve_steady_state
+from bpcg.landscape.warmstart import coarse_warm_start
 from bpcg.pipeline import (
     HeroState,
     Log,
@@ -190,6 +191,10 @@ def flat_hero(cfg, log: Log = None) -> HeroState:
         )
 
     t = time.perf_counter()
+    z_init, warm = coarse_warm_start(
+        graph, is_outlet, OUTLET_Z_M, U, runoff_eff, columns, cfg,
+        max_iter=solver_max_iter(cfg, "hero"), log=log,
+    )  # fmt: skip
     st = run_stages_2_to_4(
         graph,
         is_outlet,
@@ -203,7 +208,9 @@ def flat_hero(cfg, log: Log = None) -> HeroState:
         runoff=runoff,
         temperature_sea_c=TEMPERATURE_SEA_C,
         max_iter=solver_max_iter(cfg, "hero"),
+        z_init=z_init,
     )
+    st.diag["warm_start"] = warm
     sec["stages"] = time.perf_counter() - t
 
     fields = {

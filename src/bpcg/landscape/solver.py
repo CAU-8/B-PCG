@@ -93,6 +93,7 @@ class SolverResult:
     seconds: float = 0.0
     n_frozen: int = 0
     frozen: np.ndarray | None = None
+    uplift_effective: np.ndarray | None = None  # 솔버가 실제로 쓴 U [m/yr]
 
     def fields(self, cast: bool = False) -> dict[str, np.ndarray]:
         """FIELDS 이름으로 된 필드 dict.
@@ -509,8 +510,8 @@ def solve_steady_state(
     area = np.ascontiguousarray(graph.area, dtype=np.float64)
     width = np.sqrt(area)
     w_water = area * R if inflow is None else area * R + inflow
-    w_sed = U * area
     inv_n = 1.0 / p["n"]
+    w_sed = U * area
 
     rcv = None
     flips = np.zeros(n, dtype=np.int32)
@@ -583,4 +584,5 @@ def solve_steady_state(
         seconds=time.perf_counter() - t0,
         n_frozen=int(n_frozen),
         frozen=flips >= max_flips,
+        uplift_effective=U,
     )

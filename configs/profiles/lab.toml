@@ -5,6 +5,7 @@ coarse_n_per_face = 256
 l0_n_per_face = 1024           # 약 9.8 km, 629만 칸 (보고용)
 
 [hero]
+max_flow_iterations = 1000      # 히어로는 칸이 많아 반복이 더 필요 (1280² 에서 약 450~600회)
 spacing_m = 25.0
 size_m = 40_000.0
 
