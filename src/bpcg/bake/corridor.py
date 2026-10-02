@@ -22,7 +22,12 @@
 | strata_top.bin/.json | 재질 부피의 윗면 (지표, 수평 4 m) — 명세에 더한 파일 |
 | entrances.json | 동굴 입구 캡슐 양 끝 (엔진 좌표, 입구로 옮겨 갈 때) — 명세에 더한 파일 |
 | cave_mouth.bin/.json | 지표 점의 동굴 거리 d_cave (높이맵 격자). 음수면 입구 구멍 |
+| heightmap_detail.bin/.json | heightmap + 프랙탈 디테일 (bake.detail). 보기용, 솔버 결과 아님 |
+| cave_mouth_detail.bin/.json | cave_mouth 와 같되 heightmap_detail 지표의 d_cave |
 | manifest.json | 국소 좌표 원점, 엔진 변환, 회랑 사각형, 파일 목록, 시드, 설정 해시, git 커밋 |
+
+*_detail 두 파일은 detail.fractal_gain > 0 일 때만 씁니다. 0 이거나 [detail] 이 없으면 쓰지 않고
+지난 굽기가 남긴 것도 지웁니다(엔진은 heightmap_detail 이 있을 때만 '프랙탈 디테일' 층을 둡니다).
 
 모든 높이맵은 bake.heightmap.write_heightmap 형식입니다. 값은 해수면 기준 고도 [m] 그대로이고
 origin 의 y 가 −y_offset 이라 엔진 Y = 값 − y_offset 입니다(origin + (col·간격, 값, row·간격)).
@@ -39,6 +44,7 @@ import numpy as np
 
 from bpcg import __version__
 from bpcg.bake.bundle import git_commit, write_json
+from bpcg.bake.detail import add_fractal_detail, band_limits, detail_settings
 from bpcg.bake.heightmap import write_heightmap
 from bpcg.bake.mesh import EngineFrame, build_mesh, cave_surface, export_glb
 from bpcg.geology import rocks as rk
@@ -53,11 +59,22 @@ MAX_CANDIDATES = 256  # 회랑 시작점 후보 수 상한
 STRATA_CHUNK_POINTS = 4_000_000  # 재질 부피를 이만큼씩 나눠 계산 (메모리 상한)
 WATER_SURFACE_TOL_M = 0.01  # 수면이 지표보다 이만큼 이상 낮으면 물 없음으로 봄
 CAVE_MOUTH_CLIP_M = 20.0  # cave_mouth 값(지표 점의 d_cave)을 ±이 값으로 자름 (inf 없애기)
+DETAIL_STEMS = ("heightmap_detail", "cave_mouth_detail")  # 프랙탈 디테일을 켰을 때만 쓰는 높이맵
+DETAIL_MIN_SAMPLES = 8  # 높이맵 한 변이 이보다 짧으면 스펙트럼을 잴 수 없어 디테일을 건너뜀
 
 
 def _log(log, msg: str) -> None:
     if log is not None:
         log(msg)
+
+
+def _remove_stems(folder: Path, stems) -> None:
+    """높이맵 파일 한 쌍(<stem>.bin/.json)이 남아 있으면 지웁니다 (끈 층의 지난 결과)."""
+    for stem in stems:
+        for ext in (".bin", ".json"):
+            p = folder / f"{stem}{ext}"
+            if p.exists():
+                p.unlink()
 
 
 def _centers(graph) -> tuple[np.ndarray, np.ndarray]:
@@ -357,6 +374,41 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
     files["cave_mouth"]["n_open"] = int((mouth < 0.0).sum())
     sec["cave_mouth"] = time.perf_counter() - t
 
+    # --- 프랙탈 디테일 (보기용): 히어로 격자가 못 그린 짧은 파장을 이어 그린 지표와 그 지표의
+    # 동굴 입구 구멍. 끄면(fractal_gain 0) 쓰지 않고 지난 굽기의 파일도 지웁니다. 엔진은
+    # heightmap_detail 이 있을 때만 '프랙탈 디테일' 층을 둡니다.
+    det = detail_settings(cfg)
+    if det is not None:
+        k_lo, k_hi = band_limits(voxel, det["min_wavelength_m"], det["max_wavelength_m"])
+        if k_hi <= k_lo or min(surf.shape) < DETAIL_MIN_SAMPLES:
+            _log(log, f"[굽기] 프랙탈 디테일: 간격 {voxel:g} m 회랑에는 더할 파장이 없습니다")
+            det = None
+    if det is not None:
+        t = time.perf_counter()
+        try:
+            surf_d, dmeta = add_fractal_detail(surf, gx, gy, voxel, wet, vol, cfg, mouth=mouth)
+        except ValueError as e:
+            _log(log, f"[굽기] 프랙탈 디테일을 건너뜁니다: {e}")
+            det = None
+    if det is not None:
+        files["heightmap_detail"] = write_heightmap(out / "heightmap_detail", surf_d, voxel, origin)
+        files["heightmap_detail"]["detail"] = dmeta
+        ev = vol.evaluate_grid(gx.ravel(), gy.ravel(), surf_d.reshape(-1, 1), keys=("d_cave",))
+        mouth_d = np.clip(ev["d_cave"].reshape(gx.shape), -CAVE_MOUTH_CLIP_M, CAVE_MOUTH_CLIP_M)
+        files["cave_mouth_detail"] = write_heightmap(out / "cave_mouth_detail", mouth_d, voxel,
+                                                     origin)  # fmt: skip
+        files["cave_mouth_detail"]["n_open"] = int((mouth_d < 0.0).sum())
+        sec["detail"] = time.perf_counter() - t
+        _log(
+            log,
+            f"[굽기] 프랙탈 디테일: RMS {dmeta['rms_m']:.2f} m (최대 {dmeta['max_abs_m']:.1f} m), "
+            f"β {dmeta['beta_before']:.2f} → {dmeta['beta_after']:.2f} "
+            f"({dmeta['beta_wavelength_m'][0]:g}–{dmeta['beta_wavelength_m'][1]:g} m), "
+            f"웅덩이 채움 {dmeta['n_filled']} 칸, {sec['detail']:.2f} s",
+        )
+    else:
+        _remove_stems(out, DETAIL_STEMS)
+
     # --- 히어로 전체 25 m 지표
     g = hero_state.graph
     ny, nx = g.shape
@@ -438,6 +490,9 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
     ]  # fmt: skip
     if "caves" in files:
         file_names.append("caves.glb")
+    for stem in DETAIL_STEMS:
+        if stem in files:
+            file_names += [f"{stem}.bin", f"{stem}.json"]
     sec["total"] = time.perf_counter() - t_all
     manifest = {
         "format": "bpcg-corridor",
@@ -490,6 +545,7 @@ def bake_corridor(hero_state, cfg, out_dir, engine_dir=None, log=print) -> dict:
             shutil.copy2(out / name, eng / name)
         if "caves" not in files and (eng / "caves.glb").exists():
             (eng / "caves.glb").unlink()
+        _remove_stems(eng, [s for s in DETAIL_STEMS if s not in files])
         _log(log, f"[굽기] 엔진 폴더에도 복사했습니다: {eng}")
     _log(log, f"[굽기] 끝: {sec['total']:.2f} s → {out}")
     return manifest
