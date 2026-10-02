@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B-PCG 스튜디오</title>
+<link rel="icon" type="image/gif" href="/static/logo.gif">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img class="logo" id="brand-logo" src="/static/logo.gif" alt="" width="38" height="38" onerror="this.hidden=true">
+    <div>
+      <h1>B-PCG 스튜디오</h1>
+      <p class="sub">매개변수 → 생성 → 지도·그림 → Godot</p>
+    </div>
+  </div>
+  <div class="run-picker">
+    <label for="run-select">볼 결과</label>
+    <select id="run-select" aria-describedby="run-chip"></select>
+    <button id="runs-refresh" class="icon-btn" type="button" title="실행 목록 새로 고침" aria-label="실행 목록 새로 고침">↻</button>
+    <span id="run-chip" class="status-pill" hidden></span>
+  </div>
+  <div class="godot">
+    <button id="godot-play" class="btn" type="button" title="고른 결과의 회랑 파일을 engine/baked 로 복사하고 Godot 로 걸어 봅니다">Godot로 보기</button>
+    <button id="godot-editor" class="btn ghost" type="button" title="고른 결과를 engine/baked 로 복사하고 Godot 편집기를 엽니다">편집기로 열기</button>
+    <div id="godot-status" class="godot-status" role="status" aria-live="polite"></div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="panel" id="settings" aria-label="실행 설정">
+    <div class="panel-head">
+      <h2>실행 설정</h2>
+      <span class="hint" id="version"></span>
+    </div>
+    <a class="jump-link" href="#results">↑ 결과 보기로</a>
+
+    <div class="grid2">
+      <label class="field"><span>행성 설정</span><select id="planet"></select></label>
+      <label class="field"><span>프로필</span><select id="profile"></select></label>
+    </div>
+    <p class="hint" id="profile-hint"></p>
+    <div class="grid2">
+      <label class="field"><span>시드 (planet.seed)</span><input id="seed" type="number" min="0" step="1" value="0"></label>
+      <div class="field"><span>실행 이름</span><span class="hint">날짜-프로필-시드로 자동</span></div>
+    </div>
+    <label class="check"><input type="checkbox" id="flat"><span>평면 히어로만 만들기<br><span class="hint">행성 없이 가짜 경계조건으로 히어로만 풉니다. 빠르지만 행성 지도와 그림은 없습니다.</span></span></label>
+    <label class="check"><input type="checkbox" id="figures" checked><span>끝나면 결과 그림 그리기<br><span class="hint">analysis/figures/render_results.py 를 이어서 돌립니다 (노트북 기준 수십 초).</span></span></label>
+
+    <div class="actions">
+      <button id="run-btn" class="btn primary" type="button">실행</button>
+      <button id="cancel-btn" class="btn danger" type="button" hidden>취소</button>
+    </div>
+    <p id="run-msg" class="msg" role="status" aria-live="polite"></p>
+    <p id="validate-msg" class="msg error" role="status" aria-live="polite" hidden></p>
+
+    <div class="changed-bar">
+      <span>기본값에서 바꾼 값 <strong id="changed-count">0</strong>개</span>
+      <button id="reset-all" class="link" type="button">모두 되돌리기</button>
+    </div>
+
+    <section class="area-box" aria-labelledby="area-title">
+      <h3 id="area-title">영역·해상도 <span class="badge cat-resolution">프로필</span></h3>
+      <p class="hint">히어로 유역(가까이 보는 땅)과 걷는 회랑의 크기·간격입니다. 키우면 시간이 칸 수에 비례해 늘고, 히어로가 클수록 바다에서 먼 육지 자리가 필요합니다.</p>
+      <div id="area-params"></div>
+      <div class="area-derived" id="area-derived" aria-live="polite"></div>
+    </section>
+
+    <div class="param-tools">
+      <input id="param-search" type="search" placeholder="매개변수 찾기 (이름·설명, 예: 융기, theta)" aria-label="매개변수 찾기">
+      <div id="cat-filter" class="chips" role="group" aria-label="분류로 거르기"></div>
+    </div>
+    <div id="param-groups"></div>
+  </aside>
+
+  <main id="results">
+    <a class="jump-link" href="#settings">실행 설정·매개변수로 ↓</a>
+    <nav class="tabs" role="tablist" aria-label="결과 보기">
+      <button class="tab" role="tab" data-tab="progress" aria-selected="true">진행</button>
+      <button class="tab" role="tab" data-tab="overview" aria-selected="false">개요</button>
+      <button class="tab" role="tab" data-tab="planet" aria-selected="false">행성 지도</button>
+      <button class="tab" role="tab" data-tab="hero" aria-selected="false">히어로 지도</button>
+      <button class="tab" role="tab" data-tab="figures" aria-selected="false">그림</button>
+      <button class="tab" role="tab" data-tab="reference" aria-selected="false">매개변수 설명</button>
+    </nav>
+
+    <section class="tabpanel" id="tab-progress" role="tabpanel"></section>
+    <section class="tabpanel" id="tab-overview" role="tabpanel" hidden></section>
+    <section class="tabpanel" id="tab-planet" role="tabpanel" hidden></section>
+    <section class="tabpanel" id="tab-hero" role="tabpanel" hidden></section>
+    <section class="tabpanel" id="tab-figures" role="tabpanel" hidden></section>
+    <section class="tabpanel" id="tab-reference" role="tabpanel" hidden></section>
+  </main>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<dialog id="lightbox" class="lightbox"><button class="btn small close" type="button">닫기</button><img alt=""></dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>

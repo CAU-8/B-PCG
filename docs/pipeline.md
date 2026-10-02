@@ -472,6 +472,7 @@
 | `bake/bundle.py` | `write_bundle(path, graph, fields, meta)` / `read_bundle(path)` | `manifest.json`(bpcg 버전, git 커밋, 설정 해시, 그래프 종류·모양·R·간격, `face_basis`, 필드 목록: 이름·파일·dtype·단위·그룹·모양) + 그룹 폴더의 `<이름>.npy`. 그래프는 `graph.npz`(pos, nbr, dist, area) |
 | `bake/corridor.py` | `bake_corridor(hero_state, cfg, out_dir, engine_dir=None)` | 아래 표 |
 | `bake/textures.py` | `face_textures(planet, out_dir)` | 면 6개 PNG(평균 고도 색, 판, 해양저 나이, 강수). 궤도 장면용 |
+| `bake/globe.py` | `bake_globe(planet, cfg, out_dir, hero=…, face_basis=…, engine_dir=…)` | 엔진 지구본 장면의 자료 `globe/`: `globe.json`(면 기저, 등각 대응 규칙, 필드마다 이름·단위·색표·설명·읽는 법) + 면당 N²(기본 256) 필드 `.bin`과 (N+1)² 모서리 고도. Godot 좌표 = (x, z, −y). 형식은 engine/GLOBE.md |
 
 **회랑 굽기.**
 
@@ -488,10 +489,29 @@
 | `strata.u8/.json` | 회랑 재질 부피(수평 4 m, 수직 2 m, uint8). 위는 `strata_top`을 따라감 |
 | `strata_top.bin/.json` | 재질 부피의 윗면(수평 4 m) |
 | `cave_mouth.bin/.json` | 지표 점의 동굴 거리 d_cave(높이맵 격자, ±20 m로 자름). 엔진은 음수인 곳의 지형을 뚫어 동굴 입구를 보입니다. SDF라 쌍선형 보간해도 구멍 가장자리가 매끄럽습니다 |
+| `heightmap_detail.bin/.json` | `heightmap`에 프랙탈 디테일을 더하고 새로 생긴 웅덩이를 채운 지표(같은 격자, `bake/detail.py`). 보기용이고 솔버 결과가 아닙니다. `detail.fractal_gain` > 0일 때만 씁니다 |
+| `cave_mouth_detail.bin/.json` | `cave_mouth`와 같되 d_cave를 `heightmap_detail` 지표에서 잰 값. 엔진의 '프랙탈 디테일' 층이 켜져 있으면 이것으로 지형을 뚫습니다 |
 | `entrances.json` | 동굴 입구 캡슐 양 끝(엔진 좌표): `inside`는 통로 한가운데, `outside`는 산비탈 밖 공중. 엔진의 입구로 옮겨 가기(T)가 씁니다. 목록을 줄이지 않고 씁니다 |
 | `manifest.json` | 국소 좌표 원점(구면 단위 벡터, 동·북 벡터, 위경도), 회랑 사각형, 파일 목록, 시드, 설정 해시, git 커밋 |
 
 엔진 축은 X = 동, Y = 위, Z = 남입니다. 히어로 평면의 (동, 북)은 엔진의 (X, −Z)입니다.
+
+**프랙탈 디테일(`bake/detail.py`, 설정 `[detail]`).**
+
+- **현상.** 실제 산지는 작게 볼수록 계속 거칩니다. 고도 2D 파워 스펙트럼 P(k) ∝ k^−β에서 GLO-90 산지 타일 16개는 β ≈ 3.0(2–15 km), β ≈ 4.2(0.2–2 km)이고, 히어로(25 m)도 2.98, 4.26으로 맞습니다. 그런데 2 m 회랑은 4–20 m에서 β ≈ 4.74로 매끈합니다. 25 m 격자는 칸 2개(50 m, 나이퀴스트)보다 짧은 파장을 그리지 못하고 그 근처도 보간으로 약해지며, 회랑은 그 지도를 쌍선형 보간한 뒤 40 m fbm(진폭 2 m) 하나만 더하기 때문입니다.
+- **규칙.**
+    - 이음 기준: 회랑 지표에서 히어로가 그린 가장 짧은 옥타브(`max_wavelength_m` ~ 2배)의 띠 RMS a를 잽니다.
+    - 자기 아핀 잡음: 전역 칸 번호의 정수 해시(시드 갈래 7301)로 만든 흰 가우스 잡음을 FFT로 걸러 P ∝ k^−(2+2H)(`hurst` = H)를 [1/`max_wavelength_m`, 1/`min_wavelength_m`] 띠에만 둡니다. 띠 첫 옥타브의 RMS가 `fractal_gain`·a·2^−H가 되게 맞추므로, 파장이 반으로 줄 때마다 거칠기가 2^−H배로 이어집니다. 디테일은 원래 지표에 더해지고, 원래 지표의 같은 띠 성분(40 m fbm 등)은 그대로 남습니다.
+    - 어디에 얼마나: 계수 m = clip(경사/`slope_ref`, 0, 1) × (지표 0.5 m 아래가 흙·충적층이면 `soil_factor`) × 물 항 × 동굴 항 × 웅덩이 항 × 가장자리 항.
+        - 물: 물 칸에서 `water_margin_m` 안은 0, 그 뒤 20 m에 걸쳐 1. 물 칸은 비트까지 그대로입니다.
+        - 동굴: 원래 지표의 입구 구멍(`cave_mouth` < 0)에서 2 m 안은 0, 그 뒤 10 m에 걸쳐 1. 입구 둘레를 들어 올리면 지표 아래로 잘라 둔 동굴 벽과 지표 사이에 틈이 생기기 때문입니다.
+        - 웅덩이: 원래 지표의 닫힌 웅덩이 칸은 0, 그 뒤 6 m에 걸쳐 1. 원래 우묵한 곳은 비트까지 그대로입니다.
+        - 가장자리: 회랑 가장자리에서 `edge_fade_m`에 걸쳐 0 → 1. 주변 25 m 지형과의 단차를 늘리지 않습니다.
+    - 웅덩이 채우기: 더한 잡음이 만든 닫힌 웅덩이를 priority-flood로 채웁니다. 출구는 가장자리·물 칸, 원래 웅덩이 칸, 동굴 입구 구멍(물이 빠지는 싱크홀)입니다. 채운 곳은 평평한 작은 면이 됩니다.
+    - `water`, `strata`, `caves`는 바꾸지 않습니다. `fractal_gain` = 0이면 `*_detail` 파일을 쓰지 않고, 지난 굽기의 파일도 지웁니다.
+    - 설정: `[detail]`은 굽기에서만 쓰는 절입니다. 그 절이 생기기 전에 만든 히어로 묶음은 지금 `configs/planets/<행성>.toml`의 값으로 굽고(`cli.bake_config`), `bpcg bake --set detail.fractal_gain=2.0`처럼 굽기 키(`detail.*`, `profile.corridor.*`)만 바꿔 다시 구울 수 있습니다.
+    - 엔진: 디테일을 켜면 지형 색칠과 단면이 재질 부피의 층 깊이를 그린 지표에서 잽니다(윗면 + 디테일 − 기본 지표). 그러지 않으면 디테일이 낮춘 골에서 흙 아래 암석 색이 얼룩으로 보입니다.
+- **지표.** `manifest.file_meta.heightmap_detail.detail`에 a(`anchor_rms_m`), 더한 RMS·최댓값, 회랑 가운데 정사각 창의 4–50 m β 전후(`beta_before`, `beta_after`), 채운 칸 수(`n_filled`)를 적습니다. earth_v2 회랑(2 m)에서 a = 3.4 m(50–100 m 띠)입니다. 기본 `fractal_gain` = 2는 RMS 1.1 m(최대 7.0 m), β 5.00 → 3.83, 채운 칸 1.8%이고, 1이면 RMS 0.55 m, β 4.28, 채운 칸 0.3%입니다. 이 회랑은 어디서나 흙이 덮여 `soil_factor`가 계속 걸리므로, 사용자가 '조금 강조'를 원해 기본을 2로 두었습니다.
 
 ## 12. metrics (점수표, 설계도 7장)
 
@@ -519,7 +539,7 @@
 | `uv run bpcg planet --profile laptop --out out/earth` | 1~4단계, L0 묶음, 면 텍스처, 점수표 |
 | `uv run bpcg hero --from out/earth` | 히어로 L2 (L0 경계조건) |
 | `uv run bpcg hero --flat --out out/flat` | 평면 히어로 (가짜 경계조건) |
-| `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, `engine/baked/`에도 씀 |
+| `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
 | `uv run bpcg all --profile tiny --out out/tiny` | 전부 한 번 |
 
 파이프라인 함수는 `bpcg/pipeline.py`의 `generate_planet(cfg)`, `generate_hero(cfg, planet=None)`, `bake(hero, cfg, out_dir, engine_dir)`입니다.
@@ -539,6 +559,7 @@
     - 히어로 솔버에서 진동으로 고정된 칸이 30%입니다.
     - 선상지 판정 `slope_drop_ratio` 4는 n = 1 기준입니다. n = 2에서는 경사 차이가 융기 차이의 제곱근이라, 평면 히어로에서는 선상지가 생기지 않습니다. 실제 히어로에는 선상지 2,874칸이 있습니다.
     - `soil.bare_slope` 0.8이 규암을 뺀 모든 S_crit 이상이라, '가파르면 맨 암반' 규칙이 거의 걸리지 않습니다.
+        - 그래서 earth_v2 회랑은 지표 0.5 m 아래가 모두 흙(두께 1.6–1.8 m)이고, 프랙탈 디테일의 흙 항이 어디서나 `soil_factor` 0.35입니다. 가파른 암반만 더 거칠게 하는 대비는 흙 모델이 맨 암반을 만들어야 보입니다.
     - 육지의 91~96%에서 지하수면이 지표에 닿습니다(지구 22~32%).
     - 동굴 입구가 너무 많고, 단면에서 지표 가까이 큰 빈 곳이 보입니다.
     - 바다 비율은 0.625입니다(지구 0.709).

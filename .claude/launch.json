@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "studio",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--no-sync", "bpcg", "studio", "--no-browser", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}

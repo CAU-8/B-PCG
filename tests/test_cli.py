@@ -35,6 +35,16 @@ def test_cli_all_tiny_end_to_end(tmp_path, capsys):
     cm = json.loads((run / "corridor" / "manifest.json").read_text())
     assert cm["config_digest"] == pm["config_digest"]
     assert cm["seed"] == 0
+    # 지구본: 같은 실행의 행성 묶음으로 굽고, 히어로 자리는 회랑 manifest 에서 찾음
+    gj = json.loads((run / "globe" / "globe.json").read_text())
+    assert gj["format"] == "bpcg-globe" and gj["config_digest"] == pm["config_digest"]
+    assert gj["hero"] is not None and len(gj["fields"]) > 5
+    # bake 를 다시 돌려도 지구본을 다시 굽고, --no-globe 면 건드리지 않음
+    (run / "globe" / "globe.json").unlink()
+    assert main(["bake", "--hero", str(run / "hero"), "--no-globe"]) == 0
+    assert not (run / "globe" / "globe.json").exists()
+    assert main(["bake", "--hero", str(run / "hero")]) == 0
+    assert (run / "globe" / "globe.json").exists()
 
 
 def test_cli_hero_flat_then_bake(tmp_path):
@@ -45,6 +55,7 @@ def test_cli_hero_flat_then_bake(tmp_path):
     assert main(["bake", "--hero", str(run / "hero")]) == 0
     cm = json.loads((run / "corridor" / "manifest.json").read_text())
     assert cm["site"]["kind"] == "flat_hero" and cm["seed"] == 3
+    assert not (run / "globe").exists()  # 행성이 없는 실행은 지구본도 없음
 
 
 def test_cli_rejects_missing_inputs(tmp_path):

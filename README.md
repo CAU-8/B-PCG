@@ -71,6 +71,7 @@ uv run python tools/doctor.py     # 환경 점검
 - [초기 설계 가이드](docs/guide/planet_guide.md)
 - [분석 스크립트](analysis/README.md)
 - [엔진](engine/README.md)
+- [스튜디오: 매개변수를 바꿔 돌리고 지도·그림·Godot 로 보기](docs/studio.md) (`uv run bpcg studio`)
 
 ## 라이선스
 
