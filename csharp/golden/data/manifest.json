@@ -481,6 +481,24 @@
       "case": "sample_sphere_n4",
       "bytes": 101774,
       "commit": true
+    },
+    {
+      "module": "hydro",
+      "case": "sphere7",
+      "bytes": 76160,
+      "commit": true
+    },
+    {
+      "module": "hydro",
+      "case": "flat20x30_ties",
+      "bytes": 151004,
+      "commit": true
+    },
+    {
+      "module": "hydro",
+      "case": "signed_zero",
+      "bytes": 1110,
+      "commit": true
     }
   ]
 }

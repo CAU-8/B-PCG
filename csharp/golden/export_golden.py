@@ -35,6 +35,8 @@ from bpcg.bake.bundle import git_commit
 from bpcg.core import config as cfgmod
 from bpcg.core import constants, cubesphere, distance, fields, graph, hashing, noise, resample
 from bpcg.core.paths import OUT, ROOT
+from bpcg.hydro import accumulate as hacc
+from bpcg.hydro import depressions, network, routing
 
 COMMIT_ROOT = ROOT / "csharp" / "golden" / "data"
 MAX_COMMIT_BYTES = 1_000_000  # docs/conventions.md 8절: 커밋하는 바이너리는 각 1 MB 이하
@@ -898,6 +900,108 @@ def export_resample(w: Writer) -> None:
     )
 
 
+# ---------------------------------------------------------------- hydro
+def _terrain(gr: graph.CellGraph, seed: int, scale: float, base: float) -> np.ndarray:
+    """그래프 위 노이즈 지형 [m] (golden 입력용)."""
+    p = gr.unit() if gr.kind == "sphere" else gr.pos / 1000.0
+    return noise.fbm3(p * 2.0, seed) * scale + base
+
+
+def _hydro_case(
+    w: Writer, name: str, gr: graph.CellGraph, z: np.ndarray, outlet: np.ndarray, commit: bool
+) -> None:
+    """채움 → D8(두 번, 히스테리시스) → 순서 → 누적 → 유역·강 구간을 한 사례로 씁니다."""
+    m = "hydro"
+    eps = 1e-3
+    zhat = depressions.fill_depressions(z, gr.nbr, outlet)
+    zt = depressions.fill_epsilon(z, gr.nbr, outlet, eps)
+    rcv, slope, n1 = routing.d8_receivers(zt, gr.nbr, gr.dist, outlet)
+    # 지형을 조금 흔든 뒤 지난 수신 셀로 히스테리시스를 겁니다(η = 0.02, 설정 기본값과 같음)
+    z2 = z + noise.fbm3((gr.unit() if gr.kind == "sphere" else gr.pos / 1000.0) * 7.0, 99) * 5.0
+    zt2 = depressions.fill_epsilon(z2, gr.nbr, outlet, eps)
+    rcv2, slope2, n2 = routing.d8_receivers(zt2, gr.nbr, gr.dist, outlet, prev=rcv, eta=0.02)
+    start, donors = routing.donor_lists(rcv2)
+    order = routing.topo_order(rcv2)
+    area_acc = hacc.accumulate(rcv2, order, gr.area)
+    q = hacc.accumulate(rcv2, order, gr.area * 0.37)
+    one = hacc.accumulate(rcv2, order, 1.0)
+    cnt = hacc.donors_count(rcv2)
+    outl = network.outlet_of(rcv2, order)
+    is_river = (q > np.quantile(q, 0.8)) & ~outlet
+    segs = network.river_segments(rcv2, order, is_river)
+    cells = np.concatenate(segs) if segs else np.zeros(0, dtype=np.int64)
+    offs = np.cumsum([0] + [len(x) for x in segs]).astype(np.int64)
+    w.case(
+        m,
+        name,
+        inputs={
+            "z": z,
+            "z2": z2,
+            "nbr": gr.nbr,
+            "dist": gr.dist,
+            "area": gr.area,
+            "is_outlet": outlet,
+            "eps": np.float64(eps),
+            "eta": np.float64(0.02),
+            "is_river": is_river,
+        },
+        outputs={
+            "zhat": zhat,
+            "zt": zt,
+            "rcv": rcv,
+            "slope": slope,
+            "n_changed": np.int64(n1),
+            "zt2": zt2,
+            "rcv2": rcv2,
+            "slope2": slope2,
+            "n_changed2": np.int64(n2),
+            "start": start,
+            "donors": donors,
+            "order": order,
+            "area_acc": area_acc,
+            "q": q,
+            "one": one,
+            "donors_count": cnt,
+            "outlet_of": outl,
+            "seg_cells": cells,
+            "seg_offsets": offs,
+        },
+        commit=commit,
+    )
+
+
+def export_hydro(w: Writer) -> None:
+    sph = graph.sphere_graph(32, R_EARTH, 1.0, 0)
+    z = _terrain(sph, 4, 3000.0, 200.0)
+    _hydro_case(w, "sphere32", sph, z, z < 0.0, commit=False)
+    sph7 = graph.sphere_graph(7, R_EARTH, 1.0, 123456789)
+    z7 = _terrain(sph7, 5, 2000.0, 100.0)
+    _hydro_case(w, "sphere7", sph7, z7, z7 < 0.0, commit=True)
+    fl = graph.flat_graph(64, 64, 100.0, 1.0, 1738104521, (-3200.0, 3200.0))
+    zf = _terrain(fl, 6, 400.0, 600.0)
+    out_f = (
+        fl.boundary_mask() & (np.arange(fl.n_cells) % 64 < 5) & (np.arange(fl.n_cells) >= 63 * 64)
+    )
+    _hydro_case(w, "flat64", fl, zf, out_f, commit=False)
+    # 정수 고도 + 흔들기 없는 평면: 경사 동률과 넓은 평지(채움 FIFO)가 많이 생깁니다
+    fl0 = graph.flat_graph(20, 30, 25.0)
+    zi = np.floor(_terrain(fl0, 7, 6.0, 3.0))
+    out0 = np.zeros(fl0.n_cells, dtype=bool)
+    out0[[0, 29, 599]] = True
+    _hydro_case(w, "flat20x30_ties", fl0, zi, out0, commit=True)
+    # 부호 있는 0: 출구 −0.0 옆의 +0.0 칸 (분석 절의 손 사례)
+    nbr = np.array([[3, -1], [2, -1], [1, 3], [0, 2]], dtype=np.int32)
+    zz = np.array([-0.0, 0.0, 0.0, 0.0])
+    oo = np.array([True, True, False, False])
+    w.case(
+        "hydro",
+        "signed_zero",
+        inputs={"z": zz, "nbr": nbr, "is_outlet": oo},
+        outputs={"zhat": depressions.fill_depressions(zz, nbr, oo)},
+        commit=True,
+    )
+
+
 EXPORTS: dict[str, Callable[[Writer], None]] = {
     "core/hashing": export_hashing,
     "core/noise": export_noise,
@@ -908,6 +1012,7 @@ EXPORTS: dict[str, Callable[[Writer], None]] = {
     "core/graph": export_graph,
     "core/distance": export_distance,
     "core/resample": export_resample,
+    "hydro": export_hydro,
 }
 
 
@@ -933,6 +1038,15 @@ def main(argv: list[str] | None = None) -> int:
     for name in names:
         print(f"[golden] {name}", flush=True)
         EXPORTS[name](w)
+    cases = w.cases
+    if args.only:
+        # 일부만 다시 만들 때는 지난 manifest 의 다른 묶음 사례를 그대로 둡니다.
+        old = args.out / "manifest.json"
+        if old.exists():
+            prev = json.loads(old.read_text(encoding="utf-8")).get("cases", [])
+            done = {(c["module"], c["case"]) for c in w.cases}
+            kept = [c for c in prev if (c["module"], c["case"]) not in done]
+            cases = kept + w.cases
     manifest = {
         "created_by": "csharp/golden/export_golden.py",
         "bpcg_version": __version__,
@@ -943,13 +1057,13 @@ def main(argv: list[str] | None = None) -> int:
         "scipy": scipy.__version__,
         "platform": platform.platform(),
         "machine": platform.machine(),
-        "cases": w.cases,
+        "cases": cases,
     }
     text = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "manifest.json").write_text(text, encoding="utf-8", newline="\n")
     if commit_root is not None:
-        committed = dict(manifest, cases=[c for c in w.cases if c["commit"]])
+        committed = dict(manifest, cases=[c for c in cases if c["commit"]])
         committed.pop("git_commit")
         commit_root.mkdir(parents=True, exist_ok=True)
         (commit_root / "manifest.json").write_text(

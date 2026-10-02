@@ -4,10 +4,11 @@
 
 ## 0. 지금 상태와 다음 할 일
 
-### 지금 상태 (2026-10-02)
+### 지금 상태 (2026-10-03)
 
-- **단계 1(뼈대와 core)을 마치고 코드 검토를 기다립니다.** 지시대로 core 를 옮긴 뒤 멈췄습니다. 사용자가 단계 0 검토는 건너뛰기로 했습니다(10장 D5).
-- **대조 결과: C# 시험 99개가 모두 통과했고, 실수 비교는 모두 비트 단위 일치입니다**(macOS 26.6 arm64, .NET SDK 10.0.401·런타임 10.0.12, numpy 2.5.3, numba 0.68.0). tan·atan·atan2·sin·pow 를 거친 값(격자 위치·면적·대원 거리·고스트 가중치·보간 값)도 같은 libm 이라 비트까지 같습니다. 다른 OS 에서는 아직 돌려 보지 않았습니다.
+- **단계 2(묶음별 포팅)를 진행 중입니다.** 사용자가 core 검토를 따로 하지 않고 순서대로 계속하라고 했습니다(10장 D13). 끝낸 묶음: core, hydro.
+- **대조 결과: C# 시험 119개가 모두 통과했고, 실수 비교는 모두 비트 단위 일치입니다**(macOS 26.6 arm64, .NET SDK 10.0.401·런타임 10.0.12, numpy 2.5.3, numba 0.68.0). 다른 OS 에서는 아직 돌려 보지 않았습니다.
+- hydro(2026-10-03): `Depressions`, `Routing`, `AccumulateModule`(파일 `Accumulate.cs`, 0장 쟁점 6 규칙), `Network`. golden 은 구면 n=32·7, 평면 64², 정수 고도 평면(경사 동률·넓은 평지), ±0 부호 손 사례입니다. 채움·D8(히스테리시스 포함)·순서·누적·유역·강 구간이 모두 비트 단위로 같습니다.
 - 만든 것:
   - 저장소 설정: `.gitignore`(C# 빌드 출력, golden 예외), `.gitattributes`, `.editorconfig`(`[*.cs]`), `global.json`(SDK 10.0, 시험 실행기 Microsoft.Testing.Platform, 10장 D11).
   - 프로젝트: `csharp/Directory.Build.props`, `Bpcg`·`Bpcg.Cli`(뼈대만)·`Bpcg.Tests`, `Bpcg.slnx`, 잠금 파일 `packages.lock.json`, `csharp/README.md`.
@@ -20,8 +21,8 @@
 
 ### 다음 할 일
 
-1. **core 코드 검토를 받습니다**(지시: core 는 이후 모든 모듈의 본보기). 특히 볼 곳은 이름 규칙(0장 쟁점 6), 배열 표현(평평한 1차원 + 열 수), 예외 형(Python ValueError → `ArgumentException`), 시험 구성, golden 사례 파일 형식입니다.
-2. 검토가 끝나면 단계 2 를 hydro 부터 시작합니다: golden 사례 추가(6장 hydro 절 '(f)') → `csharp/Bpcg/Hydro/*.cs` → 대조 시험 → 3장·이 장 갱신 → 커밋.
+1. 단계 2 를 순서대로 잇습니다: planet → geology → landscape → subsurface → metrics → pipeline·hero → volume → bake → cli. 묶음마다 golden 사례 추가(6장 해당 절 '(f)') → `csharp/Bpcg/<Pkg>/*.cs` → 대조 시험 → 3장·이 장 갱신 → 커밋.
+2. 다음 묶음은 planet 입니다(6장 planet ①·② 절).
 3. 확인 명령: `uv run python csharp/golden/export_golden.py` → `dotnet build csharp/Bpcg.slnx` → `dotnet test --solution csharp/Bpcg.slnx` → `dotnet format csharp/Bpcg.slnx --verify-no-changes` → `uv run pytest -m "not slow"`. macOS 에서 SDK 가 PATH 에 없으면 `/usr/local/share/dotnet` 을 앞에 둡니다.
 
 ### 결정이 필요한 쟁점
@@ -379,11 +380,11 @@ Python 모듈 60개(`src/bpcg` 에서 studio/ 와 빈 earth/ 를 뺀 것)를 단
 | `core/graph.py` | 146 | csharp/Bpcg/Core/Graph.cs | public static class Graph; public sealed class CellGraph | 중간 | 대조 통과(exact) | macOS arm64 비트 일치 |
 | `core/distance.py` | 274 | csharp/Bpcg/Core/Distance.cs | public static class Distance | 중간 | 대조 통과(exact) | macOS arm64 비트 일치 |
 | `core/resample.py` | 291 | csharp/Bpcg/Core/Resample.cs | public static class Resample; public sealed record GhostStencil | 중간 | 대조 통과(exact) | macOS arm64 비트 일치 |
-| `hydro/__init__.py` | 4 | (없음) | 없음 | 낮음 | 시작 전 | - |
-| `hydro/accumulate.py` | 66 | csharp/Bpcg/Hydro/Accumulate.cs | public static class AccumulateModule (namespace Bpcg.Hydro). 정적 클래스 Accumulate 안에 메서드 Acc… | 낮음 | 시작 전 | - |
-| `hydro/depressions.py` | 219 | csharp/Bpcg/Hydro/Depressions.cs | public static class Depressions (namespace Bpcg.Hydro) | 중간 | 시작 전 | - |
-| `hydro/network.py` | 109 | csharp/Bpcg/Hydro/Network.cs | public static class Network (namespace Bpcg.Hydro) | 낮음 | 시작 전 | - |
-| `hydro/routing.py` | 229 | csharp/Bpcg/Hydro/Routing.cs | public static class Routing (namespace Bpcg.Hydro). 반환 튜플은 값 튜플 (long[] Rcv, double[] Slo… | 중간 | 시작 전 | - |
+| `hydro/__init__.py` | 4 | (없음) | 없음 | 낮음 | 해당 없음 | - |
+| `hydro/accumulate.py` | 66 | csharp/Bpcg/Hydro/Accumulate.cs | public static class AccumulateModule (namespace Bpcg.Hydro). 정적 클래스 Accumulate 안에 메서드 Acc… | 낮음 | 대조 통과(exact) | macOS arm64 비트 일치 |
+| `hydro/depressions.py` | 219 | csharp/Bpcg/Hydro/Depressions.cs | public static class Depressions (namespace Bpcg.Hydro) | 중간 | 대조 통과(exact) | macOS arm64 비트 일치 |
+| `hydro/network.py` | 109 | csharp/Bpcg/Hydro/Network.cs | public static class Network (namespace Bpcg.Hydro) | 낮음 | 대조 통과(exact) | macOS arm64 비트 일치 |
+| `hydro/routing.py` | 229 | csharp/Bpcg/Hydro/Routing.cs | public static class Routing (namespace Bpcg.Hydro). 반환 튜플은 값 튜플 (long[] Rcv, double[] Slo… | 중간 | 대조 통과(exact) | macOS arm64 비트 일치 |
 | `planet/__init__.py` | 5 | (없음) | (없음) | 낮음 | 시작 전 | - |
 | `planet/plates.py` | 691 | csharp/Bpcg/Planet/Plates.cs | public static class Plates (namespace Bpcg.Planet); sealed record BoundaryClassification;… | 중간 | 시작 전 | - |
 | `planet/crust.py` | 286 | csharp/Bpcg/Planet/Crust.cs | public static class Crust (namespace Bpcg.Planet); sealed record CrustInfo | 중간 | 시작 전 | - |
@@ -4319,6 +4320,7 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 | D10 | 2026-10-02 | numpy 합의 결합 순서를 `0.0 + pairwise` (블록 128, 누적기 8개)로 확정하고 `Bpcg.Numerics.NpReduce` 로 옮겼습니다 | 5장의 실험에서 비트 단위로 같음 | 확정 |
 | D11 | 2026-10-02 | 시험 실행기는 Microsoft.Testing.Platform 입니다(`global.json` 의 `test.runner`). NuGet 은 `xunit.v3` 4.0.1(Apache-2.0) 하나만 씁니다(xunit.runner.visualstudio·Microsoft.NET.Test.Sdk 는 뺌, P3 를 바꿈) | .NET 10 SDK 에서 xunit.v3(MTP 2.4)는 VSTest 경로로 `dotnet test` 를 돌릴 수 없음(빌드 오류). 실행은 `dotnet test --solution csharp/Bpcg.slnx` | 확정 |
 | D12 | 2026-10-02 | golden 스크립트는 Python 정수 리스트를 배열로 만들 때 dtype 을 늘 적습니다 | `hash3` golden 이 float64 를 거쳐 끝자리가 잘린 것을 C# 대조가 잡음(2⁶³ 미만·이상이 섞인 정수 리스트를 numpy 가 float64 로 만듦). 고친 뒤 통과 | 확정 |
+| D13 | 2026-10-03 | core 코드 검토를 따로 받지 않고 단계 2 를 순서대로 진행합니다. 0장 쟁점의 기본값(이름 규칙, 원소형, 예외 형 등)을 그대로 씁니다 | 사용자 결정('순서대로 계속 진행해') | 확정 |
 | P1 | 2026-10-02 | 네임스페이스 `Bpcg.Numerics`(numpy·scipy 대체), `Bpcg.IO`(파일 형식) | Python 모듈과 1:1이 아닌 코드를 한곳에 모음 | 제안 (단계 1 기본값) |
 | P2 | 2026-10-02 | FIELDS의 bool·int8은 `bool[]`·`sbyte[]` | npy `\|b1`·`\|i1`와 1:1 | 제안 (단계 1 기본값) |
 | P3 | 2026-10-02 | NuGet은 시험용 xunit.v3(Apache-2.0)·xunit.runner.visualstudio(Apache-2.0)·Microsoft.NET.Test.Sdk(MIT)만 씁니다(Tomlyn 은 D9 로 뺌) | 1장. 나머지(TOML, CRC32, CLI 인자, zip, SHA-256)는 직접 구현하거나 .NET 에 들어 있음 | 제안 (단계 1 기본값) |
@@ -4413,11 +4415,11 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 - [x] `csharp/golden/export_golden.py` (core·IO 사례)
 - [x] core: `Hashing`, `Noise`, `Constants`, `Fields`, `Package`, `Paths`, `Config`, `Cubesphere`, `Graph`, `Distance`, `Resample`
 - [x] 진행 기록 갱신, 커밋
-- [ ] core 코드 검토 받기
+- [x] core 코드 검토 (사용자가 생략하고 계속하기로 함, D13)
 
 ### 단계 2: 묶음별 포팅 (묶음마다 golden 사례 → C# → 대조 시험 → 기록 → 커밋)
 
-- [ ] hydro
+- [x] hydro (2026-10-03, 대조 시험 20개, 모두 비트 일치)
 - [ ] planet
 - [ ] geology
 - [ ] landscape
