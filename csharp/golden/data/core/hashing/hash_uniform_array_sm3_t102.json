@@ -1,0 +1,5 @@
+{
+  "module": "core/hashing",
+  "case": "hash_uniform_array_sm3_t102",
+  "meta": {}
+}

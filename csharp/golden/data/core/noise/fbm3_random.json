@@ -1,0 +1,7 @@
+{
+  "module": "core/noise",
+  "case": "fbm3_random",
+  "meta": {
+    "kwargs": {}
+  }
+}

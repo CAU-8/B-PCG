@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 콘솔 프로그램 (bpcg planet·hero·bake·all). 단계 2 끝에 옮깁니다. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Bpcg.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Bpcg/Bpcg.csproj" />
+  </ItemGroup>
+</Project>

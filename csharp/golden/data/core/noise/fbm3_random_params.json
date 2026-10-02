@@ -1,0 +1,12 @@
+{
+  "module": "core/noise",
+  "case": "fbm3_random_params",
+  "meta": {
+    "kwargs": {
+      "octaves": 3,
+      "gain": 0.6,
+      "lacunarity": 2.3,
+      "frequency": 4.0
+    }
+  }
+}

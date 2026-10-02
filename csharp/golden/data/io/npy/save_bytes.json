@@ -1,0 +1,21 @@
+{
+  "module": "io/npy",
+  "case": "save_bytes",
+  "meta": {
+    "names": [
+      "f4_1d",
+      "f8_2d",
+      "i4_1d",
+      "i8_1d",
+      "u1_3d",
+      "i1_1d",
+      "b1_1d",
+      "f8_0d",
+      "f4_empty",
+      "i4_empty2",
+      "f4_nan",
+      "f8_long",
+      "u8_1d"
+    ]
+  }
+}

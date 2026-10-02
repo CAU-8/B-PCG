@@ -1,0 +1,5 @@
+{
+  "module": "core/hashing",
+  "case": "splitmix64",
+  "meta": {}
+}

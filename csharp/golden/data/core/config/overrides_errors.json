@@ -1,0 +1,200 @@
+{
+  "module": "core/config",
+  "case": "overrides_errors",
+  "meta": {
+    "base": "earth/tiny",
+    "cases": [
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.thetaa": [
+              "float",
+              "0.5"
+            ]
+          }
+        ],
+        "error": "설정에 'landscape.thetaa' 키가 없습니다. 비슷한 키: landscape.theta, landscape.jitter, landscape.k_ref"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "plates.speed": [
+              "list",
+              [
+                [
+                  "float",
+                  "0.1"
+                ],
+                [
+                  "float",
+                  "0.2"
+                ]
+              ]
+            ]
+          }
+        ],
+        "error": "설정에 'plates.speed' 키가 없습니다. 비슷한 키: planet.seed, plates.speed_m_per_yr, plates.warp_frequency"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "caves.levels": [
+              "float",
+              "2.5"
+            ]
+          }
+        ],
+        "error": "'caves.levels' 는 정수 값이어야 합니다: 2.5 (지금 값: 2)"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "caves.levels": [
+              "bool",
+              true
+            ]
+          }
+        ],
+        "error": "'caves.levels' 는 정수 값이어야 합니다: True (지금 값: 2)"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.theta": [
+              "float",
+              "nan"
+            ]
+          }
+        ],
+        "error": "'landscape.theta' 는 유한한 실수여야 합니다 (nan·inf 는 받지 않습니다): nan"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.theta": [
+              "float",
+              "inf"
+            ]
+          }
+        ],
+        "error": "'landscape.theta' 는 유한한 실수여야 합니다 (nan·inf 는 받지 않습니다): inf"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape": [
+              "float",
+              "1.0"
+            ]
+          }
+        ],
+        "error": "'landscape' 는 절(section)이라 통째로 바꿀 수 없습니다"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "planet.name": [
+              "str",
+              "mars"
+            ]
+          }
+        ],
+        "error": "'planet.name' 는 덮어쓸 수 없습니다. 행성은 --planet (스튜디오는 '행성 설정' 칸)으로 고르세요"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "profile.name": [
+              "str",
+              "x"
+            ]
+          }
+        ],
+        "error": "'profile.name' 는 덮어쓸 수 없습니다. 프로필은 --profile (스튜디오는 '프로필' 칸)으로 고르세요"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "plates.speed_m_per_yr": [
+              "list",
+              [
+                [
+                  "float",
+                  "0.1"
+                ]
+              ]
+            ]
+          }
+        ],
+        "error": "'plates.speed_m_per_yr' 는 원소 2개 리스트여야 합니다: [0.1]"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "plates.speed_m_per_yr": [
+              "list",
+              [
+                [
+                  "float",
+                  "0.1"
+                ],
+                [
+                  "str",
+                  "a"
+                ]
+              ]
+            ]
+          }
+        ],
+        "error": "'plates.speed_m_per_yr[1]' 는 실수 값이어야 합니다: 'a' (지금 값: 0.08)"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.theta": [
+              "bare",
+              "abc"
+            ]
+          }
+        ],
+        "error": "'landscape.theta' 값 'abc' 를 읽지 못했습니다. 실수 값을 TOML 문법으로 주세요 (지금 값: 0.45)"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "planet.axis.0": [
+              "float",
+              "1.0"
+            ]
+          }
+        ],
+        "error": "설정에 'planet.axis.0' 키가 없습니다. 비슷한 키: planet.axis, planet.radius_m, planet.seed"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "planet..seed": [
+              "int",
+              "1"
+            ]
+          }
+        ],
+        "error": "설정에 'planet..seed' 키가 없습니다. 비슷한 키: planet.seed, planet.name, planet.axis"
+      }
+    ]
+  }
+}

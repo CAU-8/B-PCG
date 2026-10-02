@@ -1,0 +1,5 @@
+{
+  "module": "core/resample",
+  "case": "add_ghost_n6_l1_nan",
+  "meta": {}
+}

@@ -1,0 +1,9 @@
+{
+  "module": "core/noise",
+  "case": "vector_fbm3_test_p",
+  "meta": {
+    "kwargs": {
+      "frequency": 2.5
+    }
+  }
+}

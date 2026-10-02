@@ -1,0 +1,5 @@
+{
+  "module": "core/resample",
+  "case": "ghost_stencil_n4_l2",
+  "meta": {}
+}

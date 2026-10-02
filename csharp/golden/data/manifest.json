@@ -1,0 +1,486 @@
+{
+  "created_by": "csharp/golden/export_golden.py",
+  "bpcg_version": "0.1.0",
+  "python": "3.13.15",
+  "numpy": "2.5.3",
+  "numba": "0.68.0",
+  "scipy": "1.18.1",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "cases": [
+    {
+      "module": "core/hashing",
+      "case": "splitmix64",
+      "bytes": 32920,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash3_hash_unit",
+      "bytes": 124010,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_s0_t101",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_s0_t102",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_sm3_t101",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_sm3_t102",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_s9223372036854775807_t101",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/hashing",
+      "case": "hash_uniform_array_s9223372036854775807_t102",
+      "bytes": 17100,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "gradient_noise3",
+      "bytes": 204110,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "octave_tables_0",
+      "bytes": 3084,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "octave_tables_1",
+      "bytes": 3036,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "octave_tables_2",
+      "bytes": 3516,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "octave_tables_3",
+      "bytes": 2956,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "fbm3_test_p",
+      "bytes": 864,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "fbm3_test_p_123",
+      "bytes": 864,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "fbm3_random",
+      "bytes": 64768,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "fbm3_random_params",
+      "bytes": 64768,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "vector_fbm3_test_p",
+      "bytes": 912,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "vector_fbm3_random",
+      "bytes": 96768,
+      "commit": true
+    },
+    {
+      "module": "core/noise",
+      "case": "fbm3_errors",
+      "bytes": 272,
+      "commit": true
+    },
+    {
+      "module": "core/constants",
+      "case": "gravity",
+      "bytes": 878,
+      "commit": true
+    },
+    {
+      "module": "core/fields",
+      "case": "fields_table",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "load_earth_tiny",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "load_earth_laptop",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "load_earth_lab",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "overrides",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "overrides_errors",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "core/config",
+      "case": "parse_assignment",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "io/pyjson",
+      "case": "float_repr",
+      "bytes": 216690,
+      "commit": true
+    },
+    {
+      "module": "io/pyjson",
+      "case": "layout",
+      "bytes": 22,
+      "commit": true
+    },
+    {
+      "module": "io/npy",
+      "case": "save_bytes",
+      "bytes": 107024,
+      "commit": true
+    },
+    {
+      "module": "io/npz",
+      "case": "savez_bytes",
+      "bytes": 2378,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "grid_n1_r6371000",
+      "bytes": 1164,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "grid_n2_r6371000",
+      "bytes": 1620,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "grid_n3_r15",
+      "bytes": 2380,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "grid_n5_r1",
+      "bytes": 4812,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "grid_n16_r6371000",
+      "bytes": 39924,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "to_sphere_omega",
+      "bytes": 24936,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_distance",
+      "bytes": 7212,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "to_face_cell_of",
+      "bytes": 472968,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n1",
+      "bytes": 708,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n2",
+      "bytes": 1284,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n3",
+      "bytes": 2244,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n4",
+      "bytes": 3588,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n5",
+      "bytes": 5316,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "neighbor_table_n16",
+      "bytes": 49668,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "cross_face_pairs_n1",
+      "bytes": 712,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "cross_face_pairs_n2",
+      "bytes": 904,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "cross_face_pairs_n4",
+      "bytes": 1288,
+      "commit": true
+    },
+    {
+      "module": "core/cubesphere",
+      "case": "cross_face_pairs_n16",
+      "bytes": 3592,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "sphere_n16_j0.0_s0",
+      "bytes": 236000,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "sphere_n7_j1.0_s123456789",
+      "bytes": 47216,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "flat_16x16_j1.0_s7919",
+      "bytes": 36080,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "flat_1x5_j0.0_s0",
+      "bytes": 3701,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "flat_20x30_j0.4_s2",
+      "bytes": 80456,
+      "commit": true
+    },
+    {
+      "module": "core/graph",
+      "case": "flat_12x9_j0.0_s0",
+      "bytes": 16988,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "sphere7_inf",
+      "bytes": 51429,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "sphere7_3sp",
+      "bytes": 51429,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "flat1x5_tie",
+      "bytes": 4892,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "flat5x5_tie",
+      "bytes": 8112,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "flat5x5_none",
+      "bytes": 8112,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "flat20x30_j1",
+      "bytes": 100687,
+      "commit": true
+    },
+    {
+      "module": "core/distance",
+      "case": "values_flat20x30",
+      "bytes": 184755,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n2_l1",
+      "bytes": 5716,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n3_l1",
+      "bytes": 6676,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n4_l2",
+      "bytes": 16660,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n7_l1",
+      "bytes": 10516,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n16_l1",
+      "bytes": 19156,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n16_l2",
+      "bytes": 39700,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "ghost_stencil_n16_l8",
+      "bytes": 235540,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n4_l1_f8",
+      "bytes": 3276,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n7_l2_f8",
+      "bytes": 8940,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n16_l1_f8",
+      "bytes": 28620,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n16_l3_f4",
+      "bytes": 30156,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n5_l1_i4",
+      "bytes": 3732,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n6_l1_nan",
+      "bytes": 5580,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n8_l2_negzero",
+      "bytes": 10764,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "add_ghost_n10_l2_const",
+      "bytes": 14988,
+      "commit": true
+    },
+    {
+      "module": "core/resample",
+      "case": "sample_sphere_n4",
+      "bytes": 101774,
+      "commit": true
+    }
+  ]
+}

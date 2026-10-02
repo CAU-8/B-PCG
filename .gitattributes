@@ -15,3 +15,11 @@
 *.bin binary
 *.f32 binary
 *.u8 binary
+
+# C# (csharp/)
+*.cs text eol=lf diff=csharp
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.slnx text eol=lf
+*.sln text eol=lf

@@ -1,0 +1,222 @@
+{
+  "module": "core/config",
+  "case": "overrides",
+  "meta": {
+    "base": "earth/tiny",
+    "cases": [
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.theta": [
+              "float",
+              "0.5"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "landscape.theta": [
+              "float",
+              "0.5"
+            ]
+          }
+        ],
+        "digest": "54567eab5c76",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.5, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "planet.seed": [
+              "int",
+              "3"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "planet.seed": [
+              "int",
+              "3"
+            ]
+          }
+        ],
+        "digest": "950e7be16a17",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 3}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "caves.levels": [
+              "float",
+              "2.0"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "caves.levels": [
+              "int",
+              "2"
+            ]
+          }
+        ],
+        "digest": "32a21abfa80a",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.theta": [
+              "int",
+              "1"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "landscape.theta": [
+              "float",
+              "1.0"
+            ]
+          }
+        ],
+        "digest": "f39f4bac0b2c",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 1.0, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "fans.enabled": [
+              "bool",
+              false
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "fans.enabled": [
+              "bool",
+              false
+            ]
+          }
+        ],
+        "digest": "0a2009729c14",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": false, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "plates.speed_m_per_yr": [
+              "list",
+              [
+                [
+                  "float",
+                  "0.02"
+                ],
+                [
+                  "float",
+                  "0.07"
+                ]
+              ]
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "plates.speed_m_per_yr": [
+              "list",
+              [
+                [
+                  "float",
+                  "0.02"
+                ],
+                [
+                  "float",
+                  "0.07"
+                ]
+              ]
+            ]
+          }
+        ],
+        "digest": "d973d3a5edf2",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.07], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "profile.hero.size_m": [
+              "float",
+              "40000.0"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "profile.hero.size_m": [
+              "float",
+              "40000.0"
+            ]
+          }
+        ],
+        "digest": "2e18b11c827a",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 40000.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "detail.fractal_gain": [
+              "int",
+              "1"
+            ]
+          }
+        ],
+        "checked": [
+          "dict",
+          {
+            "detail.fractal_gain": [
+              "float",
+              "1.0"
+            ]
+          }
+        ],
+        "digest": "0fb05f82cfd3",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 1.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150.0, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}}"
+      },
+      {
+        "overrides": [
+          "dict",
+          {
+            "landscape.k_ref": [
+              "int",
+              "150"
+            ],
+            "zz.new.key": [
+              "float",
+              "1.5"
+            ]
+          }
+        ],
+        "checked": null,
+        "digest": "a7fd7b52bdb5",
+        "sorted_json": "{\"caves\": {\"entrance_tolerance_m\": 3.0, \"incision_fraction\": 0.35, \"levels\": 2, \"noise_wavelength_m\": 60.0, \"passage_radius_m\": 3.0, \"valley_window_m\": 1500.0}, \"climate\": {\"lapse_rate_c_per_m\": 0.0065, \"p_base_m_per_yr\": 0.25, \"p_equator\": 1.8, \"p_equator_sigma_deg\": 12.0, \"p_midlat\": 0.9, \"p_midlat_center_deg\": 50.0, \"p_midlat_sigma_deg\": 12.0, \"p_noise\": 0.35, \"pet_base_m_per_yr\": 0.1, \"pet_per_degc_m_per_yr\": 0.055, \"runoff_floor_fraction\": 0.1, \"runoff_floor_m_per_yr\": 0.01, \"runoff_ref_m_per_yr\": 0.3, \"t_equator_c\": 27.0, \"t_pole_c\": -25.0}, \"crust\": {\"collision_thickening_m\": 25000.0, \"continental_platform_m\": 250.0, \"continental_thickness_m\": 35000.0, \"margin_width_m\": 150000.0, \"oceanic_thickness_m\": 7000.0, \"rho_crust\": 2800.0, \"rho_mantle\": 3300.0, \"rho_water\": 1030.0, \"thickening_width_m\": 300000.0}, \"detail\": {\"edge_fade_m\": 50.0, \"fractal_gain\": 2.0, \"hurst\": 0.7, \"max_wavelength_m\": 50.0, \"min_wavelength_m\": 4.0, \"slope_ref\": 0.5, \"soil_factor\": 0.35, \"water_margin_m\": 6.0}, \"fans\": {\"enabled\": true, \"max_discharge_m3_per_yr\": 1000000000.0, \"min_discharge_m3_per_yr\": 1000000.0, \"radius_m\": 3000.0, \"slope\": 0.03, \"slope_drop_ratio\": 4.0}, \"geology\": {\"arc_belt_width_m\": 250000.0, \"fold_amplitude_m\": 1500.0, \"fold_belt_width_m\": 400000.0, \"fold_wavelength_m\": 15000.0, \"geotherm_c_per_m\": 0.03, \"surface_temperature_c\": 10.0}, \"groundwater\": {\"fan_alpha_m\": 120.0, \"fan_beta\": 150.0, \"max_depth_m\": 300.0, \"recharge_fraction\": 0.5}, \"landscape\": {\"deposition_g\": 1.0, \"deposition_g_l0\": 0.0, \"fill_epsilon_m\": 0.001, \"hillslope_diffusivity_m2_per_yr\": 0.005, \"hysteresis_eta\": 0.02, \"jitter\": 1.0, \"k_ref\": 150, \"max_flow_iterations\": 200, \"s_crit_default\": 0.6, \"s_min\": 1e-05, \"slope_exponent_n\": 2.0, \"stop_dz_m\": 0.1, \"theta\": 0.45, \"u_ref_m_per_yr\": 0.001}, \"ocean\": {\"age_cap_myr\": 200.0, \"ridge_depth_m\": 2500.0, \"trench_depth_m\": 3000.0, \"trench_width_m\": 40000.0, \"water_volume_m3\": 1.335e+18}, \"planet\": {\"axis\": [0.0, 0.0, 1.0], \"mean_density_kg_m3\": 5514.0, \"name\": \"earth\", \"radius_m\": 6371000.0, \"rotation_period_s\": 86164.1, \"seed\": 0}, \"plates\": {\"boundary_kappa\": 0.3, \"continental_area_fraction\": 0.4, \"count\": 12, \"speed_m_per_yr\": [0.02, 0.08], \"warp_amplitude\": 0.12, \"warp_frequency\": 2.5}, \"profile\": {\"compute\": {\"numba_threads\": 0}, \"corridor\": {\"length_m\": 1200.0, \"voxel_m\": 8.0, \"width_m\": 400.0}, \"grid\": {\"coarse_n_per_face\": 16, \"l0_n_per_face\": 32}, \"hero\": {\"max_flow_iterations\": 400, \"size_m\": 6400.0, \"spacing_m\": 100.0}, \"name\": \"tiny\"}, \"relief\": {\"hack_coefficient_km\": 2.02, \"hack_exponent\": 0.49, \"mean_fraction\": 0.5}, \"rivers\": {\"depth_coefficient\": 0.35, \"min_discharge_m3_per_s\": 0.3, \"width_coefficient\": 4.0}, \"soil\": {\"alluvium_max_m\": 30.0, \"bare_slope\": 0.8, \"decay_depth_m\": 0.5, \"production_max_cap_m_per_yr\": 0.0025, \"production_max_m_per_yr\": 0.0003, \"thickness_cap_m\": 3.0}, \"uplift\": {\"arc_slab_depth_m\": 100000.0, \"collision_factor\": 0.04, \"collision_width_m\": 100000.0, \"craton_erosion_m_per_myr\": 5.0, \"elevation_limit_m\": 5500.0, \"elevation_limit_power\": 4.0, \"exhumation_cap_m\": 30000.0, \"orogen_duration_myr\": 30.0, \"orogen_factor\": 0.03, \"orogen_width_m\": 80000.0, \"rift_subsidence_m_per_yr\": -0.0001, \"slab_deep_dip_deg\": 50.0, \"slab_shallow_depth_m\": 40000.0, \"slab_shallow_dip_deg\": 15.0}, \"zz\": {\"new\": {\"key\": 1.5}}}",
+        "manifest_json": "{\n  \"planet\": {\n    \"name\": \"earth\",\n    \"radius_m\": 6371000.0,\n    \"mean_density_kg_m3\": 5514.0,\n    \"rotation_period_s\": 86164.1,\n    \"axis\": [\n      0.0,\n      0.0,\n      1.0\n    ],\n    \"seed\": 0\n  },\n  \"plates\": {\n    \"count\": 12,\n    \"continental_area_fraction\": 0.4,\n    \"warp_amplitude\": 0.12,\n    \"warp_frequency\": 2.5,\n    \"speed_m_per_yr\": [\n      0.02,\n      0.08\n    ],\n    \"boundary_kappa\": 0.3\n  },\n  \"crust\": {\n    \"continental_thickness_m\": 35000.0,\n    \"oceanic_thickness_m\": 7000.0,\n    \"collision_thickening_m\": 25000.0,\n    \"thickening_width_m\": 300000.0,\n    \"margin_width_m\": 150000.0,\n    \"continental_platform_m\": 250.0,\n    \"rho_crust\": 2800.0,\n    \"rho_mantle\": 3300.0,\n    \"rho_water\": 1030.0\n  },\n  \"ocean\": {\n    \"water_volume_m3\": 1.335e+18,\n    \"ridge_depth_m\": 2500.0,\n    \"age_cap_myr\": 200.0,\n    \"trench_depth_m\": 3000.0,\n    \"trench_width_m\": 40000.0\n  },\n  \"uplift\": {\n    \"orogen_factor\": 0.03,\n    \"collision_factor\": 0.04,\n    \"orogen_width_m\": 80000.0,\n    \"collision_width_m\": 100000.0,\n    \"slab_shallow_dip_deg\": 15.0,\n    \"slab_shallow_depth_m\": 40000.0,\n    \"slab_deep_dip_deg\": 50.0,\n    \"arc_slab_depth_m\": 100000.0,\n    \"craton_erosion_m_per_myr\": 5.0,\n    \"rift_subsidence_m_per_yr\": -0.0001,\n    \"orogen_duration_myr\": 30.0,\n    \"exhumation_cap_m\": 30000.0,\n    \"elevation_limit_m\": 5500.0,\n    \"elevation_limit_power\": 4.0\n  },\n  \"climate\": {\n    \"p_base_m_per_yr\": 0.25,\n    \"p_equator\": 1.8,\n    \"p_equator_sigma_deg\": 12.0,\n    \"p_midlat\": 0.9,\n    \"p_midlat_center_deg\": 50.0,\n    \"p_midlat_sigma_deg\": 12.0,\n    \"p_noise\": 0.35,\n    \"t_equator_c\": 27.0,\n    \"t_pole_c\": -25.0,\n    \"lapse_rate_c_per_m\": 0.0065,\n    \"pet_per_degc_m_per_yr\": 0.055,\n    \"pet_base_m_per_yr\": 0.1,\n    \"runoff_floor_fraction\": 0.1,\n    \"runoff_floor_m_per_yr\": 0.01,\n    \"runoff_ref_m_per_yr\": 0.3\n  },\n  \"landscape\": {\n    \"theta\": 0.45,\n    \"slope_exponent_n\": 2.0,\n    \"k_ref\": 150,\n    \"u_ref_m_per_yr\": 0.001,\n    \"hillslope_diffusivity_m2_per_yr\": 0.005,\n    \"deposition_g\": 1.0,\n    \"deposition_g_l0\": 0.0,\n    \"s_crit_default\": 0.6,\n    \"s_min\": 1e-05,\n    \"fill_epsilon_m\": 0.001,\n    \"hysteresis_eta\": 0.02,\n    \"jitter\": 1.0,\n    \"max_flow_iterations\": 200,\n    \"stop_dz_m\": 0.1\n  },\n  \"relief\": {\n    \"hack_coefficient_km\": 2.02,\n    \"hack_exponent\": 0.49,\n    \"mean_fraction\": 0.5\n  },\n  \"fans\": {\n    \"enabled\": true,\n    \"slope_drop_ratio\": 4.0,\n    \"min_discharge_m3_per_yr\": 1000000.0,\n    \"max_discharge_m3_per_yr\": 1000000000.0,\n    \"radius_m\": 3000.0,\n    \"slope\": 0.03\n  },\n  \"geology\": {\n    \"geotherm_c_per_m\": 0.03,\n    \"surface_temperature_c\": 10.0,\n    \"fold_wavelength_m\": 15000.0,\n    \"fold_amplitude_m\": 1500.0,\n    \"fold_belt_width_m\": 400000.0,\n    \"arc_belt_width_m\": 250000.0\n  },\n  \"soil\": {\n    \"production_max_m_per_yr\": 0.0003,\n    \"production_max_cap_m_per_yr\": 0.0025,\n    \"decay_depth_m\": 0.5,\n    \"thickness_cap_m\": 3.0,\n    \"bare_slope\": 0.8,\n    \"alluvium_max_m\": 30.0\n  },\n  \"groundwater\": {\n    \"recharge_fraction\": 0.5,\n    \"fan_alpha_m\": 120.0,\n    \"fan_beta\": 150.0,\n    \"max_depth_m\": 300.0\n  },\n  \"caves\": {\n    \"incision_fraction\": 0.35,\n    \"levels\": 2,\n    \"valley_window_m\": 1500.0,\n    \"entrance_tolerance_m\": 3.0,\n    \"passage_radius_m\": 3.0,\n    \"noise_wavelength_m\": 60.0\n  },\n  \"rivers\": {\n    \"min_discharge_m3_per_s\": 0.3,\n    \"width_coefficient\": 4.0,\n    \"depth_coefficient\": 0.35\n  },\n  \"detail\": {\n    \"fractal_gain\": 2.0,\n    \"hurst\": 0.7,\n    \"max_wavelength_m\": 50.0,\n    \"min_wavelength_m\": 4.0,\n    \"soil_factor\": 0.35,\n    \"slope_ref\": 0.5,\n    \"water_margin_m\": 6.0,\n    \"edge_fade_m\": 50.0\n  },\n  \"profile\": {\n    \"grid\": {\n      \"coarse_n_per_face\": 16,\n      \"l0_n_per_face\": 32\n    },\n    \"hero\": {\n      \"max_flow_iterations\": 400,\n      \"spacing_m\": 100.0,\n      \"size_m\": 6400.0\n    },\n    \"corridor\": {\n      \"voxel_m\": 8.0,\n      \"width_m\": 400.0,\n      \"length_m\": 1200.0\n    },\n    \"compute\": {\n      \"numba_threads\": 0\n    },\n    \"name\": \"tiny\"\n  },\n  \"zz\": {\n    \"new\": {\n      \"key\": 1.5\n    }\n  }\n}\n"
+      }
+    ]
+  }
+}

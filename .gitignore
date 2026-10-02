@@ -45,6 +45,17 @@ out/
 # 예외: 1 MB 이하 시험 자료와 문서 근거용 작은 결과 (conventions 8절)
 !tests/fixtures/*.npz
 !analysis/*/results/*.npz
+# C# 대조 시험의 커밋하는 golden 자료 (각 1 MB 이하, csharp/golden/data/README.md)
+!csharp/golden/data/**/*.npz
+!csharp/golden/data/**/*.npy
+
+# --- C# (csharp/) ---
+csharp/**/bin/
+csharp/**/obj/
+TestResults/
+*.user
+*.binlog
+.vs/
 
 # --- Godot 실행 파일과 내보내기 템플릿 (scripts/setup 이 .tools/ 에 받음) ---
 .tools/
