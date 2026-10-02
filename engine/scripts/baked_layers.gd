@@ -9,10 +9,15 @@ extends Node3D
 ## - Caves: 동굴 메시 (caves.glb).[br]
 ## - Section: 단면 판. 재질 부피(strata.u8)를 3D 텍스처로 읽어 자르는 면에 칠합니다.[br]
 ## 레이어 이름은 LAYERS 의 키입니다. "entrance_holes" 는 지형에 동굴 입구 구멍을 뚫는 선택입니다
-## (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 뚫음).
+## (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 뚫음).[br]
+## "fractal_detail" 은 회랑 지형을 프랙탈 디테일 높이맵(heightmap_detail)으로 바꾸는 선택입니다.
+## 굽기가 히어로 격자로 그리지 못하는 100 m 보다 짧은 파장의 거칠기를 이어 붙인 보기용 지표이고,
+## 솔버 결과가 아닙니다. 파일이 있으면 처음에 켭니다. 끄면 기본 높이맵(heightmap)으로 돌아갑니다.
 
 ## 레이어가 바뀌면 (보이기, 단면) 알립니다.
 signal layers_changed
+## 회랑 지형의 높이맵을 바꿨을 때 (프랙탈 디테일) 알립니다. main.gd 가 걷는 플레이어를 올립니다.
+signal terrain_rebuilt
 
 const TERRAIN_SHADER := preload("res://shaders/cross_section.gdshader")
 const SECTION_SHADER := preload("res://shaders/strata_section.gdshader")
@@ -28,7 +33,15 @@ const LAYERS := {
 	"caves": {"label": "동굴", "solo": true},
 	"section": {"label": "지층 단면", "solo": true},
 	"entrance_holes": {"label": "동굴 입구 구멍", "solo": false},
+	"fractal_detail": {
+		"label": "프랙탈 디테일", "solo": false,
+		"hint": "히어로 격자보다 짧은 파장(100 m 아래)의 거칠기를 굽기에서 이어 붙인 지표입니다.\n"
+				+ "보기용이며 솔버 결과가 아닙니다. 끄면 기본 회랑 지표로 돌아갑니다."},
 }
+## 프랙탈 디테일을 더한 회랑 지표 높이맵과 그 지표의 동굴 입구 파일 (BakedPaths.resolve 로 바뀜).
+const DETAIL_STEM := "res://baked/heightmap_detail"
+const CAVE_MOUTH_NAME := "cave_mouth"
+const CAVE_MOUTH_DETAIL_NAME := "cave_mouth_detail"
 ## 굽기의 '물 없음' 값은 -10000 m 입니다. 이보다 낮으면 물이 없는 표본입니다.
 const WATER_NONE_BELOW_M := -9999.0
 const WATER_COLOR := Color(0.10, 0.30, 0.42, 0.78)
@@ -73,16 +86,25 @@ var _water_table: MeshInstance3D
 var _caves: Node3D
 var _section: MeshInstance3D
 var _section_y_center: float = 0.0
+## 기본(디테일 없는) 회랑 높이맵. 디테일을 켤 때 높이 차를 재려고 한 번 읽습니다.
+var _base_heightmap: HeightmapLoader
 ## 단면(자르는 면)을 받는 재질.
 var _cut_materials: Array[ShaderMaterial] = []
 var _terrain_material: ShaderMaterial
 var _visible := {}
 var _entrance_holes := true
+## 회랑 지형의 기본 높이맵 경로 (setup 때의 Terrain.heightmap_stem).
+var _base_stem := ""
+## 높이맵 경로 → 셰이더용 높이 텍스처. 프랙탈 디테일을 켜고 끌 때 다시 만들지 않습니다.
+var _textures := {}
+## 동굴 입구 파일 이름 → 읽은 높이맵.
+var _mouths := {}
 
 
 ## manifest 를 읽고 레이어를 만듭니다. 구운 묶음이 없으면 false (표본 지형만 보입니다).
 func setup(terrain: HeightmapTerrain) -> bool:
 	_terrain = terrain
+	_base_stem = terrain.heightmap_stem
 	_terrain_material = terrain.material as ShaderMaterial
 	if _terrain_material != null:
 		_cut_materials.append(_terrain_material)
@@ -115,7 +137,7 @@ func setup(terrain: HeightmapTerrain) -> bool:
 		_terrain_material.set_shader_parameter("open_entrances", _entrance_holes)
 		if strata != null and terrain.used_stem == BakedPaths.resolve(terrain.heightmap_stem):
 			strata.apply_to(_terrain_material)
-		_apply_cave_mouth()
+		_apply_cave_mouth(CAVE_MOUTH_NAME)
 
 	t = Time.get_ticks_msec()
 	_build_surround()
@@ -134,6 +156,7 @@ func setup(terrain: HeightmapTerrain) -> bool:
 	_build_section()
 	_read_entrances()
 	set_section(false)
+	_setup_fractal_detail()
 	loaded = true
 	print("구운 레이어: %s, 시간 %s ms" % [", ".join(layer_ids()), load_ms])
 	return true
@@ -154,6 +177,11 @@ func layer_label(id: String) -> String:
 
 func can_solo(id: String) -> bool:
 	return LAYERS[id]["solo"]
+
+
+## 패널 버튼에 띄울 설명 (없으면 빈 글).
+func layer_hint(id: String) -> String:
+	return LAYERS[id].get("hint", "")
 
 
 func is_layer_visible(id: String) -> bool:
@@ -194,6 +222,8 @@ func set_layer_visible(id: String, on: bool) -> void:
 			_entrance_holes = on
 			if _terrain_material != null:
 				_terrain_material.set_shader_parameter("open_entrances", on)
+		"fractal_detail":
+			on = _use_detail_surface(on)
 	_visible[id] = on
 	layers_changed.emit()
 
@@ -261,16 +291,83 @@ func _new_cut_material(shader: Shader) -> ShaderMaterial:
 	return m
 
 
-## 동굴 입구 구멍 (cave_mouth) 을 지형 재질에 넣습니다. 없으면 '입구 구멍' 선택이 없습니다.
-func _apply_cave_mouth() -> void:
-	var mouth := HeightmapLoader.load_stem(baked_dir.path_join("cave_mouth"))
+## 동굴 입구 구멍 파일 (file_name: cave_mouth 또는 cave_mouth_detail) 을 지형 재질에 넣습니다.
+## 그 파일이 없으면 cave_mouth 를 씁니다. 둘 다 없으면 '입구 구멍' 선택이 없습니다.
+func _apply_cave_mouth(file_name: String) -> void:
+	var mouth := _load_mouth(file_name)
+	if not mouth.is_valid() and file_name != CAVE_MOUTH_NAME:
+		mouth = _load_mouth(CAVE_MOUTH_NAME)
 	if not mouth.is_valid():
 		return
-	_terrain_material.set_shader_parameter("cave_mouth", _height_texture(mouth))
+	_terrain_material.set_shader_parameter("cave_mouth", _cached_texture(mouth))
 	_terrain_material.set_shader_parameter("mouth_origin", Vector2(mouth.origin.x, mouth.origin.z))
 	_terrain_material.set_shader_parameter("mouth_spacing_m", mouth.spacing_m)
 	_terrain_material.set_shader_parameter("mouth_size", Vector2(mouth.width, mouth.height))
 	_visible["entrance_holes"] = _entrance_holes
+
+
+func _load_mouth(file_name: String) -> HeightmapLoader:
+	if not _mouths.has(file_name):
+		_mouths[file_name] = HeightmapLoader.load_stem(baked_dir.path_join(file_name))
+	return _mouths[file_name]
+
+
+## 프랙탈 디테일 높이맵이 있고 회랑 지형이 구운 높이맵이면 선택 레이어로 두고 켭니다.
+func _setup_fractal_detail() -> void:
+	if _terrain.used_stem != BakedPaths.resolve(_base_stem):
+		return
+	if not HeightmapLoader.exists(BakedPaths.resolve(DETAIL_STEM)):
+		return
+	_visible["fractal_detail"] = false
+	var t := Time.get_ticks_msec()
+	set_layer_visible("fractal_detail", true)
+	_lap("fractal_detail", t)
+
+
+## 회랑 지형을 프랙탈 디테일 높이맵(on) 또는 기본 높이맵으로 바꿉니다. 지형 재질(색, 단면,
+## 입구 구멍 켜기)과 메시가 보이는지는 그대로 두고, 동굴 입구 구멍과 단면 판의 지표 높이를
+## 새 높이맵에 맞춥니다. 한 번 만든 메시·충돌 모양은 다시 씁니다. 반환: 실제로 켜졌는지.
+func _use_detail_surface(on: bool) -> bool:
+	var stem := DETAIL_STEM if on else _base_stem
+	if _terrain.used_stem != BakedPaths.resolve(stem):
+		var mesh_on := _terrain.is_mesh_visible()
+		_terrain.heightmap_stem = stem
+		if not _terrain.rebuild(true) or _terrain.used_stem != BakedPaths.resolve(stem):
+			push_error("프랙탈 디테일 지형을 읽지 못해 기본 지형으로 돌아갑니다: %s" % stem)
+			on = false
+			_terrain.heightmap_stem = _base_stem
+			_terrain.rebuild(true)
+		_terrain.set_mesh_visible(mesh_on)
+		terrain_rebuilt.emit()
+	if _terrain_material != null:
+		_apply_cave_mouth(CAVE_MOUTH_DETAIL_NAME if on else CAVE_MOUTH_NAME)
+	_apply_section_surface()
+	_apply_surface_offset(on)
+	return on
+
+
+## 프랙탈 디테일을 켜면 지형 색칠과 단면이 재질 부피의 층 깊이를 실제로 그린 지표에서 재도록
+## 두 높이맵(지금, 기본)을 넘깁니다 (strata.gdshaderinc 의 surface_offset). 끄면 차이 0.
+## 이것이 없으면 디테일이 지표를 낮춘 골에서 흙 아래 암석 색이 얼룩으로 보입니다.
+func _apply_surface_offset(on: bool) -> void:
+	var now := _terrain.heightmap
+	if on and (_base_heightmap == null or not _base_heightmap.is_valid()):
+		_base_heightmap = HeightmapLoader.load_stem(BakedPaths.resolve(_base_stem))
+	var ok := on and now != null and _base_heightmap.is_valid() \
+			and _base_heightmap.width == now.width and _base_heightmap.height == now.height
+	var mats: Array[ShaderMaterial] = []
+	if _terrain_material != null:
+		mats.append(_terrain_material)
+	if _section != null:
+		mats.append(_section.material_override as ShaderMaterial)
+	for m in mats:
+		m.set_shader_parameter("has_surface_offset", ok)
+		if ok:
+			m.set_shader_parameter("surface_now", _cached_texture(now))
+			m.set_shader_parameter("surface_base", _cached_texture(_base_heightmap))
+			m.set_shader_parameter("offset_origin", now.origin)
+			m.set_shader_parameter("offset_spacing_m", now.spacing_m)
+			m.set_shader_parameter("offset_size", Vector2(now.width, now.height))
 
 
 func _build_surround() -> void:
@@ -423,10 +520,6 @@ func _build_section() -> void:
 	var m := ShaderMaterial.new()
 	m.shader = SECTION_SHADER
 	strata.apply_to(m)
-	m.set_shader_parameter("surface_height", _height_texture(surface))
-	m.set_shader_parameter("surface_origin", surface.origin)
-	m.set_shader_parameter("surface_spacing_m", surface.spacing_m)
-	m.set_shader_parameter("surface_size", Vector2(surface.width, surface.height))
 	if water_table != null and water_table.width == surface.width \
 			and water_table.height == surface.height:
 		m.set_shader_parameter("water_table", _height_texture(water_table))
@@ -437,19 +530,41 @@ func _build_section() -> void:
 		deep.height = 1
 		deep.heights = PackedFloat32Array([-1.0e6])
 		m.set_shader_parameter("water_table", _height_texture(deep))
-	var y_lo := surface.origin.y + strata.top.min_height_m - strata.depth_m() - SECTION_MARGIN_M
-	var y_hi := surface.origin.y + surface.max_height_m + SECTION_MARGIN_M
-	_section_y_center = 0.5 * (y_lo + y_hi)
-	var quad := QuadMesh.new()
-	quad.size = Vector2(2.0 * corridor_rect.size.length(), y_hi - y_lo)
 	_section = MeshInstance3D.new()
 	_section.name = "Section"
-	_section.mesh = quad
+	_section.mesh = QuadMesh.new()
 	_section.material_override = m
 	_section.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_section.visible = false
 	add_child(_section)
 	_visible["section"] = false
+	_apply_section_surface()
+
+
+## 단면 판의 지표 높이 (지표 위를 버리고 깊이 선을 긋는 기준) 와 판의 위아래 범위를 지금 회랑
+## 지형에 맞춥니다. 프랙탈 디테일은 지표를 기본보다 높일 수 있습니다.
+func _apply_section_surface() -> void:
+	if _section == null:
+		return
+	var surface := _terrain.heightmap
+	var y_lo := surface.origin.y + strata.top.min_height_m - strata.depth_m() - SECTION_MARGIN_M
+	var y_hi := surface.origin.y + surface.max_height_m + SECTION_MARGIN_M
+	_section_y_center = 0.5 * (y_lo + y_hi)
+	(_section.mesh as QuadMesh).size = Vector2(2.0 * corridor_rect.size.length(), y_hi - y_lo)
+	if section_on:
+		_section.global_position.y = _section_y_center
+	var m := _section.material_override as ShaderMaterial
+	m.set_shader_parameter("surface_height", _cached_texture(surface))
+	m.set_shader_parameter("surface_origin", surface.origin)
+	m.set_shader_parameter("surface_spacing_m", surface.spacing_m)
+	m.set_shader_parameter("surface_size", Vector2(surface.width, surface.height))
+
+
+## 높이맵 텍스처를 경로마다 한 번만 만듭니다.
+func _cached_texture(hm: HeightmapLoader) -> ImageTexture:
+	if not _textures.has(hm.stem):
+		_textures[hm.stem] = _height_texture(hm)
+	return _textures[hm.stem]
 
 
 func _height_texture(hm: HeightmapLoader) -> ImageTexture:

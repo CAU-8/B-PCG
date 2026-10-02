@@ -7,7 +7,7 @@ extends CanvasLayer
 ## 색 바꾸기, 손전등 버튼이 있습니다 (Tab 으로 숨김). 버튼을 누르려면 Esc 로 마우스를 놓습니다.
 ## 버튼은 키보드 초점을 받지 않아 Space 같은 키가 버튼을 누르지 않습니다.
 
-## 패널의 '색' 버튼과 '손전등' 버튼을 누를 때 알립니다. name: "color_mode", "lamp".
+## 패널의 '색'·'손전등'·'지구본' 버튼을 누를 때 알립니다. name: "color_mode", "lamp", "globe".
 signal action_requested(name: String)
 
 const FONT_NAMES := [
@@ -17,10 +17,10 @@ const FONT_NAMES := [
 const FONT_SIZE := 15
 const HELP_TEXT := """[V] 날기(노클립) ↔ 걷기    [WASD] 이동    [Space·E] 위    [Q·Ctrl] 아래
 [Shift] 빠르게    [휠] 나는 속력    [클릭] 마우스로 둘러보기    [Esc] 마우스 놓기
-[1~7] 레이어 켜기·끄기    [Shift+1~7] 그 레이어만 보기    [0] 모두 보기
+{layer_keys}
 [X] 단면 켜기·끄기 (눈앞에 자르는 면)    [ [ ] ] 단면 당기기·밀기
 [T] 다음 동굴 입구로    [Shift+T] 이전 입구    [G] 색: 자연색 ↔ 지질도    [F] 손전등
-[Tab] 레이어 패널 숨기기    [H] 도움말 숨기기"""
+[M] 지구본 (행성 전체)    [Tab] 레이어 패널 숨기기    [H] 도움말 숨기기"""
 
 var _font: SystemFont
 var _status: Label
@@ -42,7 +42,7 @@ func _ready() -> void:
 	add_child(_status)
 
 	_help = _label()
-	_help.text = HELP_TEXT
+	_help.text = HELP_TEXT.format({"layer_keys": "[1~7] 레이어 켜기·끄기    [0] 모두 보기"})
 	_help.anchor_top = 1.0
 	_help.anchor_bottom = 1.0
 	_help.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -86,6 +86,7 @@ func bind_layers(layers: BakedLayers) -> void:
 		toggle.toggle_mode = true
 		toggle.custom_minimum_size = Vector2(200, 0)
 		toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		toggle.tooltip_text = layers.layer_hint(id)
 		toggle.toggled.connect(func(on: bool) -> void: layers.set_layer_visible(id, on))
 		row.add_child(toggle)
 		_toggles[id] = toggle
@@ -96,6 +97,7 @@ func bind_layers(layers: BakedLayers) -> void:
 			row.add_child(solo)
 		_rows.add_child(row)
 		index += 1
+	_help.text = HELP_TEXT.format({"layer_keys": _layer_keys_line(layers)})
 	var all := _button("0  모두 보기")
 	all.pressed.connect(layers.show_all)
 	_rows.add_child(all)
@@ -105,8 +107,31 @@ func bind_layers(layers: BakedLayers) -> void:
 	_lamp_button = _button("")
 	_lamp_button.pressed.connect(func() -> void: action_requested.emit("lamp"))
 	_rows.add_child(_lamp_button)
+	var globe := _button("M  지구본 (행성 전체)")
+	globe.tooltip_text = "행성 전체를 지구본으로 봅니다. 지구본에서 M 을 누르면 돌아옵니다"
+	globe.pressed.connect(func() -> void: action_requested.emit("globe"))
+	_rows.add_child(globe)
 	layers.layers_changed.connect(refresh_layers)
 	refresh_layers()
+
+
+## 도움말의 레이어 키 줄. 번호는 지금 있는 레이어 순서(layer_ids)를 따릅니다.
+func _layer_keys_line(layers: BakedLayers) -> String:
+	var ids := layers.layer_ids()
+	var solo: Array[int] = []
+	var extra: Array[String] = []
+	for i in ids.size():
+		if layers.can_solo(ids[i]):
+			solo.append(i + 1)
+		else:
+			extra.append("%d = %s" % [i + 1, layers.layer_label(ids[i])])
+	var line := "[1~%d] 레이어 켜기·끄기" % ids.size()
+	if not extra.is_empty():
+		line += " (%s)" % ", ".join(extra)
+	if not solo.is_empty():
+		line += "    [Shift+%s] 그 레이어만 보기" % (
+				str(solo[0]) if solo.size() == 1 else "%d~%d" % [solo[0], solo[-1]])
+	return line + "    [0] 모두 보기"
 
 
 ## 버튼 눌림 상태를 레이어 상태에 맞춥니다 (신호를 다시 내지 않음).

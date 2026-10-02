@@ -23,13 +23,18 @@ var heightmap: HeightmapLoader
 ## 실제로 읽은 높이맵 경로.
 var used_stem: String = ""
 
+## 경로 → 그 경로로 마지막에 만든 {heightmap, mesh, shape}. rebuild(true) 가 다시 씁니다.
+var _built := {}
+
 
 func _ready() -> void:
 	rebuild()
 
 
 ## 높이맵을 다시 읽고 자식 노드를 새로 만듭니다. 성공하면 true.
-func rebuild() -> bool:
+## [br]reuse 가 true 면 같은 경로로 전에 만든 높이맵·메시·충돌 모양을 다시 써서 읽기와 메시
+## 만들기를 건너뜁니다. 프랙탈 디테일처럼 두 높이맵을 오갈 때 씁니다.
+func rebuild(reuse := false) -> bool:
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -41,15 +46,28 @@ func rebuild() -> bool:
 			return false
 		print("지형: %s 가 없어 표본 %s 를 씁니다" % [stem, fallback_stem])
 		stem = fallback_stem
-	heightmap = HeightmapLoader.load_stem(stem)
-	if not heightmap.is_valid():
-		push_error("지형을 읽지 못했습니다: " + heightmap.error_message)
-		return false
+	var built: Dictionary = _built.get(stem, {}) if reuse else {}
+	if built.is_empty():
+		heightmap = HeightmapLoader.load_stem(stem)
+		if not heightmap.is_valid():
+			push_error("지형을 읽지 못했습니다: " + heightmap.error_message)
+			return false
+		var hole := collision_hole
+		if hole.has_area():
+			# 경계 바로 안쪽 한 칸은 남겨 고운 지형과 이어지게 합니다.
+			hole = hole.grow(-heightmap.spacing_m)
+		built = {
+			"heightmap": heightmap,
+			"mesh": heightmap.build_mesh(skirt_m),
+			"shape": heightmap.build_shape(hole),
+		}
+		_built[stem] = built
+	heightmap = built["heightmap"]
 	used_stem = stem
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "Mesh"
-	mesh_instance.mesh = heightmap.build_mesh(skirt_m)
+	mesh_instance.mesh = built["mesh"]
 	mesh_instance.position = heightmap.origin
 	if material != null:
 		mesh_instance.material_override = material
@@ -59,11 +77,7 @@ func rebuild() -> bool:
 	body.name = "Body"
 	var shape := CollisionShape3D.new()
 	shape.name = "Shape"
-	var hole := collision_hole
-	if hole.has_area():
-		# 경계 바로 안쪽 한 칸은 남겨 고운 지형과 이어지게 합니다.
-		hole = hole.grow(-heightmap.spacing_m)
-	shape.shape = heightmap.build_shape(hole)
+	shape.shape = built["shape"]
 	shape.transform = heightmap.shape_transform()
 	body.add_child(shape)
 	add_child(body)

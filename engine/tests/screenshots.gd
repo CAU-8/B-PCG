@@ -9,6 +9,7 @@ extends SceneTree
 ## 끝나면 'BPCG_SHOTS_OK <장 수>' 를 찍고 끝납니다.
 
 const MAIN_SCENE := "res://scenes/main.tscn"
+const GLOBE_SCENE := "res://scenes/globe.tscn"
 const ARG_PREFIX := "--shots-dir="
 ## 한 장을 찍기 전에 기다리는 프레임 수 (셰이더 컴파일, 그림자, 안개가 자리 잡도록).
 const SETTLE_FRAMES := 12
@@ -80,6 +81,18 @@ func _run() -> void:
 	if baked.entrances_inside.size() > 0:
 		main.go_to_entrance(1)
 		await _shot("07_entrance", main)
+	# 8·9. 프랙탈 디테일 켬·끔 (같은 시점, 비탈 가까이)
+	if baked.layer_ids().has("fractal_detail"):
+		var p := Vector3(c.x + 150.0, 0.0, c.z - 400.0)
+		var g := _ground(main, p)
+		player.look_from(Vector3(p.x - 35.0, g + 18.0, p.z + 35.0), Vector3(p.x, g - 5.0, p.z))
+		baked.set_layer_visible("fractal_detail", true)
+		await _shot("08_detail_on", main)
+		baked.set_layer_visible("fractal_detail", false)
+		await _shot("09_detail_off", main)
+		baked.set_layer_visible("fractal_detail", true)
+	# 10~. 지구본 장면 (행성 전체): 고도, 판, 강수, 히어로로 날아가기
+	await _globe_shots(main)
 	print("BPCG_SHOTS_OK %d" % _count)
 	quit(0)
 
@@ -94,6 +107,39 @@ func _shot(name: String, main: Node) -> void:
 		await process_frame
 	main._update_status()
 	await process_frame
+	var image := root.get_viewport().get_texture().get_image()
+	var path := _dir.path_join(name + ".png")
+	image.save_png(path)
+	_count += 1
+	print("찍음: %s" % path)
+
+
+func _globe_shots(main: Node) -> void:
+	if not ResourceLoader.exists(GLOBE_SCENE):
+		return
+	main.queue_free()
+	await process_frame
+	var globe_main := (load(GLOBE_SCENE) as PackedScene).instantiate()
+	root.add_child(globe_main)
+	await process_frame
+	if globe_main.globe.data == null or globe_main.globe.data.missing:
+		print("지구본 자료가 없어 지구본 장면은 찍지 않습니다")
+		return
+	await _shot_plain("10_globe_elevation")
+	for pair in [[2, "11_globe_plates"], [8, "12_globe_precip"]]:
+		globe_main.select_field_index(pair[0])
+		await _shot_plain(pair[1])
+	globe_main.select_field_index(0)
+	globe_main.camera.fly_to_hero()
+	for i in 90:
+		await process_frame
+	await _shot_plain("13_globe_hero")
+
+
+## 지구본 장면 캡처 (회랑 상태 글을 다시 쓰지 않음).
+func _shot_plain(name: String) -> void:
+	for i in SETTLE_FRAMES:
+		await process_frame
 	var image := root.get_viewport().get_texture().get_image()
 	var path := _dir.path_join(name + ".png")
 	image.save_png(path)

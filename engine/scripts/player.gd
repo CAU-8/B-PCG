@@ -88,11 +88,23 @@ func set_noclip(on: bool) -> void:
 	noclip = on
 	velocity = Vector3.ZERO
 	shape.disabled = on
-	if not on and ground_height_at.is_valid():
-		var ground: float = ground_height_at.call(global_position)
-		if is_finite(ground) and global_position.y < ground + 0.1:
-			global_position.y = ground + 0.5
+	if not on:
+		lift_above_ground()
 	noclip_changed.emit(on)
+
+
+## 발이 지면 아래(또는 지면에 거의 붙어)면 지면 위 0.5 m 로 올리고 아래로 가던 속도를 없앱니다.
+## 지형 높이맵이 바뀔 때(프랙탈 디테일) 걷는 플레이어가 새 땅속에 묻히지 않게 씁니다.
+## 올렸으면 true.
+func lift_above_ground() -> bool:
+	if not ground_height_at.is_valid():
+		return false
+	var ground: float = ground_height_at.call(global_position)
+	if not is_finite(ground) or global_position.y >= ground + 0.1:
+		return false
+	global_position.y = ground + 0.5
+	velocity.y = maxf(velocity.y, 0.0)
+	return true
 
 
 ## 지금 나는 속력 (Shift 포함, m/s). 걷기면 걷는 속력.

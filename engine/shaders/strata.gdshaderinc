@@ -4,6 +4,7 @@
 // 열 c, 행 r 기둥의 가운데는 X = origin.x + c·dx, Z = origin.z + r·dz 입니다.
 // 층 k 의 가운데는 Y = (그 기둥의 윗면) − (k + 0.5)·dy 입니다 (지표를 따라가는 층).
 // 재질 번호: 0..11 암석(geology.rocks), 254 물, 255 공기(동굴).
+// 지표를 바꿔 그릴 때(프랙탈 디테일) 층 깊이는 그린 지표에서 잽니다: 윗면 + (지금 지표 − 기본 지표).
 
 uniform bool has_strata = false;
 uniform sampler3D strata : filter_nearest, repeat_disable;
@@ -17,6 +18,22 @@ uniform vec3 strata_origin = vec3(0.0);
 uniform vec3 strata_spacing = vec3(4.0, 2.0, 4.0);
 // (열 수, 층 수, 행 수)
 uniform vec3 strata_size = vec3(1.0);
+// 그린 지표와 기본 지표의 높이 차 (같은 격자의 두 높이맵, 값만 빼므로 원점 Y 는 필요 없음)
+uniform bool has_surface_offset = false;
+uniform sampler2D surface_now : filter_linear, repeat_disable;
+uniform sampler2D surface_base : filter_linear, repeat_disable;
+// 두 높이맵 격자: 0번 표본의 (X, Y, Z), 간격 (m), (열 수, 행 수)
+uniform vec3 offset_origin = vec3(0.0);
+uniform float offset_spacing_m = 1.0;
+uniform vec2 offset_size = vec2(1.0);
+
+float surface_offset(vec2 xz) {
+	if (!has_surface_offset) {
+		return 0.0;
+	}
+	vec2 uv = ((xz - offset_origin.xz) / offset_spacing_m + 0.5) / offset_size;
+	return texture(surface_now, uv).r - texture(surface_base, uv).r;
+}
 
 bool strata_covers(vec2 xz) {
 	vec2 g = (xz - strata_origin.xz) / strata_spacing.xz + 0.5;
@@ -26,7 +43,7 @@ bool strata_covers(vec2 xz) {
 // 재질 부피 윗면의 엔진 Y (쌍선형).
 float strata_top_y(vec2 xz) {
 	vec2 uv = ((xz - strata_origin.xz) / strata_spacing.xz + 0.5) / strata_size.xz;
-	return texture(strata_top, uv).r + strata_origin.y;
+	return texture(strata_top, uv).r + strata_origin.y + surface_offset(xz);
 }
 
 // (x, z) 기둥의 layer 번째 층(실수, 0 = 맨 위)의 재질 번호.

@@ -9,6 +9,7 @@ extends SceneTree
 ## quit(1) 합니다. tests/test_engine_smoke.py 가 이 표시를 봅니다.
 ## [br]구운 묶음이 있으면(기본 res://baked, 또는 `-- --baked-dir=<폴더>`) 레이어 불러오기와
 ## 보이기·숨기기, 단면도 검사합니다. `-- --expect-baked` 를 주면 묶음이 없을 때 실패합니다.
+## 묶음에 heightmap_detail 이 있으면 프랙탈 디테일 레이어를 켜고 끄는 것도 검사합니다.
 
 const SAMPLE_STEM := "res://samples/sample"
 const MAIN_SCENE := "res://scenes/main.tscn"
@@ -34,6 +35,8 @@ const RAY_TOLERANCE_M := 0.05
 const MAX_LANDING_FRAMES := 600
 ## 검사 전체 시간 제한 (ms). 넘으면 실패로 끝냅니다.
 const WATCHDOG_MS := 60000
+## 프랙탈 디테일 높이맵 이름 (굽기 폴더 안).
+const DETAIL_NAME := "heightmap_detail"
 
 var _done := false
 var _started_ms := 0
@@ -68,6 +71,8 @@ func _run() -> void:
 	if not await _check_physics(main):
 		return
 	if not await _check_noclip(main):
+		return
+	if not await _check_fractal_detail(main):
 		return
 	if not _check_layers(main):
 		return
@@ -211,6 +216,9 @@ func _instantiate_main() -> Node:
 		return null
 	if not (main.get_node_or_null("Hud") is Hud):
 		_fail("Hud 노드가 없습니다")
+		return null
+	if not ResourceLoader.exists(main.GLOBE_SCENE):
+		_fail("M 키로 가는 지구본 장면이 없습니다: %s" % main.GLOBE_SCENE)
 		return null
 	if not (main.get_node_or_null("Player/Head/Camera/Lamp") is Light3D):
 		_fail("손전등 (Player/Head/Camera/Lamp) 이 없습니다")
@@ -405,6 +413,159 @@ func _check_layers(main: Node) -> bool:
 		", ".join(ids), baked.cave_faces, baked.cave_source, baked.entrances_inside.size(),
 		baked.strata.cols, baked.strata.layers, baked.strata.rows])
 	return true
+
+
+## 프랙탈 디테일: heightmap_detail 이 있으면 레이어가 맨 끝에 있고 처음에 켜져 있으며, 숫자 키와
+## 패널 버튼으로 끄고 켤 때 회랑 지형(높이, 충돌)·단면 판의 지표·입구 구멍·버튼이 같이 바뀌는지,
+## 지형을 숨긴 채 바꿔도 숨은 채인지, 걷는 플레이어가 새 땅속에 묻히지 않는지 봅니다.
+## 파일이 없으면 레이어도 없어야 합니다.
+func _check_fractal_detail(main: Node) -> bool:
+	var baked := main.get_node("Baked") as BakedLayers
+	if not baked.loaded:
+		return true
+	var hud := main.get_node("Hud") as Hud
+	var terrain := main.get_node("Terrain") as HeightmapTerrain
+	var player := main.get_node("Player") as Player
+	var ids := baked.layer_ids()
+	var has_file := HeightmapLoader.exists(BakedPaths.dir().path_join(DETAIL_NAME))
+	if ids.has("fractal_detail") != has_file:
+		return _fail("heightmap_detail 파일 있음 = %s 인데 프랙탈 디테일 레이어 있음 = %s" % [
+			has_file, ids.has("fractal_detail")])
+	if not has_file:
+		print("프랙탈 디테일: 굽기 파일이 없어 레이어도 없습니다")
+		return true
+	if ids.back() != "fractal_detail" or baked.can_solo("fractal_detail"):
+		return _fail("프랙탈 디테일이 맨 끝 선택 레이어가 아닙니다: %s" % [ids])
+	if not baked.is_layer_visible("fractal_detail"):
+		return _fail("프랙탈 디테일 파일이 있는데 처음에 꺼져 있습니다")
+	if not terrain.used_stem.ends_with(DETAIL_NAME):
+		return _fail("프랙탈 디테일이 켜졌는데 지형이 %s 입니다" % terrain.used_stem)
+	var button := hud.layer_button("fractal_detail")
+	if button == null or not button.button_pressed:
+		return _fail("프랙탈 디테일 버튼이 없거나 눌려 있지 않습니다")
+	var detail := terrain.heightmap
+	var base := HeightmapLoader.load_stem(BakedPaths.dir().path_join("heightmap"))
+	if not base.is_valid() or base.heights.size() != detail.heights.size():
+		return _fail("기본 높이맵을 읽지 못했거나 디테일과 격자가 다릅니다")
+	# 두 높이맵이 가장 많이 다른 안쪽 표본에서 높이와 충돌면이 바뀌는지 봅니다.
+	var worst := Vector2i.ZERO
+	var worst_m := 0.0
+	for row in range(1, detail.height - 1):
+		for col in range(1, detail.width - 1):
+			var i := row * detail.width + col
+			var d := absf(detail.heights[i] - base.heights[i])
+			if d > worst_m:
+				worst = Vector2i(col, row)
+				worst_m = d
+	if worst_m < 1e-3:
+		return _fail("heightmap_detail 이 heightmap 과 같습니다")
+	var probe := detail.origin + Vector3(worst.x, 0.0, worst.y) * detail.spacing_m
+	var section := baked.get_node_or_null("Section") as MeshInstance3D
+	var section_m := section.material_override as ShaderMaterial if section != null else null
+	var detail_surface: Variant = (
+			section_m.get_shader_parameter("surface_height") if section_m != null else null)
+	var m := terrain.material as ShaderMaterial
+	var detail_mouth: Variant = m.get_shader_parameter("cave_mouth")
+	var has_mouth_detail := HeightmapLoader.exists(BakedPaths.dir().path_join("cave_mouth_detail"))
+
+	# 끄기: 숫자 키 (패널 순서 번호)
+	var key := KEY_1 + ids.find("fractal_detail")
+	var t := Time.get_ticks_msec()
+	main._unhandled_input(_key_event(key))
+	var off_ms := Time.get_ticks_msec() - t
+	if baked.is_layer_visible("fractal_detail") or button.button_pressed:
+		return _fail("%s 키로 프랙탈 디테일이 꺼지지 않았거나 버튼이 눌려 있습니다" % OS.get_keycode_string(key))
+	if terrain.used_stem != BakedPaths.dir().path_join("heightmap"):
+		return _fail("프랙탈 디테일을 껐는데 지형이 %s 입니다" % terrain.used_stem)
+	if not terrain.is_mesh_visible():
+		return _fail("프랙탈 디테일을 끄니 지형 메시가 숨었습니다")
+	if not await _expect_ground(terrain, main, probe, base, "끈 뒤"):
+		return false
+	if section_m != null and section_m.get_shader_parameter("surface_height") == detail_surface:
+		return _fail("프랙탈 디테일을 껐는데 단면 판의 지표 높이 텍스처가 그대로입니다")
+	if has_mouth_detail and m.get_shader_parameter("cave_mouth") == detail_mouth:
+		return _fail("프랙탈 디테일을 껐는데 동굴 입구 텍스처가 그대로입니다")
+
+	# 켜기: 패널 버튼. 지형을 숨긴 채 바꾸면 숨은 채여야 합니다. 단면을 켠 채 바꾸면 단면 판이
+	# 새 지표의 가장 높은 곳까지 덮어야 합니다.
+	baked.set_layer_visible("terrain", false)
+	baked.set_section(true, terrain.to_global(probe), Vector3.BACK)
+	t = Time.get_ticks_msec()
+	button.button_pressed = true
+	var on_ms := Time.get_ticks_msec() - t
+	if section != null:
+		var top_y := section.global_position.y + 0.5 * (section.mesh as QuadMesh).size.y
+		var max_y := terrain.to_global(Vector3(0.0, detail.origin.y + detail.max_height_m, 0.0)).y
+		if top_y < max_y:
+			return _fail("프랙탈 디테일을 켰는데 단면 판 위 끝 %.2f 가 지표 최고 %.2f 보다 낮습니다" % [
+				top_y, max_y])
+	baked.set_section(false)
+	if not baked.is_layer_visible("fractal_detail") or not terrain.used_stem.ends_with(DETAIL_NAME):
+		return _fail("패널 버튼으로 프랙탈 디테일이 켜지지 않았습니다 (지형 %s)" % terrain.used_stem)
+	if terrain.is_mesh_visible() or baked.is_layer_visible("terrain"):
+		return _fail("지형을 숨긴 채 프랙탈 디테일을 켰는데 지형 메시가 보입니다")
+	baked.set_layer_visible("terrain", true)
+	if terrain.heightmap != detail:
+		return _fail("프랙탈 디테일을 다시 켰는데 전에 만든 높이맵을 다시 쓰지 않았습니다")
+	if not await _expect_ground(terrain, main, probe, detail, "다시 켠 뒤"):
+		return false
+	if section_m != null and section_m.get_shader_parameter("surface_height") != detail_surface:
+		return _fail("프랙탈 디테일을 다시 켰는데 단면 판의 지표 높이 텍스처가 돌아오지 않았습니다")
+	if m.get_shader_parameter("cave_mouth") != detail_mouth:
+		return _fail("프랙탈 디테일을 다시 켰는데 동굴 입구 텍스처가 돌아오지 않았습니다")
+
+	# 걷는 중에 바꾸면 새 지면 위로 올라와야 합니다.
+	player.set_noclip(false)
+	for _i in 2:
+		var feet := terrain.to_global(Vector3(probe.x, terrain.height_at(probe) - 3.0, probe.z))
+		player.global_position = feet
+		baked.toggle_layer("fractal_detail")
+		var ground: float = main._ground_y(player.global_position)
+		if not (player.global_position.y >= ground):
+			player.set_noclip(true)
+			return _fail("걷는 중에 프랙탈 디테일을 바꿨는데 땅속에 있습니다: %.2f < %.2f" % [
+				player.global_position.y, ground])
+	player.set_noclip(true)
+	if not baked.is_layer_visible("fractal_detail"):
+		return _fail("프랙탈 디테일을 두 번 바꿨는데 켜져 있지 않습니다")
+	print("프랙탈 디테일: 켜짐 (처음), %s 키, 높이 차 최대 %.2f m, 끄기 %d ms, 다시 켜기 %d ms" % [
+		OS.get_keycode_string(key), worst_m, off_ms, on_ms])
+	return true
+
+
+## 지형의 높이(height_at)와 충돌면(물리 광선)이 local 에서 높이맵 hm 의 값과 같은지 봅니다.
+func _expect_ground(
+		terrain: HeightmapTerrain, main: Node, local: Vector3, hm: HeightmapLoader,
+		when: String) -> bool:
+	var want := hm.height_at(local)
+	if absf(terrain.height_at(local) - want) > HEIGHT_TOLERANCE_M:
+		return _fail("프랙탈 디테일을 %s 지형 높이 %f 가 기대 %f 와 다릅니다" % [
+			when, terrain.height_at(local), want])
+	# 새 충돌체가 물리 공간에 들어가도록 기다립니다.
+	await physics_frame
+	await physics_frame
+	var exclude: Array[RID] = [(main.get_node("Player") as Player).get_rid()]
+	var surround_body := main.get_node_or_null("Baked/Surround/Body") as StaticBody3D
+	if surround_body != null:
+		exclude.append(surround_body.get_rid())
+	var top := terrain.to_global(Vector3(local.x, hm.origin.y + hm.max_height_m + 100.0, local.z))
+	var bottom := terrain.to_global(
+			Vector3(local.x, hm.origin.y + hm.min_height_m - 100.0, local.z))
+	var query := PhysicsRayQueryParameters3D.create(top, bottom, 0xFFFFFFFF, exclude)
+	var hit := terrain.get_world_3d().direct_space_state.intersect_ray(query)
+	var expected := terrain.to_global(Vector3(local.x, want, local.z)).y
+	if hit.is_empty() or absf(hit.position.y - expected) > RAY_TOLERANCE_M:
+		return _fail("프랙탈 디테일을 %s 물리 광선이 %s, 기대 높이 %f" % [
+			when, "빗나감" if hit.is_empty() else str(hit.position.y), expected])
+	return true
+
+
+func _key_event(key: Key) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.physical_keycode = key
+	event.keycode = key
+	event.pressed = true
+	return event
 
 
 func _pass() -> void:

@@ -2,7 +2,8 @@ extends Node3D
 ## 시작 장면. 지형과 구운 레이어를 불러오고, 플레이어를 세우고, 보기 전환 키를 받습니다.
 ##
 ## 자식의 _ready() 가 부모보다 먼저 불리므로 여기서는 지형이 이미 준비돼 있습니다.
-## 키는 Hud.HELP_TEXT 에 적혀 있습니다. 레이어 숫자 키(1~7, Shift, 0)는 여기서 직접 받습니다.
+## 키는 Hud.HELP_TEXT 에 적혀 있습니다. 레이어 숫자 키(1~9, Shift, 0)는 여기서 직접 받습니다.
+## 숫자는 패널 순서(BakedLayers.layer_ids)를 따릅니다. 구운 레이어가 다 있으면 1~8 입니다.
 
 ## 단면을 켤 때 눈앞 거리 (m).
 const SECTION_DISTANCE_M := 15.0
@@ -16,6 +17,8 @@ const ENTRANCE_EYE_UP_M := 1.0
 ## 상태 글을 다시 쓰는 간격 (s).
 const STATUS_INTERVAL_S := 0.1
 const COLOR_MODE_NAMES := {1: "자연색", 2: "지질도 (흙 아래 기반암)"}
+## M 키로 가는 지구본 장면 (행성 전체, engine/GLOBE.md).
+const GLOBE_SCENE := "res://scenes/globe.tscn"
 
 var _color_mode := 1
 var _entrance_index := -1
@@ -36,6 +39,7 @@ func _ready() -> void:
 	player.global_position = terrain.spawn_point(clearance)
 	hud.bind_layers(baked)
 	hud.action_requested.connect(_on_hud_action)
+	baked.terrain_rebuilt.connect(_on_terrain_rebuilt)
 	_update_option_labels()
 	_update_status()
 
@@ -54,6 +58,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if key == KEY_0:
 			baked.show_all()
+			return
+		if key == KEY_M:
+			open_globe()
 			return
 	if event.is_action_pressed("toggle_section"):
 		baked.toggle_layer("section")
@@ -80,6 +87,12 @@ func _process(delta: float) -> void:
 	if _status_timer <= 0.0:
 		_status_timer = STATUS_INTERVAL_S
 		_update_status()
+
+
+## 지구본 장면(행성 전체)으로 갑니다. 지구본에서 M 을 누르면 이 장면으로 돌아옵니다.
+func open_globe() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().change_scene_to_file(GLOBE_SCENE)
 
 
 ## 지형 색: 자연색 ↔ 지질도. 구운 재질 부피가 없으면 바꾸지 않습니다.
@@ -113,9 +126,17 @@ func _on_hud_action(action: String) -> void:
 	match action:
 		"color_mode":
 			cycle_color_mode()
+		"globe":
+			open_globe()
 		"lamp":
 			lamp.visible = not lamp.visible
 			_update_option_labels()
+
+
+## 회랑 지형 높이맵이 바뀌면 (프랙탈 디테일) 걷는 플레이어가 새 땅속에 묻히지 않게 올립니다.
+func _on_terrain_rebuilt() -> void:
+	if not player.noclip:
+		player.lift_above_ground()
 
 
 func _update_option_labels() -> void:

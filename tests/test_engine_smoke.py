@@ -13,6 +13,8 @@ GDScript 나 셰이더 오류가 나도 Godot 는 0 으로 끝나므로 출력�
 - test_engine_loads_baked_corridor: tiny 히어로를 임시 폴더에 구워 `--baked-dir` 로 넘기고,
   레이어(주변 지형, 수면, 지하수면, 동굴, 단면) 불러오기와 보이기·숨기기를 검사합니다.
   동굴 메시는 편집기 가져오기 없이 실행 중 glTF 로 읽는 경로를 탑니다.
+  굽기가 프랙탈 디테일(heightmap_detail)을 썼으면 그 레이어가 처음에 켜져 있고 켜고 끄기가 되는지도
+  봅니다 (smoke.gd 의 _check_fractal_detail).
 """
 
 import os
@@ -181,3 +183,6 @@ def test_engine_loads_baked_corridor(godot_env, tmp_path):
     assert "레이어: terrain, surround, water, water_table, caves, section" in out
     assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
     assert f"입구 {man['caves']['n_entrances']}," in out
+    # tiny 기본 설정(fractal_gain 1, 8 m 복셀)은 프랙탈 디테일을 반드시 굽습니다.
+    assert "heightmap_detail.bin" in man["files"]
+    assert "프랙탈 디테일: 켜짐 (처음)" in out
