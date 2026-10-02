@@ -1,8 +1,8 @@
 # engine/ — Godot 4.7.2 프로젝트
 
-This folder is the Godot 4.7.2 (standard, non-.NET) project for B-PCG. It only loads files baked by the Python package (`engine/baked/`) and shows them: a heightmap becomes a mesh plus a collision shape, and the player can walk on it. The axis convention is X = east, Y = up, Z = south, in metres, in a local frame around a corridor reference point. A headless smoke test runs with `uv run pytest -m godot`.
+This folder is the Godot 4.7.2 (standard, non-.NET) project for B-PCG. It only loads files baked by the Python package (`engine/baked/`) and shows them: the corridor heightmap, the surrounding 25 m terrain, water surfaces, the water table, cave meshes and a strata cross-section. Each layer can be toggled or shown alone, and the player can fly through everything (noclip) or walk. The axis convention is X = east, Y = up, Z = south, in metres, in a local frame around a corridor reference point. A headless smoke test runs with `uv run pytest -m godot`.
 
-엔진은 지질·물·동굴을 계산하지 않습니다. 파이썬이 구운 파일을 불러와 보여 주고, 그 위를 걷게 합니다.
+엔진은 지질·물·동굴을 계산하지 않습니다. 파이썬이 구운 파일을 불러와 보여 주고, 그 사이를 날거나 걷게 합니다.
 
 ## 한눈에 보기
 
@@ -14,8 +14,8 @@ This folder is the Godot 4.7.2 (standard, non-.NET) project for B-PCG. It only l
 | 좌표 | X = 동, Y = 위, Z = 남. 단위 m. 회랑 기준점을 원점으로 한 지역 좌표 |
 | 지형 넘김 | 높이맵 `.bin`(float32) + `.json` → `ArrayMesh`(그리기) + `HeightMapShape3D`(충돌) |
 | 메시 넘김 | glb 타일. `NORMAL` 필수, 꼭짓점마다 붙는 값은 `COLOR_0` |
-| 카메라 | `far = 12000 m`. 기본값 4000 m 는 6~8 km 회랑 끝까지 보이지 않습니다 |
-| 입력 | `move_forward/back/left/right` = W/S/A/D, `jump` = Space (물리 키 위치 기준) |
+| 카메라 | `far = 40000 m`. 주변 25 m 지형(한 변 32~40 km) 끝까지 보이게 |
+| 입력 | 아래 '조작' 표. `project.godot` 의 입력 동작(물리 키 위치 기준) + 숫자 키(레이어)는 `main.gd` 가 직접 받음 |
 | 검사 | `uv run pytest -m godot` (Godot 가 없으면 건너뜀) |
 
 ## 왜 4.7.2 표준판인가
@@ -37,7 +37,44 @@ Godot 실행 파일은 `.tools/godot/` 에 둡니다 (git 에서 빠짐). `scrip
 .tools\godot\Godot_v4.7.2-stable_win64.exe --path engine -e
 ```
 
-프로젝트 관리자에서 `engine/project.godot` 를 가져와도 됩니다. 시작 장면은 `scenes/main.tscn` 이고, 프로젝트 실행(F5, macOS 는 Cmd+B)으로 돌리면 걸을 수 있습니다. 화면을 누르면 마우스로 둘러보고, Esc 로 마우스를 놓습니다.
+프로젝트 관리자에서 `engine/project.godot` 를 가져와도 됩니다. 시작 장면은 `scenes/main.tscn` 이고, 프로젝트 실행(F5, macOS 는 Cmd+B)으로 돌립니다. 편집기 없이 바로 돌리려면 `-e` 를 뺍니다. 처음 열 때는 동굴 메시(수십~100 MB)를 가져오느라 1분 안팎 걸릴 수 있습니다.
+
+**조작.** 시작은 노클립(날기)입니다. 화면 왼쪽 아래에 같은 표가 나옵니다(H 로 숨김).
+
+| 키 | 하는 일 |
+|---|---|
+| V | 날기(노클립) ↔ 걷기. 날기는 땅과 동굴 벽을 뚫고 지나갑니다. 땅속에서 걷기로 바꾸면 지면 위로 올라옵니다 |
+| W A S D | 이동 (날기는 바라보는 방향, 걷기는 수평) |
+| Space · E / Q · Ctrl | 위 / 아래 (걷기에서 Space 는 뛰기) |
+| Shift, 마우스 휠 | 5 배 빠르게, 나는 속력 1.25 배씩 바꾸기 (1 ~ 3000 m/s) |
+| 화면 클릭 / Esc | 마우스로 둘러보기 / 마우스 놓기 (패널 버튼을 누를 때) |
+| 1 ~ 8 | 레이어 켜기·끄기 (순서는 오른쪽 패널, 도움말 줄에 지금 번호가 나옴). 보통 8 이 프랙탈 디테일(보기용) |
+| Shift + 1 ~ 6 | 그 레이어만 보기 (나머지 숨김) |
+| 0 | 모두 보기 (지하수면·단면은 끈 처음 상태) |
+| X | 지층 단면 켜기·끄기. 눈앞 15 m 에 수직으로 선 면을 놓고, 그 면과 눈 사이의 지형·동굴·물을 버립니다 |
+| [ / ] | 단면을 당기기 / 밀기 (10 m/s, Shift 면 50 m/s) |
+| T / Shift + T | 다음 / 이전 동굴 입구 앞으로 옮겨 입구 안쪽을 보기 |
+| G | 지형 색: 자연색 ↔ 지질도(흙 아래 10 m 안의 첫 기반암) |
+| F | 손전등 (동굴 안에서) |
+| Tab / H | 레이어 패널 / 도움말 숨기기 |
+| M | 지구본 장면(행성 전체)으로 가기. 지구본에서 M 을 누르면 돌아옴. 패널의 'M 지구본' 버튼도 같음 |
+
+**레이어.** 오른쪽 패널에서 버튼으로도 켜고 끕니다. 줄마다 '만 보기' 버튼이 있습니다.
+
+| 번호 | 레이어 | 파일 | 보이는 것 |
+|---|---|---|---|
+| 1 | 회랑 지형 (2 m) | `heightmap` | 걷는 지표. 자연색은 재질 부피 맨 위 층(흙 = 풀, 충적층 = 모래빛, 드러난 암반 = 암석 색) |
+| 2 | 주변 지형 (25 m) | `surround25` | 히어로 유역 전체. 회랑 자리는 비우고 고운 지형에 맡깁니다(경계에 30 m 치마) |
+| 3 | 호수·강 수면 | `water` | 반투명 물 |
+| 4 | 지하수면 | `water_table` | 반투명 하늘색 면. 처음 켤 때 메시를 만듭니다 |
+| 5 | 동굴 | `caves.glb` | 동굴 벽. 앞면이 동굴 안을 보므로 밖(땅속, 단면)에서는 동굴 속이 들여다보입니다. 벽 색 = 벽 뒤 암석 |
+| 6 | 지층 단면 | `strata.u8`, `strata_top` | 자르는 면 위의 재질 부피. 지하수면 아래는 파랗게, 지하수면은 하늘색 선, 10 m 마다 가는 선·50 m 마다 굵은 선, 구운 깊이보다 깊은 곳은 회색 빗금, 동굴은 뚫려 보임 |
+| 7 | 동굴 입구 구멍 | `cave_mouth` | 지표가 동굴 빈 곳 안인 곳의 지형을 뚫음 (선택, '만 보기' 대상 아님) |
+| 8 | 프랙탈 디테일 | `heightmap_detail`, `cave_mouth_detail` | 켜면 회랑 지형이 50 m 보다 짧은 파장의 거칠기를 더한 지표로 바뀌고(그리기·충돌·단면 판의 지표선·입구 구멍 모두), 끄면 기본 `heightmap` 으로 돌아감. 파일이 있을 때만 있고 처음에 켜짐 (선택, '만 보기' 대상 아님) |
+
+**프랙탈 디테일(8).** 히어로 격자(25 m)는 50 m(칸 2개)보다 짧은 파장을 그리지 못해서, 2 m 회랑 지표가 50 m 아래에서 실제 산지보다 매끈합니다. 굽기(`configs/planets/*.toml` 의 `[detail]`, 기본 세기 2)가 히어로가 그린 가장 짧은 옥타브(50~100 m)의 거칠기를 더 짧은 파장(50 m → 4 m)으로 이어 붙여 `heightmap_detail` 을 쓰고, 그 지표에서 다시 잰 동굴 거리를 `cave_mouth_detail` 로 씁니다. 흙·충적층이 덮인 곳과 완만한 곳은 줄이고, 물가·동굴 입구 둘레·원래 웅덩이·회랑 가장자리에는 넣지 않습니다. 보기용 지표이고 솔버(지형·물·동굴 계산) 결과가 아닙니다. 수면·재질 부피·동굴 메시는 기본 지표 그대로이고, 지형 색칠과 단면은 재질 부피의 층 깊이를 그린 지표에서 잽니다(두 높이맵의 차를 셰이더에 넘김). 다른 세기로 보려면 `uv run bpcg bake --hero <실행>/hero --engine --set detail.fractal_gain=1.0` 처럼 다시 굽습니다. 엔진은 두 높이맵의 메시·충돌 모양을 한 번씩 만들어 기억해 두므로, 처음 열 때 한 번 더 만드는 시간(501 × 3001 회랑에서 약 2 초)이 들고 그 뒤의 켜고 끄기는 바로 됩니다. 메시가 숨어 있었으면 바꾼 뒤에도 숨은 채이고, 걷는 중이면 새 지면 위로 올려 줍니다.
+
+왼쪽 위에는 지금 모드·속력, 위치(회랑 가운데 기준 동·북, 해발), 땅속이면 깊이와 그 자리 암석, 지하수면 깊이, 단면 거리, 동굴 입구 수가 나옵니다.
 
 **연기 검사(smoke test).** 보통은 pytest 로 돌립니다. 임시 HOME 처리와 Godot 찾기를 대신 해 줍니다.
 
@@ -58,23 +95,34 @@ GDScript 구문 오류나 셰이더 컴파일 오류가 있어도 Godot 는 종�
 1. `scripts/` 의 모든 `.gd` 가 구문 오류 없이 읽힘
 2. 단면 셰이더가 컴파일됨 (headless 의 가짜 렌더러도 셰이더를 컴파일합니다. 실패하면 uniform 목록이 비어 있음)
 3. 표본 높이맵: 꼭짓점 수 = width × height, 높이 범위가 `.json` 과 1e-3 m 안에서 같음, 법선이 위를 봄, 삼각형 앞면이 위를 봄, 충돌 모양 크기와 높이 범위가 맞음
-4. 시작 장면: 지형 메시·충돌체, 단면 셰이더 재질, 하늘·안개, 해, 카메라 `far ≥ 10000 m`
-5. 물리: 위에서 쏜 광선이 높이맵 표본 높이를 0.05 m 안에서 맞힘, 플레이어가 땅에 내려섬
+4. 시작 장면: 지형 메시·충돌체, 단면 셰이더 재질, 하늘·안개, 해, 카메라 `far ≥ 10000 m`, Baked·Hud·손전등 노드
+5. 물리: 위에서 쏜 광선이 높이맵 표본 높이를 0.05 m 안에서 맞힘(주변 지형 충돌면은 뺌), 걷기로 바꾼 플레이어가 땅에 내려섬
+6. 노클립: 충돌을 끄고, 중력 없이 앞으로·위로 날아간 거리가 속력 × 시간과 25 % 안에서 같음, 땅속에서 걷기로 바꾸면 지면 위로 올라옴
+7. 프랙탈 디테일: `heightmap_detail` 이 있으면 레이어가 맨 끝에 있고 처음에 켜져 있음, 숫자 키로 끄고 패널 버튼으로 켤 때 지형 높이·물리 광선·단면 판의 지표 텍스처·입구 구멍 텍스처·버튼 상태가 같이 바뀜, 지형을 숨긴 채 바꾸면 숨은 채, 걷는 중에 바꾸면 지면 위. 파일이 없으면 레이어도 없음
+8. 구운 묶음이 있으면 레이어: 모든 레이어가 있음, 동굴 삼각형 수·입구 수·재질 부피 크기가 manifest 와 같음, 레이어마다 끄고 켜기와 패널 버튼 상태, 만 보기, 모두 보기, 단면 켜기·밀기·끄기
+
+pytest 는 두 번 돌립니다. 한 번은 빈 굽기 폴더(`-- --baked-dir=<빈 폴더>`)로 표본 지형만, 한 번은 tiny 히어로를 임시 폴더에 구워 `--expect-baked` 로 모든 레이어를 검사합니다(동굴 메시는 실행 중 glTF 로 읽는 경로).
+
+**화면 캡처.** `tests/screenshots.gd` 는 시작 장면을 여러 시점·레이어 조합(시작, 하늘, 지질도, 단면, 동굴만, 물만, 동굴 입구)으로 찍어 PNG 로 남깁니다. 창이 떠야 그려지므로 `--headless` 없이, HOME 만 임시 폴더로 바꿔 돌립니다.
+
+```sh
+HOME=$(mktemp -d) .tools/godot/Godot.app/Contents/MacOS/Godot --path engine --resolution 1600x900 --script res://tests/screenshots.gd -- --shots-dir=$PWD/out/shots
+```
 
 ## 폴더
 
 | 경로 | 역할 | git |
 |---|---|---|
 | `project.godot` | 프로젝트 설정: 이름, 시작 장면, 입력, 물리 엔진, Blender 가져오기 끔 | 올림 |
-| `scenes/` | 장면(`.tscn`). `main.tscn` 이 시작 장면 | 올림 |
-| `scripts/` | GDScript. `heightmap_loader.gd`(높이맵 읽기), `terrain.gd`(지형 노드), `player.gd`(걷기), `main.gd`(시작 장면) | 올림 |
-| `shaders/` | `cross_section.gdshader`: 자르는 면 한쪽을 버리고 높이별 층 무늬로 칠함 (층 무늬는 자리표시, 나중에 지층 3D 텍스처로 바꿈) | 올림 |
-| `tests/` | `smoke.gd`: headless 연기 검사 | 올림 |
+| `scenes/` | 장면(`.tscn`). `main.tscn` 이 시작 장면(회랑), `globe.tscn` 은 행성 전체 지구본([GLOBE.md](GLOBE.md)) | 올림 |
+| `scripts/` | GDScript. `heightmap_loader.gd`(높이맵 읽기), `terrain.gd`(지형 노드), `baked_layers.gd`(구운 레이어 불러오기·보이기·단면), `strata_volume.gd`(재질 부피 → 3D 텍스처), `baked_paths.gd`(굽기 폴더), `player.gd`(날기·걷기), `hud.gd`(상태·레이어 패널·도움말), `main.gd`(시작 장면, 키) | 올림 |
+| `shaders/` | `cross_section.gdshader`(지형: 자연색·지질도·층 무늬, 자르는 면, 입구 구멍), `strata_section.gdshader`(단면 판), `cave.gdshader`(동굴 벽), `water.gdshader`(수면·지하수면), 공통 `section.gdshaderinc`·`strata.gdshaderinc` | 올림 |
+| `tests/` | `smoke.gd`: headless 연기 검사, `screenshots.gd`: 화면 캡처 | 올림 |
 | `samples/` | 작은 표본. `sample.bin/.json` (129 × 129, 10 m 간격, 65 KB)과 이를 만드는 `make_sample.py` | 올림 |
 | `baked/` | 파이썬 굽기 결과. 없을 수 있습니다 | 빠짐 |
 | `.godot/` | Godot 캐시. 지워도 `--import` 로 다시 생깁니다 | 빠짐 |
 
-`terrain.gd` 는 먼저 `res://baked/heightmap` 을 찾고, 없으면 `res://samples/sample` 을 씁니다. 그래서 `baked/` 가 없어도 장면이 열립니다. 표본을 다시 만들 때는 저장소 맨 위에서 `uv run python engine/samples/make_sample.py` 를 돌립니다 (난수를 쓰지 않아 같은 파일이 나옵니다).
+`terrain.gd` 는 먼저 `res://baked/heightmap` 을 찾고, 없으면 `res://samples/sample` 을 씁니다. 그래서 `baked/` 가 없어도 장면이 열립니다(그때는 레이어 패널에 회랑 지형만 있습니다). 명령줄 끝에 `-- --baked-dir=<폴더>` 를 주면 그 폴더의 굽기 결과를 씁니다(`baked_paths.gd`). 표본을 다시 만들 때는 저장소 맨 위에서 `uv run python engine/samples/make_sample.py` 를 돌립니다 (난수를 쓰지 않아 같은 파일이 나옵니다).
 
 ## 파이썬 → Godot 넘김 형식
 
@@ -114,6 +162,23 @@ Godot 지역 좌표는 X = 동, Y = 위, Z = 남인 오른손 좌표계이고 �
 - 충돌: `HeightMapShape3D` 에 같은 float 배열을 넣고, 수평으로 `spacing_m` 배 늘여 타일 가운데에 놓습니다 (`shape_transform()`). 100만 표본에 5.5 ms. 정사각형이 아닌 높이맵도 Jolt 에서 광선 오차 0.1 mm 안으로 맞는 것을 확인했습니다.
 - 한 장은 1024 × 1024 표본 안팎까지가 알맞습니다. 회랑이 더 크면 타일로 나눠 각 타일의 `origin` 을 다르게 줍니다.
 - `.bin` 은 Godot 자원이 아니어서 내보내기(export) 때 빠집니다. 내보내기 설정의 '자원이 아닌 파일 포함' 필터에 `*.bin` 을 넣습니다.
+
+### 회랑 묶음 (`baked/`)
+
+`bpcg bake --engine` 이 쓰는 파일과 엔진의 쓰임입니다. 형식은 `docs/pipeline.md` 11장.
+
+| 파일 | 엔진의 쓰임 |
+|---|---|
+| `manifest.json` | 회랑 사각형(`corridor.rect_engine_m`), 높이 기준(`frame.y_offset_m`), 파일 목록, 동굴 삼각형 수 |
+| `heightmap`, `surround25` | 지형 메시·충돌 (`HeightmapTerrain`) |
+| `heightmap_detail`, `cave_mouth_detail` | (있으면) 프랙탈 디테일 레이어. `heightmap`·`cave_mouth` 와 같은 격자 |
+| `water` | 물이 있는 표본(−10000 보다 큼)이 닿는 칸만 사각형으로 |
+| `water_table` | 지하수면 메시(처음 켤 때)와 단면의 지하수면 선 |
+| `strata.u8` + `strata.json` + `strata_top` | `R8` 3D 텍스처(가로 = 열, 세로 = 층, 깊이 = 행)와 윗면 `RF` 텍스처. 한 변이 2048 을 넘으면 쓰지 않습니다 |
+| `cave_mouth` | `RF` 텍스처. 음수인 곳의 지형을 뚫음 |
+| `caves.glb` | 편집기가 가져왔으면 `load()`, 아니면 실행 중 `GLTFDocument` |
+| `entrances.json` | 입구로 옮겨 가기 (T) |
+| `globe/` | 지구본 장면의 자료 (`globe.json` + 필드 `.bin`). `bpcg bake`·`bpcg all` 이 같은 실행의 행성 묶음으로 굽습니다 ([GLOBE.md](GLOBE.md)) |
 
 ### glb 타일
 

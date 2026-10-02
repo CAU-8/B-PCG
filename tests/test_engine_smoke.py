@@ -7,6 +7,14 @@ Godot 4.7.2 실행 파일을 아래 순서로 찾고, 없으면 건너뜁니다.
 Godot 는 편집기 설정을 사용자 폴더에 씁니다. 실제 설정을 덮어쓰지 않도록
 HOME (Windows 는 APPDATA, LOCALAPPDATA 도) 을 임시 폴더로 바꿔 실행합니다.
 GDScript 나 셰이더 오류가 나도 Godot 는 0 으로 끝나므로 출력의 BPCG_SMOKE_OK 표시를 봅니다.
+
+검사는 둘입니다.
+- test_engine_smoke: 빈 굽기 폴더를 줘서 표본 지형만으로 돕니다 (engine/baked 에 무엇이 있든 같음).
+- test_engine_loads_baked_corridor: tiny 히어로를 임시 폴더에 구워 `--baked-dir` 로 넘기고,
+  레이어(주변 지형, 수면, 지하수면, 동굴, 단면) 불러오기와 보이기·숨기기를 검사합니다.
+  동굴 메시는 편집기 가져오기 없이 실행 중 glTF 로 읽는 경로를 탑니다.
+  굽기가 프랙탈 디테일(heightmap_detail)을 썼으면 그 레이어가 처음에 켜져 있고 켜고 끄기가 되는지도
+  봅니다 (smoke.gd 의 _check_fractal_detail).
 """
 
 import os
@@ -125,21 +133,56 @@ def _engine_files() -> set[Path]:
     return files
 
 
-def test_engine_smoke(godot_env):
+def _smoke(godot: Path, env: dict[str, str], user_args: list[str]) -> str:
+    """smoke.gd 를 돌리고 통과 표시와 오류 없음을 확인합니다. 반환: 표준 출력."""
+    smoke = _run(
+        godot, env, ["--script", "res://tests/smoke.gd", "--", *user_args], SMOKE_TIMEOUT_S
+    )
+    output = smoke.stdout + smoke.stderr
+    assert "BPCG_SMOKE_OK" in smoke.stdout, f"연기 검사 실패:\n{_tail(smoke)}"
+    assert smoke.returncode == 0, f"종료 코드 {smoke.returncode}:\n{_tail(smoke)}"
+    assert "SCRIPT ERROR" not in output, f"스크립트 오류:\n{_tail(smoke)}"
+    assert "SHADER ERROR" not in output, f"셰이더 오류:\n{_tail(smoke)}"
+    return smoke.stdout
+
+
+def test_engine_smoke(godot_env, tmp_path):
     godot, env = godot_env
     before = _engine_files()
 
     imported = _run(godot, env, ["--import"], IMPORT_TIMEOUT_S)
     assert imported.returncode == 0, f"--import 실패:\n{_tail(imported)}"
 
-    smoke = _run(godot, env, ["--script", "res://tests/smoke.gd"], SMOKE_TIMEOUT_S)
-    output = smoke.stdout + smoke.stderr
-    assert "BPCG_SMOKE_OK" in smoke.stdout, f"연기 검사 실패:\n{_tail(smoke)}"
-    assert smoke.returncode == 0, f"종료 코드 {smoke.returncode}:\n{_tail(smoke)}"
-    assert "SCRIPT ERROR" not in output, f"스크립트 오류:\n{_tail(smoke)}"
-    assert "SHADER ERROR" not in output, f"셰이더 오류:\n{_tail(smoke)}"
+    empty = tmp_path / "no_bake"
+    empty.mkdir()
+    out = _smoke(godot, env, [f"--baked-dir={empty.as_posix()}"])
+    assert "표본 지형만 검사했습니다" in out
 
     # 가져오기(import)는 .godot/ 밖에 .uid, .import 만 만들어야 합니다 (둘 다 커밋 대상).
     new = sorted(p.relative_to(ROOT).as_posix() for p in _engine_files() - before)
     junk = [p for p in new if not p.endswith((".uid", ".import"))]
     assert not junk, f"Godot 가 engine/ 에 예상하지 못한 파일을 만들었습니다: {junk}"
+
+
+def test_engine_loads_baked_corridor(godot_env, tmp_path):
+    """tiny 히어로를 구워 엔진이 모든 레이어를 불러오고 켜고 끄는지 봅니다."""
+    from bpcg.bake.corridor import bake_corridor
+    from bpcg.core.config import load_config
+    from bpcg.pipeline import generate_hero
+
+    godot, env = godot_env
+    # test_bake.HERO_OVERRIDES 와 같은 까닭으로 선상지 호수와 동굴이 생기는 조건을 고정합니다.
+    overrides = {"landscape.slope_exponent_n": 1.0, "rivers.min_discharge_m3_per_s": 0.02}
+    cfg = load_config("earth", "tiny", overrides=overrides)
+    man = bake_corridor(generate_hero(cfg, log=None), cfg, tmp_path / "baked", log=None)
+    assert "caves.glb" in man["files"] and man["caves"]["n_entrances"] > 0
+
+    imported = _run(godot, env, ["--import"], IMPORT_TIMEOUT_S)
+    assert imported.returncode == 0, f"--import 실패:\n{_tail(imported)}"
+    out = _smoke(godot, env, [f"--baked-dir={(tmp_path / 'baked').as_posix()}", "--expect-baked"])
+    assert "레이어: terrain, surround, water, water_table, caves, section" in out
+    assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
+    assert f"입구 {man['caves']['n_entrances']}," in out
+    # tiny 기본 설정(fractal_gain 1, 8 m 복셀)은 프랙탈 디테일을 반드시 굽습니다.
+    assert "heightmap_detail.bin" in man["files"]
+    assert "프랙탈 디테일: 켜짐 (처음)" in out

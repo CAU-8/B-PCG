@@ -4,6 +4,8 @@
 [ext_resource type="Script" uid="uid://b43hl8vhpqd4i" path="res://scripts/terrain.gd" id="2_terrain"]
 [ext_resource type="Shader" uid="uid://cjj4itimqvn2" path="res://shaders/cross_section.gdshader" id="3_cross"]
 [ext_resource type="Script" uid="uid://oaau43hsok7" path="res://scripts/player.gd" id="4_player"]
+[ext_resource type="Script" path="res://scripts/baked_layers.gd" id="5_baked"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="6_hud"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -16,7 +18,7 @@ sky = SubResource("Sky_main")
 tonemap_mode = 2
 fog_enabled = true
 fog_light_color = Color(0.7, 0.76, 0.84, 1)
-fog_density = 0.0002
+fog_density = 0.0001
 fog_aerial_perspective = 0.5
 fog_sky_affect = 0.3
 
@@ -41,6 +43,10 @@ directional_shadow_max_distance = 1000.0
 [node name="Terrain" type="Node3D" parent="." unique_id=1788330870]
 script = ExtResource("2_terrain")
 material = SubResource("ShaderMaterial_terrain")
+skirt_m = 30.0
+
+[node name="Baked" type="Node3D" parent="." unique_id=1407734219]
+script = ExtResource("5_baked")
 
 [node name="Player" type="CharacterBody3D" parent="." unique_id=1604882990]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 200, 0)
@@ -55,4 +61,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 
 [node name="Camera" type="Camera3D" parent="Player/Head" unique_id=205213648]
 current = true
-far = 12000.0
+far = 40000.0
+
+[node name="Lamp" type="SpotLight3D" parent="Player/Head/Camera" unique_id=1772260393]
+light_energy = 3.0
+spot_range = 80.0
+spot_angle = 40.0
+
+[node name="Hud" type="CanvasLayer" parent="." unique_id=631170244]
+script = ExtResource("6_hud")

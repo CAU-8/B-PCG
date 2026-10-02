@@ -82,6 +82,10 @@ def face_cell_areas(n: int, R: float) -> np.ndarray:
         - omega(X_plus, Y_minus)
         + omega(X_minus, Y_minus)
     )
+    # 포함-배제의 반올림 오차가 n² 에 비례해 쌓여 8겹 대칭이 깨집니다(n=4096 에서 2e-9).
+    # 면 경계를 사이에 둔 두 칸의 면적이 정확히 같도록 거울 대칭으로 평균합니다. 합은 그대로입니다.
+    om = 0.25 * (om + om[:, ::-1] + om[::-1, :] + om[::-1, ::-1])
+    om = 0.5 * (om + om.T)
     return (R**2) * om
 
 
@@ -94,6 +98,100 @@ def neighbor_distance(p1: np.ndarray, p2: np.ndarray, R: float) -> np.ndarray:
     cross_norm = np.linalg.norm(np.cross(p1, p2), axis=-1)
     dot_prod = np.sum(p1 * p2, axis=-1)
     return R * np.arctan2(cross_norm, dot_prod)
+
+
+def to_face(p: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """구면 위 점(단위 벡터가 아니어도 됨) → (면 f, a, b). 가이드 1장 역사상."""
+    p = np.asarray(p, dtype=float)
+    f = np.argmax(p @ FACE_N.T, axis=-1)
+    pn = np.einsum("...k,...k->...", p, FACE_N[f])
+    a = 4.0 / np.pi * np.arctan(np.einsum("...k,...k->...", p, FACE_U[f]) / pn)
+    b = 4.0 / np.pi * np.arctan(np.einsum("...k,...k->...", p, FACE_V[f]) / pn)
+    return f, a, b
+
+
+def cell_of(p: np.ndarray, n: int) -> np.ndarray:
+    """구면 위 점 → 그 점을 담은 셀 번호 c = f·n² + j·n + i."""
+    f, a, b = to_face(p)
+    i = np.clip(np.floor(n * (a + 1.0) / 2.0).astype(np.int64), 0, n - 1)
+    j = np.clip(np.floor(n * (b + 1.0) / 2.0).astype(np.int64), 0, n - 1)
+    return f * n * n + j * n + i
+
+
+# 이웃 슬롯 순서 (dj, di). 가이드 1장과 같습니다.
+NEIGHBOR_SLOTS = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+CARDINAL_SLOTS = (1, 3, 4, 6)
+
+_U_INT = FACE_U.astype(int)
+_V_INT = FACE_V.astype(int)
+_N_INT = FACE_N.astype(int)
+
+
+def _face_with_normal(e: np.ndarray) -> int:
+    return int(np.nonzero((_N_INT == e).all(axis=1))[0][0])
+
+
+def _cross_edge(f: int, n: int, e: np.ndarray, t: np.ndarray, k: np.ndarray):
+    """면 f 에서 방향 e 로 넘어갈 때, 남은 인덱스 k(축 t)가 닿는 이웃 면의 (f2, i3, j3).
+
+    가이드 1장 '이웃 규칙' 1~5단계. k 는 배열이어도 됩니다.
+    """
+    f2 = _face_with_normal(e)
+    if abs(int(_N_INT[f] @ _U_INT[f2])) == 1:
+        s1 = int(_N_INT[f] @ _U_INT[f2])
+        s2 = int(t @ _V_INT[f2])
+        i3 = np.full_like(k, n - 1 if s1 > 0 else 0)
+        j3 = k if s2 > 0 else n - 1 - k
+    else:
+        s1 = int(_N_INT[f] @ _V_INT[f2])
+        s2 = int(t @ _U_INT[f2])
+        j3 = np.full_like(k, n - 1 if s1 > 0 else 0)
+        i3 = k if s2 > 0 else n - 1 - k
+    return f2, i3, j3
+
+
+def neighbor_table(n: int) -> np.ndarray:
+    """전체 이웃 표 (6n², 8) int32. 큐브 꼭짓점 너머 대각선은 -1.
+
+    슬롯 순서는 NEIGHBOR_SLOTS.
+    면 경계를 넘는 이웃은 가이드 1장의 인덱스 교환·반전 규칙으로 정합니다.
+    """
+    nn = n * n
+    nbr = np.full((6 * nn, 8), -1, dtype=np.int32)
+    jj, ii = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    jj = jj.ravel()
+    ii = ii.ravel()
+    for f in range(6):
+        c = f * nn + jj * n + ii
+        for s, (dj, di) in enumerate(NEIGHBOR_SLOTS):
+            i2 = ii + di
+            j2 = jj + dj
+            in_i = (i2 >= 0) & (i2 < n)
+            in_j = (j2 >= 0) & (j2 < n)
+            m = in_i & in_j
+            nbr[c[m], s] = f * nn + j2[m] * n + i2[m]
+            for side in (-1, 1):
+                # i 쪽으로만 넘어감
+                m = (~in_i) & in_j & (i2 == (n if side > 0 else -1))
+                if m.any():
+                    f2, i3, j3 = _cross_edge(f, n, side * _U_INT[f], _V_INT[f], j2[m])
+                    nbr[c[m], s] = f2 * nn + j3 * n + i3
+                # j 쪽으로만 넘어감
+                m = in_i & (~in_j) & (j2 == (n if side > 0 else -1))
+                if m.any():
+                    f2, i3, j3 = _cross_edge(f, n, side * _V_INT[f], _U_INT[f], i2[m])
+                    nbr[c[m], s] = f2 * nn + j3 * n + i3
+    return nbr
+
+
+def cross_face_pairs(n: int, nbr: np.ndarray | None = None) -> np.ndarray:
+    """면 경계를 사이에 둔 가로·세로 이웃 쌍 (k, 2). 각 쌍은 한 번씩만 나옵니다."""
+    if nbr is None:
+        nbr = neighbor_table(n)
+    c = np.repeat(np.arange(nbr.shape[0]), len(CARDINAL_SLOTS))
+    c2 = nbr[:, list(CARDINAL_SLOTS)].ravel()
+    ok = (c2 >= 0) & (c // (n * n) != c2 // (n * n)) & (c < c2)
+    return np.stack([c[ok], c2[ok]], axis=1)
 
 
 def cubesphere_grid(n: int, R: float = 6_371_000.0) -> Grid:
