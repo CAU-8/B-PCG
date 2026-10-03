@@ -167,7 +167,7 @@ public sealed class KdTree
             {
                 int i = _idx[t];
                 double d2 = Dist2(i, q);
-                if (d2 > ub2)
+                if (d2 >= ub2)
                 {
                     continue;
                 }

@@ -258,4 +258,110 @@ public static class SciPy
         double c1 = ((a00 * b1) - (a01 * b0)) / det;
         return (c0 / sc0, c1 / sc1);
     }
+
+    /// <summary>
+    /// scipy.ndimage.distance_transform_edt(input) (2차원, (ny, nx) 행 우선): True 칸마다 가장 가까운 False 칸까지
+    /// 유클리드 거리 [칸], False 칸은 0. 정확한 제곱 거리(Felzenszwalb–Huttenlocher)의 제곱근이라 scipy 와 같은 값입니다.
+    /// </summary>
+    /// <remarks>TODO(port): False 칸이 하나도 없을 때 scipy 의 값은 정의되지 않습니다(여기서는 +inf).</remarks>
+    public static double[] DistanceTransformEdt(bool[] input, int ny, int nx)
+    {
+        const double inf = double.PositiveInfinity;
+        double[] f = new double[ny * nx];
+        for (int i = 0; i < f.Length; i++)
+        {
+            f[i] = input[i] ? inf : 0.0;
+        }
+        int m = Math.Max(ny, nx);
+        double[] line = new double[m];
+        double[] outLine = new double[m];
+        int[] v = new int[m];
+        double[] z = new double[m + 1];
+        // 열 방향
+        for (int i = 0; i < nx; i++)
+        {
+            for (int j = 0; j < ny; j++)
+            {
+                line[j] = f[(j * nx) + i];
+            }
+            Dt1D(line, ny, outLine, v, z);
+            for (int j = 0; j < ny; j++)
+            {
+                f[(j * nx) + i] = outLine[j];
+            }
+        }
+        // 행 방향
+        for (int j = 0; j < ny; j++)
+        {
+            Array.Copy(f, j * nx, line, 0, nx);
+            Dt1D(line, nx, outLine, v, z);
+            Array.Copy(outLine, 0, f, j * nx, nx);
+        }
+        for (int i = 0; i < f.Length; i++)
+        {
+            f[i] = Math.Sqrt(f[i]);
+        }
+        return f;
+    }
+
+    // 1차원 제곱 거리 변환 (하한 포물선 봉투)
+    private static void Dt1D(double[] f, int n, double[] d, int[] v, double[] z)
+    {
+        int k = -1;
+        for (int q = 0; q < n; q++)
+        {
+            if (double.IsPositiveInfinity(f[q]))
+            {
+                continue;
+            }
+            if (k < 0)
+            {
+                k = 0;
+                v[0] = q;
+                z[0] = double.NegativeInfinity;
+                z[1] = double.PositiveInfinity;
+                continue;
+            }
+            double s;
+            while (true)
+            {
+                int p = v[k];
+                s = ((f[q] + ((double)q * q)) - (f[p] + ((double)p * p))) / (2.0 * (q - p));
+                if (s <= z[k])
+                {
+                    k--;
+                    if (k < 0)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
+            }
+            k++;
+            v[k] = q;
+            z[k] = k == 0 ? double.NegativeInfinity : s;
+            z[k + 1] = double.PositiveInfinity;
+        }
+        if (k < 0)
+        {
+            for (int q = 0; q < n; q++)
+            {
+                d[q] = double.PositiveInfinity;
+            }
+            return;
+        }
+        int kk = 0;
+        for (int q = 0; q < n; q++)
+        {
+            while (z[kk + 1] < q)
+            {
+                kk++;
+            }
+            double diff = q - v[kk];
+            d[q] = (diff * diff) + f[v[kk]];
+        }
+    }
 }
