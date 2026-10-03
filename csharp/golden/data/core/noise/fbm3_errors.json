@@ -1,0 +1,13 @@
+{
+  "module": "core/noise",
+  "case": "fbm3_errors",
+  "meta": {
+    "errors": {
+      "octaves0": "ValueError",
+      "gain0": "ValueError",
+      "freq_neg": "ValueError",
+      "nan_point": "ValueError",
+      "bad_shape": "ValueError"
+    }
+  }
+}

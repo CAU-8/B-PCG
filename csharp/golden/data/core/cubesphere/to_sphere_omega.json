@@ -1,0 +1,5 @@
+{
+  "module": "core/cubesphere",
+  "case": "to_sphere_omega",
+  "meta": {}
+}

@@ -1,0 +1,5 @@
+{
+  "module": "core/resample",
+  "case": "add_ghost_n8_l2_negzero",
+  "meta": {}
+}

@@ -1,0 +1,10 @@
+{
+  "module": "core/noise",
+  "case": "fbm3_test_p_123",
+  "meta": {
+    "kwargs": {
+      "octaves": 4,
+      "frequency": 1.2
+    }
+  }
+}

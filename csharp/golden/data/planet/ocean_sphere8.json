@@ -1,0 +1,18 @@
+{
+  "module": "planet",
+  "case": "ocean_sphere8",
+  "meta": {
+    "graph": {
+      "n": 8,
+      "R": 6371000.0,
+      "jitter": 1.0,
+      "seed": 99
+    },
+    "axis": [
+      0.3,
+      -0.2,
+      0.9
+    ],
+    "climate_seed": 777
+  }
+}

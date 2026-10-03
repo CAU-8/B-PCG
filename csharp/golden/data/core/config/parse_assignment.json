@@ -1,0 +1,229 @@
+{
+  "module": "core/config",
+  "case": "parse_assignment",
+  "meta": {
+    "cases": [
+      {
+        "text": "landscape.theta=0.5",
+        "key": "landscape.theta",
+        "value": [
+          "float",
+          "0.5"
+        ],
+        "error": null
+      },
+      {
+        "text": "fans.enabled=false",
+        "key": "fans.enabled",
+        "value": [
+          "bool",
+          false
+        ],
+        "error": null
+      },
+      {
+        "text": "plates.speed_m_per_yr=[0.02, 0.07]",
+        "key": "plates.speed_m_per_yr",
+        "value": [
+          "list",
+          [
+            [
+              "float",
+              "0.02"
+            ],
+            [
+              "float",
+              "0.07"
+            ]
+          ]
+        ],
+        "error": null
+      },
+      {
+        "text": "k=\"글자\"",
+        "key": "k",
+        "value": [
+          "str",
+          "글자"
+        ],
+        "error": null
+      },
+      {
+        "text": "planet.name=mars",
+        "key": "planet.name",
+        "value": [
+          "bare",
+          "mars"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=inf",
+        "key": "x",
+        "value": [
+          "float",
+          "inf"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=-nan",
+        "key": "x",
+        "value": [
+          "float",
+          "nan"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=-0.0",
+        "key": "x",
+        "value": [
+          "float",
+          "-0.0"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=0x10",
+        "key": "x",
+        "value": [
+          "int",
+          "16"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=1_000",
+        "key": "x",
+        "value": [
+          "int",
+          "1000"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=1979-05-27",
+        "key": "x",
+        "value": [
+          "date",
+          "datetime.date(1979, 5, 27)"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=07:32:00",
+        "key": "x",
+        "value": [
+          "time",
+          "datetime.time(7, 32)"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=07:32",
+        "key": "x",
+        "value": [
+          "bare",
+          "07:32"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=1.",
+        "key": "x",
+        "value": [
+          "bare",
+          "1."
+        ],
+        "error": null
+      },
+      {
+        "text": "x=.5",
+        "key": "x",
+        "value": [
+          "bare",
+          ".5"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=01",
+        "key": "x",
+        "value": [
+          "bare",
+          "01"
+        ],
+        "error": null
+      },
+      {
+        "text": "x=0.5 # 주석",
+        "key": "x",
+        "value": [
+          "float",
+          "0.5"
+        ],
+        "error": null
+      },
+      {
+        "text": "x={a=1}",
+        "key": "x",
+        "value": [
+          "dict",
+          {
+            "a": [
+              "int",
+              "1"
+            ]
+          }
+        ],
+        "error": null
+      },
+      {
+        "text": "x=1e400",
+        "key": "x",
+        "value": [
+          "float",
+          "inf"
+        ],
+        "error": null
+      },
+      {
+        "text": " a.b = 2 ",
+        "key": "a.b",
+        "value": [
+          "int",
+          "2"
+        ],
+        "error": null
+      },
+      {
+        "text": "k==1",
+        "key": "k",
+        "value": [
+          "bare",
+          "=1"
+        ],
+        "error": null
+      },
+      {
+        "text": "=1",
+        "key": null,
+        "value": null,
+        "error": "'키=값' 꼴이어야 합니다: '=1' (예: landscape.theta=0.5)"
+      },
+      {
+        "text": "k=",
+        "key": null,
+        "value": null,
+        "error": "'키=값' 꼴이어야 합니다: 'k=' (예: landscape.theta=0.5)"
+      },
+      {
+        "text": "noequals",
+        "key": null,
+        "value": null,
+        "error": "'키=값' 꼴이어야 합니다: 'noequals' (예: landscape.theta=0.5)"
+      }
+    ]
+  }
+}

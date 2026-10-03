@@ -1,0 +1,21 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bpcg.Engine", "Bpcg.Engine.csproj", "{438D1472-EF10-4977-8402-4F76917FFF63}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		ExportDebug|Any CPU = ExportDebug|Any CPU
+		ExportRelease|Any CPU = ExportRelease|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.Debug|Any CPU.Build.0 = Debug|Any CPU
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
+$\t\t{438D1472-EF10-4977-8402-4F76917FFF63}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,9 @@
+{
+  "module": "core/noise",
+  "case": "vector_fbm3_random",
+  "meta": {
+    "kwargs": {
+      "octaves": 4
+    }
+  }
+}

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- B-PCG 계산 라이브러리. Godot 에 의존하지 않습니다 (단계 4 에서 engine/ 이 참조). -->
+  <PropertyGroup>
+    <RootNamespace>Bpcg</RootNamespace>
+    <AssemblyName>Bpcg</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bpcg.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+{
+  "module": "planet",
+  "case": "flat24",
+  "meta": {
+    "graph": {
+      "nx": 24,
+      "ny": 24,
+      "dx": 1000.0,
+      "jitter": 1.0,
+      "seed": 7302
+    },
+    "origin": [
+      -12000.0,
+      12000.0
+    ],
+    "lat_deg": 37.5,
+    "field_order": [
+      "crust_type",
+      "is_ocean",
+      "convergence_kind",
+      "subduction_side",
+      "convergence_m_per_yr",
+      "dist_convergent_m",
+      "dist_divergent_m"
+    ]
+  }
+}

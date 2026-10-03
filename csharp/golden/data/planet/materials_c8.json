@@ -1,0 +1,66 @@
+{
+  "module": "planet",
+  "case": "materials_c8",
+  "meta": {
+    "config": [
+      "earth",
+      "tiny"
+    ],
+    "overrides": {},
+    "n_per_face": 8,
+    "field_order": [
+      "plate_id",
+      "boundary_type",
+      "convergence_m_per_yr",
+      "convergence_kind",
+      "subduction_side",
+      "dist_convergent_m",
+      "dist_divergent_m",
+      "spreading_m_per_yr",
+      "crust_type",
+      "crust_thickness_m",
+      "ocean_age_myr",
+      "z_platform_m",
+      "is_ocean",
+      "uplift_m_per_yr",
+      "exhumation_m",
+      "dist_arc_m",
+      "precip_m_per_yr",
+      "temperature_c",
+      "pet_m_per_yr",
+      "runoff_m_per_yr",
+      "runoff_eff_m_per_yr"
+    ],
+    "info_order": [
+      "sea_level_m",
+      "ocean_fraction",
+      "continental_fraction",
+      "bathymetry_m",
+      "z_platform_base_m",
+      "trench_m",
+      "coast_signed_m",
+      "plates",
+      "seconds"
+    ],
+    "plates_info_order": [
+      "seeds",
+      "omegas",
+      "omegas_initial",
+      "flips",
+      "ocean_fraction",
+      "plate_area_m2",
+      "plates_without_divergent",
+      "n_boundary",
+      "age_provisional_myr",
+      "spreading_kinematic_m_per_yr",
+      "spreading_floor_m_per_yr"
+    ],
+    "flips": [],
+    "plates_without_divergent": [],
+    "n_boundary": {
+      "convergent": 95,
+      "divergent": 98,
+      "transform": 51
+    }
+  }
+}

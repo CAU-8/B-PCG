@@ -1,0 +1,47 @@
+{
+  "module": "planet",
+  "case": "transfer_c8_f12_noinfo",
+  "meta": {
+    "config": [
+      "earth",
+      "tiny"
+    ],
+    "n_coarse": 8,
+    "n_fine": 12,
+    "jitter": 1.0,
+    "seed": 0,
+    "with_info": false,
+    "field_order": [
+      "plate_id",
+      "boundary_type",
+      "convergence_kind",
+      "subduction_side",
+      "crust_type",
+      "convergence_m_per_yr",
+      "spreading_m_per_yr",
+      "crust_thickness_m",
+      "dist_divergent_m",
+      "ocean_age_myr",
+      "dist_convergent_m",
+      "z_platform_m",
+      "is_ocean",
+      "uplift_m_per_yr",
+      "exhumation_m",
+      "dist_arc_m",
+      "precip_m_per_yr",
+      "temperature_c",
+      "pet_m_per_yr",
+      "runoff_m_per_yr",
+      "runoff_eff_m_per_yr"
+    ],
+    "info_order": [
+      "sea_level_m",
+      "ocean_fraction",
+      "continental_fraction",
+      "bathymetry_m",
+      "z_platform_base_m",
+      "trench_m",
+      "seconds"
+    ]
+  }
+}

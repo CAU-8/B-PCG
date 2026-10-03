@@ -1,0 +1,5 @@
+{
+  "module": "io/npz",
+  "case": "savez_bytes",
+  "meta": {}
+}

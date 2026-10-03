@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Bpcg/Bpcg.csproj" />
+  <Project Path="Bpcg.Cli/Bpcg.Cli.csproj" />
+  <Project Path="Bpcg.Engine/Bpcg.Engine.csproj" />
+  <Project Path="Bpcg.Tests/Bpcg.Tests.csproj" />
+</Solution>

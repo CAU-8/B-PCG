@@ -1,0 +1,5 @@
+{
+  "module": "core/hashing",
+  "case": "hash3_hash_unit",
+  "meta": {}
+}

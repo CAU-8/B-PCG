@@ -1,0 +1,5 @@
+{
+  "module": "core/cubesphere",
+  "case": "neighbor_distance",
+  "meta": {}
+}
