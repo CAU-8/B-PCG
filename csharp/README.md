@@ -7,7 +7,8 @@ This folder holds the C# port of the generator in `src/bpcg` (target: .NET 10, `
 | 폴더 | 내용 |
 |---|---|
 | `Bpcg/` | 계산 라이브러리 (Godot 에 의존하지 않음). `Core/`·`Hydro/` … 는 Python 묶음과 1:1, `Numerics/`·`IO/` 는 numpy·scipy·파일 형식 대체 |
-| `Bpcg.Cli/` | 콘솔 프로그램 (planet·hero·bake·all, 단계 2 끝에 옮김) |
+| `Bpcg.Cli/` | 콘솔 프로그램 (planet·hero·bake·all, 단계 2 끝에 옮김). 실행 단위는 라이브러리의 `Runs.cs` |
+| `Bpcg.Engine/` | Godot 4.7.2 .NET 프로젝트 (engine/ 의 C# 판, 엔진 안에서 행성 생성). [Bpcg.Engine/README.md](Bpcg.Engine/README.md) |
 | `Bpcg.Tests/` | 대조 시험 (xUnit). Python 모듈 하나에 시험 클래스 하나 |
 | `golden/export_golden.py` | golden 자료를 만드는 Python 스크립트 |
 | `golden/data/` | 커밋하는 작은 golden 사례 (각 1 MB 이하) |

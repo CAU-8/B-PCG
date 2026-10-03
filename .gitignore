@@ -70,6 +70,7 @@ Godot_v*
 # --- 엔진 (Godot 4) ---
 engine/.godot/
 engine/baked/
+csharp/Bpcg.Engine/.godot/
 engine/export/
 *.pck
 

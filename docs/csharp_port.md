@@ -4,6 +4,15 @@
 
 ## 0. 지금 상태와 다음 할 일
 
+### 단계 4: Godot .NET 전환 (2026-10-03, 진행 중)
+
+- 사용자가 정한 방향: 최종 목표는 Python 없이 C# 으로 진행하는 것이고, `csharp/` 안에서 돌아가면 전체를 대체합니다. GDScript 도 모두 C# 으로 옮기고(0장 쟁점 1 은 '(2) Godot 안에서 계산'), 생성은 Godot 안 처음 화면에서 시작합니다.
+- 만든 것: `csharp/Bpcg.Engine/`(Godot 4.7.2 .NET, net10.0, `Bpcg.slnx` 에 포함). `engine/scripts/*.gd` 13개와 `engine/tests/*.gd` 3개를 C# 으로 옮겼고, 처음 화면(`StartMenu`)·진행률(`StageProgress`)·설정 경로(`EnginePaths`)를 새로 만들었습니다. 쓰는 법과 대응표는 [csharp/Bpcg.Engine/README.md](../csharp/Bpcg.Engine/README.md).
+- 라이브러리: `cli.py` 의 실행 단위를 `csharp/Bpcg/Runs.cs`(+ `RunError`)로 옮겨 콘솔과 엔진이 같이 씁니다. 콘솔 출력은 그대로입니다(tiny 결과 바이트 일치, 걸린 시간만 다름).
+- Godot .NET 판은 `.tools/godot-net/Godot_mono.app` 에 손으로 받았습니다(SHA-512 일치, 1장 절차의 (나)). net10.0 게임 어셈블리가 편집기 빌드(`--build-solutions`)와 실행 모두에서 돕니다.
+- 확인: 엔진 안 tiny 생성 = 콘솔 결과, C# 연기 검사(회랑·지구본)가 C#·Python 굽기 모두에서 통과, 화면 13장이 GDScript 판과 픽셀 일치.
+- 남은 일: 설치 스크립트·doctor·CI·pytest 의 Godot 검사·스튜디오 'Godot로 보기' 를 .NET 판과 새 프로젝트로 바꾸기, 내보낸 게임의 configs, `engine/`·Python 대체 정리.
+
 ### 지금 상태 (2026-10-03)
 
 - **단계 2(묶음별 포팅)를 진행 중입니다.** 사용자가 core 검토를 따로 하지 않고 순서대로 계속하라고 했습니다(10장 D13). 끝낸 묶음: core, hydro.
@@ -4437,9 +4446,9 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 
 ### 단계 4: Godot 연결 (시작 전에 확인을 받음)
 
-- [ ] 0장 쟁점 1(목표)과 9(엔진 계산 규칙) 정하기
-- [ ] engine/을 .NET 판 프로젝트로 바꾸고 `csharp/Bpcg`를 ProjectReference로 참조
-- [ ] C# 노드가 생성·굽기를 주 스레드 밖에서 부르고 `user://`에 씀, `BakedPaths`가 그 폴더를 읽음
+- [x] 0장 쟁점 1(목표) 정하기: Godot 안에서 계산, GDScript 도 C# 으로 (2026-10-03). 9(엔진 계산 규칙 문서)는 아직
+- [x] .NET 판 프로젝트를 `csharp/Bpcg.Engine/` 에 새로 만들고 `csharp/Bpcg`를 ProjectReference로 참조 (engine/ 은 아직 그대로)
+- [x] C# 처음 화면이 생성·굽기를 주 스레드 밖에서 부르고 `user://runs`에 씀, `BakedPaths`가 그 폴더를 읽음
 - [ ] 설치 스크립트, CI(`setup-dotnet`, `use-dotnet: true`, `dotnet test`), docs/conventions.md·engine/README.md의 '표준판' 규칙(9장 목록)
 
 ## 13. 부록: 분석이 남긴 질문

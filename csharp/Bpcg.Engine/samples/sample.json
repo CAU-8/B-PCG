@@ -1,0 +1,16 @@
+{
+  "format": "float32_le",
+  "layout": "row_major",
+  "axes": "x_east_y_up_z_south",
+  "width": 129,
+  "height": 129,
+  "spacing_m": 10.0,
+  "origin": [
+    -640.0,
+    0.0,
+    -640.0
+  ],
+  "min": 5.009469032287598,
+  "max": 140.1663055419922,
+  "bpcg_version": "0.1.0"
+}
