@@ -37,6 +37,7 @@ from bpcg.core import constants, cubesphere, distance, fields, graph, hashing, n
 from bpcg.core.paths import OUT, ROOT
 from bpcg.hydro import accumulate as hacc
 from bpcg.hydro import depressions, network, routing
+from bpcg.planet import climate, crust, materials, ocean, plates, uplift
 
 COMMIT_ROOT = ROOT / "csharp" / "golden" / "data"
 MAX_COMMIT_BYTES = 1_000_000  # docs/conventions.md 8절: 커밋하는 바이너리는 각 1 MB 이하
@@ -1002,6 +1003,244 @@ def export_hydro(w: Writer) -> None:
     )
 
 
+# ---------------------------------------------------------------- numerics/tanh
+def _tanh_inputs(r: np.random.Generator, n_random: int) -> np.ndarray:
+    """np.tanh 대조용 입력: 구간 경계(2^k) 근처, 넓은 크기 범위, 특수값."""
+    edges = []
+    for k in range(-30, 6):
+        b = 2.0**k
+        for d in range(-3, 4):
+            edges.append(np.nextafter(b, np.inf) if d > 0 else b)
+            v = b
+            for _ in range(abs(d)):
+                v = np.nextafter(v, np.inf if d > 0 else -np.inf)
+            edges.append(v)
+    special = [0.0, -0.0, np.inf, -np.inf, np.nan, 5e-324, -5e-324, 2.2250738585072014e-308]
+    special += [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 18.5, 19.0, 19.0625, 20.0, 22.0, 1e300]
+    mags = 10.0 ** r.uniform(-30.0, 3.0, n_random)
+    sign = np.where(r.random(n_random) < 0.5, -1.0, 1.0)
+    uni = r.uniform(-25.0, 25.0, n_random)
+    x = np.concatenate([np.array(edges), -np.array(edges), np.array(special), mags * sign, uni])
+    return x.astype(np.float64)
+
+
+def export_tanh(w: Writer) -> None:
+    m = "numerics/tanh"
+    x = _tanh_inputs(rng(7101), 12_000)
+    w.case(m, "vectors", inputs={"x": x}, outputs={"tanh": np.tanh(x)}, commit=True)
+    xl = _tanh_inputs(rng(7102), 500_000)
+    w.case(m, "large", inputs={"x": xl}, outputs={"tanh": np.tanh(xl)}, commit=False)
+
+
+# ---------------------------------------------------------------- planet
+PLANET_CFG = ("earth", "tiny")
+
+
+def _prefixed(prefix: str, d: dict) -> dict:
+    """dict 의 배열 값만 prefix 를 붙여 꺼냅니다(스칼라·목록은 meta 로)."""
+    return {f"{prefix}{k}": v for k, v in d.items() if isinstance(v, np.ndarray)}
+
+
+def _scalars(d: dict) -> dict:
+    return {k: v for k, v in d.items() if isinstance(v, int | float) and not isinstance(v, bool)}
+
+
+def _materials_case(w: Writer, name: str, n_c: int, commit: bool, overrides: dict | None = None):
+    """거친 격자의 사슬 1 단계별 출력과 build_materials 전체를 씁니다."""
+    m = "planet"
+    cfg = cfgmod.load_config(*PLANET_CFG, overrides=overrides)
+    R = float(cfg.planet.radius_m)
+    gr = graph.sphere_graph(n_c, R)
+    score = crust.continent_score(gr, cfg)
+    cont = crust.continent_mask(gr, cfg)
+    seeds = plates.plate_seeds(cfg)
+    omega0 = plates.plate_omegas(cfg, R)
+    kappa = float(cfg.plates.boundary_kappa)
+    cls = plates.classify_boundaries(gr, plates.assign_plates(gr.unit(), seeds, cfg), omega0, kappa)
+    fields, info = materials.build_materials(gr, cfg)
+    pinfo = info["plates"]
+    outputs = {
+        "continent_score": score,
+        "continental": cont,
+        **_prefixed("cls.", cls),
+        **_prefixed("f.", fields),
+        **_prefixed("info.", info),
+        **_prefixed("plates_info.", pinfo),
+        "sea_level_m": np.float64(info["sea_level_m"]),
+        "ocean_fraction": np.float64(info["ocean_fraction"]),
+        "continental_fraction": np.float64(info["continental_fraction"]),
+    }
+    meta = {
+        "config": list(PLANET_CFG),
+        "overrides": overrides or {},
+        "n_per_face": n_c,
+        "field_order": list(fields),
+        "info_order": list(info),
+        "plates_info_order": list(pinfo),
+        "flips": pinfo["flips"],
+        "plates_without_divergent": pinfo["plates_without_divergent"],
+        "n_boundary": pinfo["n_boundary"],
+    }
+    w.case(m, name, outputs=outputs, meta=meta, commit=commit)
+    return gr, fields, info, cfg
+
+
+def _transfer_case(w: Writer, name: str, coarse: tuple, n_f: int, with_info: bool, commit: bool):
+    """거친 격자 재료(_materials_case 의 반환)를 L0 (흔들기 있음) 로 옮깁니다."""
+    gr, cf, ci, cfg = coarse
+    n_c = int(gr.shape[1])
+    fine = graph.sphere_graph(
+        n_f,
+        float(cfg.planet.radius_m),
+        jitter=float(cfg.landscape.jitter),
+        seed=int(cfg.planet.seed),
+    )
+    fields, info = materials.transfer_materials(gr, cf, ci if with_info else None, fine, cfg)
+    inputs = {**_prefixed("cf.", cf), "coarse_z_platform_base_m": ci["z_platform_base_m"]}
+    outputs = {
+        **_prefixed("f.", fields),
+        **_prefixed("info.", info),
+        "sea_level_m": np.float64(info["sea_level_m"]),
+        "ocean_fraction": np.float64(info["ocean_fraction"]),
+        "continental_fraction": np.float64(info["continental_fraction"]),
+    }
+    meta = {
+        "config": list(PLANET_CFG),
+        "n_coarse": n_c,
+        "n_fine": n_f,
+        "jitter": float(cfg.landscape.jitter),
+        "seed": int(cfg.planet.seed),
+        "with_info": with_info,
+        "field_order": list(fields),
+        "info_order": list(info),
+    }
+    w.case("planet", name, inputs=inputs, outputs=outputs, meta=meta, commit=commit)
+
+
+def export_planet(w: Writer) -> None:
+    m = "planet"
+    c16 = _materials_case(w, "materials_c16", 16, commit=True)
+    _transfer_case(w, "transfer_c16_f32", c16, 32, True, commit=False)
+    c8 = _materials_case(w, "materials_c8", 8, commit=True)
+    _transfer_case(w, "transfer_c8_f12", c8, 12, True, commit=True)
+    _transfer_case(w, "transfer_c8_f12_noinfo", c8, 12, False, commit=True)
+    # 판 뒤집기(negate·away_from_neighbor)와 끝까지 발산 경계가 없는 판이 남는 경우
+    _materials_case(w, "materials_c8_s72", 8, commit=True, overrides={"planet.seed": 72})
+    _materials_case(
+        w, "materials_c8_p20s43", 8, commit=True, overrides={"plates.count": 20, "planet.seed": 43}
+    )
+
+    # 작은 함수: 손으로 고른 경계값 + 무작위 값
+    cfg = cfgmod.load_config(*PLANET_CFG)
+    r = rng(7301)
+    ages = np.concatenate(
+        [
+            np.array([0.0, -0.0, -5.0, 1e-12, 69.99999999, 70.0, 70.00000001, 200.0, 1e6, np.nan]),
+            r.uniform(0.0, 250.0, 300),
+        ]
+    )
+    thick = np.concatenate([np.array([0.0, 35_000.0, 40_000.0, 1e5]), r.uniform(5e3, 8e4, 300)])
+    sx = np.concatenate(
+        [np.array([-0.5, -0.0, 0.0, 0.5, 1.0, 1.5, np.nan]), r.uniform(-0.2, 1.2, 200)]
+    )
+    nt = 400
+    d_conv = np.where(r.random(nt) < 0.1, np.inf, r.uniform(0.0, 4e5, nt))
+    side = r.integers(-1, 2, nt).astype(np.int8)
+    kind = r.integers(0, 4, nt).astype(np.uint8)
+    p = 10.0 ** r.uniform(-3.0, 1.0, 500)
+    pet = 10.0 ** r.uniform(-3.0, 1.0, 500)
+    lat = r.uniform(-np.pi / 2, np.pi / 2, 300)
+    zt = r.uniform(-3000.0, 6000.0, 300)
+    w.case(
+        m,
+        "functions",
+        inputs={
+            "ages": ages,
+            "thick": thick,
+            "sx": sx,
+            "d_conv": d_conv,
+            "side": side,
+            "kind": kind,
+            "p": p,
+            "pet": pet,
+            "lat": lat,
+            "z": zt,
+        },
+        outputs={
+            "ocean_depth": crust.ocean_depth_m(ages, 2500.0),
+            "airy": crust.airy_elevation_m(thick, cfg),
+            "smoothstep": crust.smoothstep(sx),
+            "trench": crust.trench_offset_m(d_conv, side, kind, cfg),
+            "arc_distance_m": np.float64(uplift.arc_distance_m(cfg)),
+            "runoff": climate.budyko_runoff(p, pet),
+            "temperature": climate.surface_temperature(lat, zt, cfg),
+            "temperature_noz": climate.surface_temperature(lat, None, cfg),
+        },
+        meta={"config": list(PLANET_CFG), "ridge_depth_m": 2500.0},
+        commit=True,
+    )
+
+    # 해수면·바다 마스크: 노이즈 지형 + 기울인 자전축의 위도·기후
+    cfg_t = cfg.with_overrides({"planet.axis": [0.3, -0.2, 0.9]})
+    s8 = graph.sphere_graph(8, R_EARTH, 1.0, 99)
+    z8 = _terrain(s8, 11, 4000.0, -500.0)
+    wv = float(np.sum(s8.area) * 1500.0)
+    h8 = ocean.sea_level(z8, s8.area, wv)
+    w.case(
+        m,
+        "ocean_sphere8",
+        inputs={"z": z8, "water_volume": np.float64(wv), "h_probe": np.float64(250.0)},
+        outputs={
+            "sea_level": np.float64(h8),
+            "volume_at_h": np.float64(ocean.ocean_volume(z8, s8.area, h8)),
+            "volume_probe": np.float64(ocean.ocean_volume(z8, s8.area, 250.0)),
+            "ocean_mask": ocean.ocean_mask(s8, z8, h8),
+            "ocean_mask_probe": ocean.ocean_mask(s8, z8, 250.0),
+            "latitude": climate.latitude_rad(s8, cfg_t),
+            **_prefixed("climate.", climate.generate_climate(s8, cfg_t, z=np.maximum(z8, 0.0))),
+            **_prefixed("climate_seed.", climate.generate_climate(s8, cfg_t, seed=777)),
+        },
+        meta={
+            "graph": {"n": 8, "R": R_EARTH, "jitter": 1.0, "seed": 99},
+            "axis": [0.3, -0.2, 0.9],
+            "climate_seed": 777,
+        },
+        commit=True,
+    )
+
+    # 평면 그래프: 융기·기후 (lat_deg)
+    fl = graph.flat_graph(24, 24, 1000.0, 1.0, 7302, (-12_000.0, 12_000.0))
+    n = fl.n_cells
+    r = rng(7303)
+    ff = {
+        "crust_type": (r.random(n) < 0.7).astype(np.uint8),
+        "is_ocean": r.random(n) < 0.2,
+        "convergence_kind": r.integers(0, 4, n).astype(np.uint8),
+        "subduction_side": r.integers(-1, 2, n).astype(np.int8),
+        "convergence_m_per_yr": r.uniform(-0.05, 0.08, n),
+        "dist_convergent_m": np.where(r.random(n) < 0.1, np.inf, r.uniform(0.0, 4e5, n)),
+        "dist_divergent_m": np.where(r.random(n) < 0.1, np.inf, r.uniform(0.0, 1e5, n)),
+    }
+    zf = r.uniform(-200.0, 3000.0, n)
+    w.case(
+        m,
+        "flat24",
+        inputs={f"ff.{k}": v for k, v in ff.items()} | {"z": zf},
+        outputs={
+            **_prefixed("uplift.", uplift.generate_uplift(fl, ff, cfg)),
+            **_prefixed("climate.", climate.generate_climate(fl, cfg, z=zf, lat_deg=37.5)),
+            "latitude": climate.latitude_rad(fl, cfg, 37.5),
+        },
+        meta={
+            "graph": {"nx": 24, "ny": 24, "dx": 1000.0, "jitter": 1.0, "seed": 7302},
+            "origin": [-12_000.0, 12_000.0],
+            "lat_deg": 37.5,
+            "field_order": list(ff),
+        },
+        commit=True,
+    )
+
+
 EXPORTS: dict[str, Callable[[Writer], None]] = {
     "core/hashing": export_hashing,
     "core/noise": export_noise,
@@ -1013,6 +1252,8 @@ EXPORTS: dict[str, Callable[[Writer], None]] = {
     "core/distance": export_distance,
     "core/resample": export_resample,
     "hydro": export_hydro,
+    "numerics/tanh": export_tanh,
+    "planet": export_planet,
 }
 
 

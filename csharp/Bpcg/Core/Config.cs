@@ -53,20 +53,34 @@ public class Section
     public object? Get(string key, object? @default = null) =>
         Wrap(Data.TryGetValue(key, out object? v) ? v : @default);
 
+    /// <summary>점 경로로 값을 찾습니다 ("plates.count"). 없으면 KeyNotFoundException.</summary>
+    protected object? Lookup(string dotted)
+    {
+        object? node = Data;
+        foreach (string part in dotted.Split('.'))
+        {
+            if (node is not OrderedDictionary<string, object?> d || !d.TryGetValue(part, out node))
+            {
+                throw new KeyNotFoundException($"설정에 '{dotted}' 가 없습니다");
+            }
+        }
+        return node;
+    }
+
     /// <summary>as_dict: 깊은 복사.</summary>
     public OrderedDictionary<string, object?> AsDict() => ConfigValue.DeepCopyDict(Data);
 
-    /// <summary>절 읽기.</summary>
-    public Section Sec(string key) => (Section)this[key]!;
+    /// <summary>절 읽기 (점 경로 가능). 아래 형별 읽기도 모두 점 경로를 받습니다.</summary>
+    public Section Sec(string key) => (Section)Wrap(Lookup(key))!;
 
     /// <summary>float(v): 정수·실수·bool 을 double 로.</summary>
-    public double F(string key) => ConfigValue.ToDouble(this[key], key);
+    public double F(string key) => ConfigValue.ToDouble(Lookup(key), key);
 
     /// <summary>int(v): 실수는 0 쪽으로 자르고 NaN·inf·int64 밖이면 예외.</summary>
-    public long I(string key) => ConfigValue.ToLong(this[key], key);
+    public long I(string key) => ConfigValue.ToLong(Lookup(key), key);
 
     /// <summary>bool(v).</summary>
-    public bool B(string key) => this[key] switch
+    public bool B(string key) => Lookup(key) switch
     {
         bool b => b,
         long l => l != 0,
@@ -77,7 +91,7 @@ public class Section
     };
 
     /// <summary>str(v) (글자 값).</summary>
-    public string S(string key) => this[key] switch
+    public string S(string key) => Lookup(key) switch
     {
         string s => s,
         object o => ConfigValue.PyStr(o),
@@ -85,7 +99,7 @@ public class Section
     };
 
     /// <summary>리스트 값.</summary>
-    public IReadOnlyList<object?> L(string key) => (List<object?>)this[key]!;
+    public IReadOnlyList<object?> L(string key) => (List<object?>)Lookup(key)!;
 
     /// <summary>실수 리스트 값 (원소마다 float(v)).</summary>
     public double[] FArray(string key) => L(key).Select(v => ConfigValue.ToDouble(v, key)).ToArray();
@@ -94,7 +108,12 @@ public class Section
     public bool TryF(string key, out double value)
     {
         value = 0.0;
-        if (!Data.TryGetValue(key, out object? v))
+        object? v;
+        try
+        {
+            v = Lookup(key);
+        }
+        catch (KeyNotFoundException)
         {
             return false;
         }

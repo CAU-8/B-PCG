@@ -499,6 +499,66 @@
       "case": "signed_zero",
       "bytes": 1110,
       "commit": true
+    },
+    {
+      "module": "numerics/tanh",
+      "case": "vectors",
+      "bytes": 400990,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "materials_c16",
+      "bytes": 343260,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "materials_c8",
+      "bytes": 95580,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "transfer_c8_f12",
+      "bytes": 198190,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "transfer_c8_f12_noinfo",
+      "bytes": 198190,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "materials_c8_s72",
+      "bytes": 95580,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "materials_c8_p20s43",
+      "bytes": 96348,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "functions",
+      "bytes": 46486,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "ocean_sphere8",
+      "bytes": 42926,
+      "commit": true
+    },
+    {
+      "module": "planet",
+      "case": "flat24",
+      "bytes": 66902,
+      "commit": true
     }
   ]
 }

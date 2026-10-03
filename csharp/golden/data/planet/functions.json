@@ -1,0 +1,11 @@
+{
+  "module": "planet",
+  "case": "functions",
+  "meta": {
+    "config": [
+      "earth",
+      "tiny"
+    ],
+    "ridge_depth_m": 2500.0
+  }
+}

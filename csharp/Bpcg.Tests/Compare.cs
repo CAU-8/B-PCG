@@ -106,6 +106,42 @@ public static class Compare
         }
     }
 
+    /// <summary>
+    /// golden 배열과 C# 배열을 원소 형까지 같은지 보고 비교합니다: 실수는 비트 단위, 나머지는 완전히 같음.
+    /// </summary>
+    public static void Array(Bpcg.IO.NpyArray expected, System.Array actual, string what)
+    {
+        Type te = expected.Data.GetType();
+        Assert.True(te == actual.GetType(), $"{what}: 원소 형 {te.Name} ≠ {actual.GetType().Name}");
+        switch (expected.Data)
+        {
+            case double[] d:
+                Bits(d, (double[])actual, what);
+                break;
+            case float[] f:
+                Bits(f, (float[])actual, what);
+                break;
+            case bool[] b:
+                Equal(b, (bool[])actual, what);
+                break;
+            case byte[] u8:
+                Equal(u8, (byte[])actual, what);
+                break;
+            case sbyte[] i8:
+                Equal(i8, (sbyte[])actual, what);
+                break;
+            case int[] i32:
+                Equal(i32, (int[])actual, what);
+                break;
+            case long[] i64:
+                Equal(i64, (long[])actual, what);
+                break;
+            default:
+                Assert.Fail($"{what}: 비교할 수 없는 원소 형 {te.Name}");
+                break;
+        }
+    }
+
     public static bool SameBits(double a, double b) =>
         (double.IsNaN(a) && double.IsNaN(b)) || BitConverter.DoubleToInt64Bits(a) == BitConverter.DoubleToInt64Bits(b);
 
