@@ -10,11 +10,11 @@ uv run bpcg studio --port 8800     # 다른 포트
 uv run bpcg studio --no-browser    # 브라우저를 열지 않음
 ```
 
-끄려면 터미널에서 Ctrl+C 를 누릅니다. 서버는 내 컴퓨터(127.0.0.1)에서만 듣고, 인터넷 자원(CDN·글꼴)을 쓰지 않아 오프라인에서도 돕니다. 새 의존성은 없습니다(표준 라이브러리 + numpy·scipy·matplotlib).
+끄려면 터미널에서 Ctrl+C 를 누릅니다. 서버는 내 컴퓨터(127.0.0.1)에서만 듣고, 인터넷 자원(CDN·글꼴)을 쓰지 않아 오프라인에서도 돕니다. 새 의존성은 없습니다(표준 라이브러리 + numpy·scipy·matplotlib). 계산은 C# 콘솔(`src/Bpcg.Cli`)이 하므로 .NET 10 SDK 가 있어야 합니다. 스튜디오가 실행마다 `dotnet build` 로 콘솔을 맞춰 두므로 따로 빌드하지 않아도 됩니다.
 
 같은 포트에 스튜디오를 두 번 켜면 두 번째는 "포트를 열지 못했습니다" 로 멈춥니다(윈도우도 같음). 다른 포트로 두 번째를 켜도 같은 `out/` 을 보면, 한쪽이 실행을 돌리는 동안 다른 쪽은 새 실행을 막고 그 실행을 '멈춤' 으로 바꾸지 않습니다(`job.json` 의 `server_pid`). 브라우저 탭을 닫거나 새로 고쳐 생긴 연결 끊김은 터미널에 한 줄만 찍힙니다.
 
-처음이면 프로필을 `tiny` 로 두고 '실행'을 눌러 보세요. 몇 초 만에 행성 → 히어로 → 회랑 → 그림이 한 번 돕니다. 모양을 보려면 `laptop` 으로 돌립니다(수 분).
+처음이면 프로필을 `tiny` 로 두고 '실행'을 눌러 보세요. 몇 초 만에 행성 → 히어로 → 회랑이 한 번 돕니다(그림 단계는 지금 건너뜀, 아래 '주의할 점'). 모양을 보려면 `laptop` 으로 돌립니다(수 분).
 
 ## 화면
 
@@ -31,10 +31,10 @@ uv run bpcg studio --no-browser    # 브라우저를 열지 않음
 
 - **행성 설정·프로필·시드**: `configs/planets/<행성>.toml`, `configs/profiles/<프로필>.toml`, `planet.seed` 입니다. 프로필 옆에 걸리는 시간을 적었습니다.
 - **평면 히어로만**: 행성 없이 가짜 경계조건으로 히어로만 풉니다(`bpcg all --flat`). 빠르지만 행성 지도와 그림이 없습니다.
-- **영역·해상도**: 히어로 한 변(`profile.hero.size_m`), 칸 간격(`spacing_m`), 회랑 길이·폭·간격입니다. 옆에 한 변 칸 수, 전체 칸 수, 실제 한 변(간격의 배수로 맞춤), 노트북 기본(1280² ≈ 164만 칸) 대비 계산량을 바로 보여 줍니다. 한 변 칸 수는 생성기와 같이 `round(size_m / spacing_m)` 이고 딱 반(.5)이면 짝수 쪽으로 맞춥니다(`/api/meta` 의 `hero_side_rule`). 칸이 약 400만 개를 넘거나 회랑이 히어로보다 크면 노란 경고를, 한 변이 칸 간격의 3배보다 짧거나 5000칸(`/api/meta` 의 `max_hero_side`)을 넘으면 실행을 막습니다. 서버도 실행 전에 같은 규칙(`hero.domain.hero_grid_size`)과 회랑 길이·폭·간격 > 0 을 검사해, 행성 단계를 다 돈 뒤에야 히어로에서 멈추는 일이 없습니다.
+- **영역·해상도**: 히어로 한 변(`profile.hero.size_m`), 칸 간격(`spacing_m`), 회랑 길이·폭·간격입니다. 옆에 한 변 칸 수, 전체 칸 수, 실제 한 변(간격의 배수로 맞춤), 노트북 기본(1280² ≈ 164만 칸) 대비 계산량을 바로 보여 줍니다. 한 변 칸 수는 생성기와 같이 `round(size_m / spacing_m)` 이고 딱 반(.5)이면 짝수 쪽으로 맞춥니다(`/api/meta` 의 `hero_side_rule`). 칸이 약 400만 개를 넘거나 회랑이 히어로보다 크면 노란 경고를, 한 변이 칸 간격의 3배보다 짧거나 5000칸(`/api/meta` 의 `max_hero_side`)을 넘으면 실행을 막습니다. 서버도 실행 전에 같은 규칙(`bpcg_studio.hero.hero_grid_size`, C# `Hero/Domain.cs` 와 같음)과 회랑 길이·폭·간격 > 0 을 검사해, 행성 단계를 다 돈 뒤에야 히어로에서 멈추는 일이 없습니다.
 - **매개변수 목록**: TOML 의 절마다 묶었습니다. 각 값에는 키 이름, 분류 배지, 설명(TOML 줄 끝 주석), 단위(키 이름 끝 `_m`, `_m_per_yr` 등에서 짐작), 기본값이 붙습니다. 기본값과 다르면 '바뀜' 배지와 되돌리기 단추(↺)가 나옵니다. 위의 찾기 칸과 분류 단추로 거를 수 있습니다. 바꾼 값은 브라우저에 남아 새로 고쳐도 유지됩니다.
 
-분류는 값을 바꿀 때 얼마나 조심할지 알려 줍니다(`src/bpcg/studio/params.py` 의 표).
+분류는 값을 바꿀 때 얼마나 조심할지 알려 줍니다(`src/bpcg_studio/params.py` 의 표).
 
 | 분류 | 뜻 | 예 |
 |---|---|---|
@@ -53,35 +53,35 @@ uv run bpcg studio --no-browser    # 브라우저를 열지 않음
 | 개요 | 프로필·시드·격자·바다 비율·히어로 위치·회랑, 기본값에서 바꾼 설정 표, 솔버 수렴(반복 수, 고정 칸, 반복마다 고도 변화·방향 변화 그래프), 단계별 걸린 시간(회랑은 동굴 메시·수면 높이맵처럼 굽기 이름으로), 점수표(항목 뜻, 검사/결과/반쯤 입력, 판정, 지구 값). 계산하지 못한 검사도 '불합격' 줄로 남고, 점수표 불합격과 지각 세기 한계 첫 풀이의 미수렴은 위 경고에도 나옵니다 |
 | 행성 지도 | L0 큐브스피어를 위경도 지도(1024×512)로 편 필드 지도 |
 | 히어로 지도 | 히어로 평면 격자(640 픽셀 이하로 묶음)의 필드 지도. 빨간 사각형이 엔진으로 구운 회랑입니다 |
-| 그림 | `analysis/figures/render_results.py` 가 그린 PNG 와, 그림마다 '무엇인가·어떻게 읽나·볼 점' 설명 |
+| 그림 | `analysis/figures/render_results.py` 가 그린 PNG 와, 그림마다 '무엇인가·어떻게 읽나·볼 점' 설명. 그림 스크립트를 아직 C# 결과에 맞추지 않아 새 실행에는 그림이 없습니다(예전 실행의 `figures/` 는 보임) |
 | 매개변수 설명 | 모든 매개변수의 표(분류, 설명, 단위, 기본값, 왼쪽에서 바꾼 값, 고른 결과의 값, 파일) |
 
 지도 탭 사용법:
 
 - **필드**는 지형, 판·지각, 해양, 기후, 물(강·호수·지하수), 지질·암석, 동굴, 흙으로 묶었습니다. 묶음에 없지만 읽기 쉬운 계산값(바다 수심, 지하수면 깊이, 동굴 층 합친 그림, 동굴 덮개 두께)도 있습니다.
-- 지도 위 설명 상자에 필드 이름, 단위, `core/fields.py` 의 설명, **어떻게 읽나**, 값 범위가 나옵니다.
+- 지도 위 설명 상자에 필드 이름, 단위, `bpcg_studio/fields.py` 의 설명(C# `Core/Fields.cs` 와 같은 표), **어떻게 읽나**, 값 범위가 나옵니다.
 - 색표·색 범위·로그 눈금·음영(기복 그림자)을 바꿀 수 있고, 아래에 단위가 붙은 색 막대나 범주 범례(칸 비율 포함)가 나옵니다. 추천 색 범위는 값의 2~98% 입니다. 바다가 0 인 융기 속도는 0 이 아닌 칸으로 범위를 잡고, 깎인 두께는 로그 눈금이 기본입니다. 기준 고도(`z_platform_m`)는 0 m 가 해수면이 아니라서 바다·육지 두 갈래 색을 쓰지 않습니다.
 - 겹쳐 그리기: 행성은 해안선·판 경계·히어로 위치, 히어로는 강·호수·선상지·동굴 입구·회랑입니다.
 - 마우스를 올리면 값·단위·위경도(또는 동·북 km)가, 누르면 오른쪽에 그 칸의 **모든 필드 값**과 **땅속 층 기둥**(깎여 없어진 층, 지표에 드러난 층, 기반암)이 나옵니다. 칸 정보의 줄을 누르면 그 필드를 지도에 그립니다. 휠로 확대, 끌어서 이동합니다.
 
 ## 값 하나를 바꾸면 Godot 까지 어떻게 가나
 
-1. 왼쪽에서 값을 바꾸고 '실행'을 누르면 서버가 키와 형식을 검사합니다(`core.config.checked_overrides`). 없는 키는 비슷한 키를 알려 주며 막고, 실수 자리의 nan·inf 와 `planet.name`·`profile.name`(행성·프로필 칸으로 고름)도 막습니다. 이어서 히어로·회랑 영역(`jobs.domain_errors`)을 봅니다. 이미 도는 실행이 있으면 409 로 막습니다(검사와 등록을 한 잠금 안에서 해서, 거의 같은 때 누른 두 요청도 하나만 시작).
-2. 서버가 하위 프로세스로 `python -m bpcg.cli all --profile … --seed … --out out/studio/<실행 id> --set 키=값 …` 를 돌립니다. 같은 명령을 터미널에서 직접 쳐도 됩니다(아래 `--set`).
-3. 기록 줄("[1단계] …", "[2단계] 솔버 끝 …", "[굽기] …")을 한 줄씩 읽어 단계 진행으로 바꿉니다(`studio/progress.py` 의 `STAGES` 표). 솔버는 "솔버 반복 k" 줄로 단계 안 진행을 셉니다. 같은 프로필로 끝난 지난 실행이 있으면 그때 잰 단계 시간으로 진행률과 남은 시간을 맞춥니다. 히어로 칸 수·L0 칸 수·회랑 표본 수(`jobs.cost_of`)가 다르면 그 비율로 단계 시간을 늘이거나 줄이고, 도는 단계가 지난번 시간을 넘기면 솔버는 지금 반복 속도로, 반복 기록이 없는 단계는 '계산 중' 으로 보여 줍니다.
-4. 행성이 있으면 이어서 `analysis/figures/render_results.py` 로 그림을 그립니다.
+1. 왼쪽에서 값을 바꾸고 '실행'을 누르면 서버가 키와 형식을 검사합니다(`bpcg_studio.config.checked_overrides`). 없는 키는 비슷한 키를 알려 주며 막고, 실수 자리의 nan·inf 와 `planet.name`·`profile.name`(행성·프로필 칸으로 고름)도 막습니다. 이어서 히어로·회랑 영역(`jobs.domain_errors`)을 봅니다. 이미 도는 실행이 있으면 409 로 막습니다(검사와 등록을 한 잠금 안에서 해서, 거의 같은 때 누른 두 요청도 하나만 시작).
+2. 서버가 하위 프로세스로 C# 콘솔을 빌드하고(`dotnet build src/Bpcg.Cli -c Release`, 바뀐 것이 없으면 몇 초) `dotnet src/Bpcg.Cli/bin/Release/net10.0/Bpcg.Cli.dll all --profile … --seed … --out out/studio/<실행 id> --set 키=값 …` 를 돌립니다. 터미널에서는 `uv run bpcg all …` 이 같은 일을 합니다(아래 `--set`).
+3. 기록 줄("[1단계] …", "[2단계] 솔버 끝 …", "[굽기] …")을 한 줄씩 읽어 단계 진행으로 바꿉니다(`bpcg_studio/progress.py` 의 `STAGES` 표). C# 콘솔은 예전 Python 과 같은 기록 줄을 찍습니다. 솔버는 "솔버 반복 k" 줄로 단계 안 진행을 셉니다. 같은 프로필로 끝난 지난 실행이 있으면 그때 잰 단계 시간으로 진행률과 남은 시간을 맞춥니다. 히어로 칸 수·L0 칸 수·회랑 표본 수(`jobs.cost_of`)가 다르면 그 비율로 단계 시간을 늘이거나 줄이고, 도는 단계가 지난번 시간을 넘기면 솔버는 지금 반복 속도로, 반복 기록이 없는 단계는 '계산 중' 으로 보여 줍니다.
+4. 행성이 있으면 이어서 `analysis/figures/render_results.py` 로 그림을 그리는 단계가 있지만, 그림 스크립트가 아직 C# 결과를 읽지 못해 지금은 '건너뜀' 으로 적고 넘어갑니다(`jobs.FIGURES_READY`).
 5. 실행 폴더에 `job.json`(프로필·시드·바꾼 값·상태·단계별 시간·결과 줄·크기·서버 pid)과 `job.log`(기록 전체)가 남아, 서버를 다시 켜도 목록과 진행 기록이 보입니다. 서버가 꺼질 때 돌던 실행은 '멈춤'으로 적히고, 그때 돌던 단계는 '실패(서버 꺼짐)', 남은 시간은 비웁니다. `job.json` 을 쓰지 못해도(윈도우에서 다른 프로그램이 열고 있을 때) 실행은 멈추지 않고 다음에 다시 씁니다. 실행 스레드에 오류가 나면 하위 프로세스를 끄고 '실패' 로 적습니다.
 6. 'Godot로 보기'를 누르면
-   1. Godot 4.7.2 를 찾고(`GODOT` 환경 변수 → `.tools/godot/` → `/Applications/Godot.app` → PATH, `tests/test_engine_smoke.py` 와 같은 순서), 버전을 화면 없이 확인합니다.
+   1. Godot 4.7.2 .NET 판을 찾고(`GODOT_NET` 환경 변수 → `.tools/godot-net/` → `GODOT` 환경 변수, `tests/test_engine.py` 와 같은 순서), 버전이 `4.7.2.stable.mono` 인지 화면 없이 확인합니다.
    2. `corridor/manifest.json` 이 적은 파일과 `manifest.json` 을 `engine/baked/` 로 복사하고, 이전 회랑에만 있던 파일은 지웁니다. 어느 실행인지 `engine/baked/studio_run.json` 에 적습니다.
-   3. `Godot --headless --path engine --import` 를 **임시 HOME** 으로 돌려 새 파일을 가져옵니다.
-   4. `Godot --path engine`(보기) 또는 `-e`(편집기)를 내 환경 그대로 따로 띄웁니다.
+   3. 엔진 C# 을 빌드합니다(`dotnet build engine/Bpcg.Engine.csproj`, 화면에 '빌드' 단계로 나옴).
+   4. `Godot --headless --path engine --import` 를 **임시 HOME** 으로 돌려 새 파일을 가져옵니다.
+   5. `Godot --path engine res://scenes/main.tscn`(보기, 처음 화면을 건너뛰고 회랑) 또는 `-e`(편집기)를 내 환경 그대로 따로 띄웁니다.
 
 명령줄에서 같은 일을 하려면:
 
 ```sh
 uv run bpcg all --profile laptop --out out/theta05 --set landscape.theta=0.5 --set fans.enabled=false
-uv run python analysis/figures/render_results.py out/theta05
 uv run bpcg bake --hero out/theta05/hero --engine
 ```
 
@@ -89,25 +89,26 @@ uv run bpcg bake --hero out/theta05/hero --engine
 
 ## 주의할 점
 
-- **시간.** `laptop` 은 실행 하나에 수 분, 그림까지 1~2분이 더 듭니다. `lab` 은 보고용이라 훨씬 오래 걸립니다. 한 번에 한 실행만 돕니다(같은 `out/` 을 보는 다른 스튜디오 서버의 실행까지 셈). 히어로를 키우면 시간이 칸 수에 거의 비례해 늘어납니다.
+- **그림.** 결과 그림 스크립트(`analysis/figures/render_results.py`)는 예전 Python 생성기를 import 해서 지금은 돌지 않습니다. C# 결과 파일을 읽게 고치면 `jobs.FIGURES_READY` 를 켭니다.
+- **시간.** `laptop` 은 실행 하나에 수 분이 듭니다. `lab` 은 보고용이라 훨씬 오래 걸립니다. 한 번에 한 실행만 돕니다(같은 `out/` 을 보는 다른 스튜디오 서버의 실행까지 셈). 히어로를 키우면 시간이 칸 수에 거의 비례해 늘어납니다.
 - **임시 값.** '손 보정(임시)' 값과 '학습 예정' 값은 데이터 학습(설계도 6장) 전의 값입니다. 스튜디오로 찾은 좋은 값은 근거와 함께 PR 로 `configs/` 에 반영하고, 학습이 끝나면 `configs/learned/` 가 덮어씁니다.
 - **히어로 크기와 바다.** 히어로가 클수록 바다에서 먼 육지 자리가 필요합니다. 행성에 그런 자리가 없으면 `bpcg all` 이 "[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: <이유>" 를 찍고 평면 히어로로 바꿉니다. 이때 진행·개요 탭에 경고가 뜹니다. 같은 줄이 영역 설정 오류(`size_m ≥ 3·spacing_m`, 칸 수 상한) 때문이면 경고는 "영역 설정이 맞지 않습니다" 로 따로 나옵니다(스튜디오에서는 실행 전에 막힘).
 - **Godot 와 내 설정.** 화면 없이 도는 단계(버전 확인, 가져오기)는 모두 임시 HOME 으로 돌려 내 편집기 설정을 건드리지 않습니다. 마지막 창 띄우기만 내 설정을 씁니다. 가져오기는 `engine/.godot/` 캐시를 고치고, 새 스크립트가 있으면 `.uid` 를 만들 수 있습니다(커밋 대상, `engine/README.md`).
 - **지도는 다시 표본한 그림입니다.** 행성 지도는 픽셀마다 가장 가까운 L0 칸 값이고(극 근처는 옆으로 늘어남), 히어로 지도는 큰 히어로에서 칸을 묶은 값(연속값은 평균, 범주는 가운데 칸, 강은 하나라도 있으면 있음, 동굴 입구·동굴 층은 묶음 안 층을 합침: 아래층 + 위층 = 두 층)입니다. 정확한 칸 값은 칸 정보에서 봅니다.
 - **캐시.** 행성 위경도 칸 번호 지도는 `out/studio/.cache/` 에 둡니다. 지워도 다시 만듭니다. 같은 폴더를 `bpcg all --out` 으로 다시 만들거나 실행 도중 다음 단계가 생기면 `/api/level` 의 `version` 이 바뀌어 화면이 새 격자를 받습니다. 히어로 자리·회랑 사각형도 그때 다시 읽습니다.
-- **보안.** 서버는 127.0.0.1 에서만 듣고 Host 머리글을 확인합니다. POST 는 JSON 만 받고, 다른 사이트에서 온 요청(Origin·Sec-Fetch-Site)과 본문 길이가 이상한 요청은 막습니다. 모든 응답에 iframe 금지 머리글(`X-Frame-Options: DENY`, `frame-ancestors 'none'`)을 붙여 다른 페이지가 '실행'·'Godot로 보기' 를 몰래 누르게 하지 못합니다. 그림·회랑·필드 파일 이름은 경로 없는 이름만 받습니다(`studio/names.py`, 윈도우 `D:x` 같은 드라이브 상대 경로 포함).
+- **보안.** 서버는 127.0.0.1 에서만 듣고 Host 머리글을 확인합니다. POST 는 JSON 만 받고, 다른 사이트에서 온 요청(Origin·Sec-Fetch-Site)과 본문 길이가 이상한 요청은 막습니다. 모든 응답에 iframe 금지 머리글(`X-Frame-Options: DENY`, `frame-ancestors 'none'`)을 붙여 다른 페이지가 '실행'·'Godot로 보기' 를 몰래 누르게 하지 못합니다. 그림·회랑·필드 파일 이름은 경로 없는 이름만 받습니다(`bpcg_studio/names.py`, 윈도우 `D:x` 같은 드라이브 상대 경로 포함).
 - **읽기 전용.** `out/` 의 다른 실행은 보기만 하고 고치지 않습니다(캐시도 `out/studio/.cache/` 에만 씀).
 
 ## 고칠 곳
 
 | 바꾸고 싶은 것 | 파일 |
 |---|---|
-| 진행 단계 이름·순서·무게·끝 줄 무늬, 경고 줄 | `src/bpcg/studio/progress.py` (`STAGES`, `WARNINGS`) |
-| 매개변수 분류·단위·설명 보충 | `src/bpcg/studio/params.py` (`CATEGORY_TABLE`, `HAND_HISTORY`, `UNIT_SUFFIXES`, `HELP_FALLBACK`) |
-| 지도 필드 이름·그룹·읽는 법·색표·범주 이름, 계산값, 겹쳐 그리기 | `src/bpcg/studio/labels.py` (`FIELD_TEXT`, `DERIVED`, `OVERLAYS`) |
-| 점수표 항목 뜻·지구 값, 그림 설명, 걸린 시간 이름 | `src/bpcg/studio/summary.py` (`SCORE_TEXT`, `FIGURE_TEXT`, `SECONDS_LABELS`, `CORRIDOR_SECONDS_LABELS`) |
-| 실행 전 영역 검사, 지난 실행 시간 맞추기 | `src/bpcg/studio/jobs.py` (`domain_errors`, `cost_of`, `scale_weights`) |
-| 화면 | `src/bpcg/studio/static/` (`index.html`, `app.js`, `style.css`, `logo.gif`) |
-| API | `src/bpcg/studio/server.py` (머리 주석에 표) |
+| 진행 단계 이름·순서·무게·끝 줄 무늬, 경고 줄 | `src/bpcg_studio/progress.py` (`STAGES`, `WARNINGS`) |
+| 매개변수 분류·단위·설명 보충 | `src/bpcg_studio/params.py` (`CATEGORY_TABLE`, `HAND_HISTORY`, `UNIT_SUFFIXES`, `HELP_FALLBACK`) |
+| 지도 필드 이름·그룹·읽는 법·색표·범주 이름, 계산값, 겹쳐 그리기 | `src/bpcg_studio/labels.py` (`FIELD_TEXT`, `DERIVED`, `OVERLAYS`) |
+| 점수표 항목 뜻·지구 값, 그림 설명, 걸린 시간 이름 | `src/bpcg_studio/summary.py` (`SCORE_TEXT`, `FIGURE_TEXT`, `SECONDS_LABELS`, `CORRIDOR_SECONDS_LABELS`) |
+| 실행 전 영역 검사, 지난 실행 시간 맞추기 | `src/bpcg_studio/jobs.py` (`domain_errors`, `cost_of`, `scale_weights`) |
+| 화면 | `src/bpcg_studio/static/` (`index.html`, `app.js`, `style.css`, `logo.gif`) |
+| API | `src/bpcg_studio/server.py` (머리 주석에 표) |
 
 검사는 `uv run pytest tests/test_studio.py` 입니다. Godot 는 실행하지 않습니다(찾기는 가짜 후보로, 복사는 임시 폴더로 검사).

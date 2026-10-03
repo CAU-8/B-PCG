@@ -14,7 +14,7 @@ from extract import tomo_file
 from scipy.interpolate import LinearNDInterpolator
 from scipy.spatial import Delaunay
 
-from bpcg.core.paths import DERIVED
+from bpcg_studio.paths import DERIVED
 
 OUT_DIR = DERIVED / "afrisar"
 R_E = 6378137.0  # [m] WGS84 적도 반지름

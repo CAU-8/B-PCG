@@ -14,7 +14,7 @@ import h5py
 import numpy as np
 from extract import tomo_file
 
-from bpcg.core.paths import DERIVED
+from bpcg_studio.paths import DERIVED
 
 OUT_DIR = DERIVED / "afrisar"
 

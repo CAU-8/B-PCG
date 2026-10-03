@@ -1,0 +1,13 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!-- Godot 4.7.2 .NET 판 게임 프로젝트. 계산은 ../src/Bpcg 라이브러리가 하고, 여기는 장면·화면·입력만 둡니다.
+       Godot.NET.Sdk 는 이 폴더 아래 모든 .cs 를 컴파일하므로 Bpcg 는 폴더 밖에 둡니다 (docs/csharp_port.md 1장). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Bpcg.Engine</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 생성 계산이 무거우므로 편집기 실행(Debug)에서도 Bpcg 는 최적화(Release)해 빌드합니다. -->
+    <ProjectReference Include="../src/Bpcg/Bpcg.csproj" SetConfiguration="Configuration=Release" />
+  </ItemGroup>
+</Project>

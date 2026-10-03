@@ -2,6 +2,9 @@
 
 실행: uv run python analysis/figures/render_results.py out/earth_v2 [--out out/earth_v2/figures]
 입력은 `bpcg all` 이 쓴 폴더(planet/, hero/, corridor/)입니다. ETOPO 비교는 data/pilot 이 있을 때만 그립니다.
+
+아직 돌지 않습니다: 이 스크립트는 지운 Python 생성기(bpcg)를 import 합니다. C# 이 쓴 결과 묶음
+(planet/·hero/·corridor/ 의 manifest·.npy)을 직접 읽게 고칠 때까지 남겨 둡니다.
 """
 
 import argparse
@@ -13,13 +16,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from bpcg.bake.bundle import load_hero_state, load_planet_state  # noqa: E402
+from bpcg.core.config import load_config  # noqa: E402
+from bpcg.core.paths import PILOT  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.colors import LightSource, ListedColormap, TwoSlopeNorm  # noqa: E402
 
-from bpcg.bake.bundle import load_hero_state, load_planet_state  # noqa: E402
 from bpcg.core import cubesphere as cs  # noqa: E402
-from bpcg.core.config import load_config  # noqa: E402
-from bpcg.core.paths import PILOT  # noqa: E402
 from bpcg.geology import rocks  # noqa: E402
 
 for name in (

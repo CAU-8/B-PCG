@@ -1,11 +1,11 @@
-[gd_scene format=3 uid="uid://ca2dijsfd5071"]
+[gd_scene format=3]
 
-[ext_resource type="Script" uid="uid://xxcvjr0f5dpu" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" uid="uid://b43hl8vhpqd4i" path="res://scripts/terrain.gd" id="2_terrain"]
-[ext_resource type="Shader" uid="uid://cjj4itimqvn2" path="res://shaders/cross_section.gdshader" id="3_cross"]
-[ext_resource type="Script" uid="uid://oaau43hsok7" path="res://scripts/player.gd" id="4_player"]
-[ext_resource type="Script" path="res://scripts/baked_layers.gd" id="5_baked"]
-[ext_resource type="Script" path="res://scripts/hud.gd" id="6_hud"]
+[ext_resource type="Script" path="res://Scripts/Main.cs" id="1_main"]
+[ext_resource type="Script" path="res://Scripts/HeightmapTerrain.cs" id="2_terrain"]
+[ext_resource type="Shader" path="res://shaders/cross_section.gdshader" id="3_cross"]
+[ext_resource type="Script" path="res://Scripts/Player.cs" id="4_player"]
+[ext_resource type="Script" path="res://Scripts/BakedLayers.cs" id="5_baked"]
+[ext_resource type="Script" path="res://Scripts/Hud.cs" id="6_hud"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -29,44 +29,44 @@ shader = ExtResource("3_cross")
 radius = 0.4
 height = 1.8
 
-[node name="Main" type="Node3D" unique_id=1192865503]
+[node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=2022239183]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
 
-[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1231190568]
+[node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.8660254, -0.40957585, 0.2867881, 0, 0.5735762, 0.8191517, -0.5, -0.7094062, 0.49673155, 0, 0, 0)
 shadow_enabled = true
 directional_shadow_max_distance = 1000.0
 
-[node name="Terrain" type="Node3D" parent="." unique_id=1788330870]
+[node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("2_terrain")
-material = SubResource("ShaderMaterial_terrain")
-skirt_m = 30.0
+Material = SubResource("ShaderMaterial_terrain")
+SkirtM = 30.0
 
-[node name="Baked" type="Node3D" parent="." unique_id=1407734219]
+[node name="Baked" type="Node3D" parent="."]
 script = ExtResource("5_baked")
 
-[node name="Player" type="CharacterBody3D" parent="." unique_id=1604882990]
+[node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 200, 0)
 script = ExtResource("4_player")
 
-[node name="Shape" type="CollisionShape3D" parent="Player" unique_id=434130531]
+[node name="Shape" type="CollisionShape3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_player")
 
-[node name="Head" type="Node3D" parent="Player" unique_id=877684955]
+[node name="Head" type="Node3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 
-[node name="Camera" type="Camera3D" parent="Player/Head" unique_id=205213648]
+[node name="Camera" type="Camera3D" parent="Player/Head"]
 current = true
 far = 40000.0
 
-[node name="Lamp" type="SpotLight3D" parent="Player/Head/Camera" unique_id=1772260393]
+[node name="Lamp" type="SpotLight3D" parent="Player/Head/Camera"]
 light_energy = 3.0
 spot_range = 80.0
 spot_angle = 40.0
 
-[node name="Hud" type="CanvasLayer" parent="." unique_id=631170244]
+[node name="Hud" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")

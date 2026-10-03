@@ -19,7 +19,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from bpcg.core.paths import CACHE, EXTERNAL
+from bpcg_studio.paths import CACHE, EXTERNAL
 
 ZIP_PATH = EXTERNAL / "afrisar" / "Polarimetric_height_profile_1577.zip"
 ZIP_TOP = "Polarimetric_height_profile_1577/"  # zip 안의 맨 위 폴더

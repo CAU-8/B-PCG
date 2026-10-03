@@ -1,8 +1,8 @@
 # 지구본 장면 (scenes/globe.tscn)
 
-The globe scene shows the whole generated planet as a rotatable globe. Python (`bpcg.bake.globe`) resamples the L0 planet onto a 6 × N × N cube-sphere grid and writes `<baked dir>/globe/`; Godot raises the sphere by elevation (exaggerated ×20 by default), paints it with one chosen layer (elevation, plates, climate, water, rock, caves, …), and overlays rivers, lakes and a 15° lat/lon grid. Every layer carries its own title, unit, legend and Korean explanation from `globe.json`.
+The globe scene shows the whole generated planet as a rotatable globe. The C# baker (`src/Bpcg/Bake/Globe.cs`) resamples the L0 planet onto a 6 × N × N cube-sphere grid and writes `<baked dir>/globe/`; Godot raises the sphere by elevation (exaggerated ×20 by default), paints it with one chosen layer (elevation, plates, climate, water, rock, caves, …), and overlays rivers, lakes and a 15° lat/lon grid. Every layer carries its own title, unit, legend and Korean explanation from `globe.json`.
 
-행성 전체를 한눈에 봅니다. 지구본을 돌리고, 레이어를 바꿔 칠하고, 마우스를 올리면 그 자리의 위도·경도와 값이 나옵니다. 엔진은 계산하지 않습니다. 파이썬이 구운 값을 칠하기만 합니다.
+행성 전체를 한눈에 봅니다. 지구본을 돌리고, 레이어를 바꿔 칠하고, 마우스를 올리면 그 자리의 위도·경도와 값이 나옵니다. 지구본 장면은 계산하지 않습니다. 굽기(`Bpcg` 의 `Globe.BakeGlobe`)가 쓴 값을 칠하기만 합니다.
 
 ## 한눈에 보기
 
@@ -10,27 +10,28 @@ The globe scene shows the whole generated planet as a rotatable globe. Python (`
 |---|---|
 | 보이는 것 | 행성 전체. 규모는 거시(L0) 입니다. 칸 크기는 모두 같은 잣대, 면 가운데 칸 한 변(2πR / 4N)으로 잽니다: 지구본 칸 약 39.1 km(N = 256), 값을 계산한 L0 칸은 laptop 약 19.5 km(면당 512칸), tiny 약 313 km(면당 32칸). globe.json 의 설명과 패널도 같은 잣대입니다 |
 | 자료 | `<굽기 폴더>/globe/globe.json` + `.bin` (기본 `engine/baked/globe/`, 명령줄 `-- --baked-dir=<폴더>` 로 바꿈) |
-| 굽기 | `uv run python -m bpcg.bake.globe --planet out/<run>/planet --engine` (L0 만큼 곱게 보려면 `--face-res 512`). `--face-res` 는 2 ~ 1024 이고, 넘으면 이유를 알리고 굽지 않습니다(1024 를 넘으면 꼭짓점 방향·이웃 표만 수 GB 라 노트북 메모리가 모자라고, 엔진이 레이어 텍스처 하나를 만드는 데 몇 분이 걸림) |
+| 굽기 | 처음 화면의 '행성 만들기', `uv run bpcg all`, `uv run bpcg bake --hero <실행>/hero` 가 실행 폴더의 `globe/` 에 굽습니다(`--engine` 이면 `engine/baked/globe/` 에도, `--no-globe` 면 굽지 않음). 면당 칸 수 N 은 256 입니다. `Globe.BakeGlobe` 의 `faceRes` 는 2 ~ 1024 를 받고 넘으면 이유를 알리고 굽지 않지만(1024 를 넘으면 꼭짓점 방향·이웃 표만 수 GB 라 노트북 메모리가 모자라고, 엔진이 레이어 텍스처 하나를 만드는 데 몇 분이 걸림), 예전 Python 의 `--face-res` 같은 명령줄 선택은 C# 콘솔에 아직 없습니다 |
 | 그리기 | 큐브스피어 면 6장 × 꼭짓점 (N+1)². 셰이더가 꼭짓점을 고도 × 과장 배율만큼 바깥으로 밀고(기본 ×20), 고른 레이어의 색을 칠합니다 |
 | 색 | 레이어마다 globe.json 의 색표(연속 값) 또는 범주 색. 값이 없는 칸은 회색. Godot 조명을 쓰지 않습니다(`unshaded`). 그늘은 비탈만 밝게·어둡게 하므로 평평한 곳(바다, 평지)은 지구본 어디서나 범례 색 그대로이고, G 로 그늘을 끄면 모든 칸이 범례 색과 같습니다 |
 | 읽기 | 마우스 자리: 위도·경도, 고도, 고른 레이어 값. 클릭: 그 칸의 모든 레이어 값을 고정 |
-| 검사 | `uv run pytest tests/test_engine_globe.py` (Godot 가 없으면 건너뜀) |
+| 검사 | `uv run pytest -m godot tests/test_engine.py` (Godot .NET 판이나 dotnet 이 없으면 건너뜀) |
 
 ## 여는 법
 
 ```sh
-uv run python -m bpcg.bake.globe --planet out/<run>/planet --engine   # engine/baked/globe/ 에 씀
-G=.tools/godot/Godot.app/Contents/MacOS/Godot
-$G --path engine res://scenes/globe.tscn                               # 편집기 없이 지구본만 실행
+uv run bpcg all --profile tiny --out out/tiny          # out/tiny/{planet,hero,corridor,globe}
+G=.tools/godot-net/Godot_mono.app/Contents/MacOS/Godot
+dotnet build engine/Bpcg.Engine.csproj
+$G --path engine res://scenes/globe.tscn -- --baked-dir=$PWD/out/tiny/corridor   # 지구본만 실행
 ```
 
-편집기에서는 `scenes/globe.tscn` 을 열고 '현재 장면 실행'(F6, macOS 는 Cmd+R)을 누릅니다. 프로젝트의 시작 장면은 회랑(`main.tscn`)이고, 지구본에서 M 을 누르면 회랑으로 들어갑니다.
+`--baked-dir` 을 빼면 처음 화면이 고른 실행, 그다음 `res://baked` 의 지구본을 읽습니다(굽기 폴더 안의 `globe/`, 없으면 옆의 `../globe`). 편집기에서는 `scenes/globe.tscn` 을 열고 '현재 장면 실행'(F6, macOS 는 Cmd+R)을 누릅니다. 프로젝트의 시작 장면은 처음 화면(`start.tscn`)이고, 처음 화면의 '지난 결과'에서 실행을 골라 지구본을 열 수도 있습니다. 지구본에서 M 을 누르면 회랑으로, N 을 누르면 처음 화면으로 갑니다.
 
 자료가 없으면(`globe.json` 이 없음) 화면 가운데에 '지구본 자료가 없습니다' 와 굽는 명령이, 있는데 잘못됐으면(크기·형식이 틀림) '지구본 자료를 읽지 못했습니다' 와 그 까닭이 나옵니다. 어느 쪽이든 장면은 멈추지 않습니다.
 
 ## 조작
 
-화면 왼쪽 아래에 같은 표가 나옵니다(H 로 숨김). 키는 물리 키 위치로 받습니다(`globe_main.gd`, `globe_camera.gd`). `project.godot` 의 입력 동작은 쓰지 않습니다.
+화면 왼쪽 아래에 같은 표가 나옵니다(H 로 숨김). 키는 물리 키 위치로 받습니다(`GlobeMain.cs`, `GlobeCamera.cs`). `project.godot` 의 입력 동작은 쓰지 않습니다.
 
 | 키·마우스 | 하는 일 |
 |---|---|
@@ -97,9 +98,9 @@ $G --path engine res://scenes/globe.tscn                               # 편집�
 
 **좌표.** Godot 좌표 = (행성 x, 행성 z, −행성 y) 입니다. 행성 자전축 z(북쪽)가 Godot +Y 이고, 이 바꿈은 회전(행렬식 +1)이라 면 기저의 오른손 규칙 u × v = n 이 그대로입니다. 위도 = asin(y), 경도 = atan2(−z, x) (Godot 좌표, 도). 지구본 반지름 1 이 해수면 반지름 `radius_m` 입니다. 설정의 자전축(`planet.axis`)이 z 가 아니면 굽기가 먼저 자전축을 z 로, 경도 0 의 기준(히어로 찾기와 같은 규칙)을 x 로 돌린 뒤 같은 바꿈을 합니다(`frame.axis_rotation`). 그래서 자전축은 늘 Godot +Y 이고, 엔진이 계산하는 위도·경도가 기후의 위도와 히어로의 위도·경도와 같습니다. 히어로의 `lat_deg`, `lon_deg` 도 늘 이 좌표의 단위 벡터에서 다시 계산합니다.
 
-**격자.** 면 f 의 기저 n, u, v 로 방향 ∝ n + tan(a·π/4)·u + tan(b·π/4)·v (등각 큐브스피어). 칸 (행 r, 열 c) 의 중심은 a = −1 + 2(c + ½)/N, b = −1 + 2(r + ½)/N 이고, 꼭짓점 (r, c) 는 a = −1 + 2c/N, b = −1 + 2r/N 입니다. 거꾸로 방향 → 칸은 n 과의 내적이 가장 큰 면을 고르고 a = atan(d·u / d·n) / (π/4) 로 구합니다(`GlobeData.direction_to_cell`). 행은 v, 열은 u 쪽이라 묶음의 셀 번호 c = f·n² + j·n + i 와 같은 규칙입니다.
+**격자.** 면 f 의 기저 n, u, v 로 방향 ∝ n + tan(a·π/4)·u + tan(b·π/4)·v (등각 큐브스피어). 칸 (행 r, 열 c) 의 중심은 a = −1 + 2(c + ½)/N, b = −1 + 2(r + ½)/N 이고, 꼭짓점 (r, c) 는 a = −1 + 2c/N, b = −1 + 2r/N 입니다. 거꾸로 방향 → 칸은 n 과의 내적이 가장 큰 면을 고르고 a = atan(d·u / d·n) / (π/4) 로 구합니다(`GlobeData.DirectionToCell`). 행은 v, 열은 u 쪽이라 묶음의 셀 번호 c = f·n² + j·n + i 와 같은 규칙입니다.
 
-**메시** (`globe.gd`). 면마다 꼭짓점 (N+1)² 개의 단위 방향, UV = (열/N, 행/N), 삼각형은 바깥에서 시계 방향(앞면)입니다. 면 경계는 tan(±π/4) 를 정확히 ±1 로 두고 거울 대칭으로 계산해서 이웃 면과 꼭짓점이 비트 단위로 같습니다. 이웃 면이 나누는 꼭짓점의 고도도 파이썬이 같은 값으로 쓰므로 틈이 생기지 않습니다. N = 256 이면 꼭짓점이 약 40 만 개입니다.
+**메시** (`GlobeView.cs`). 면마다 꼭짓점 (N+1)² 개의 단위 방향, UV = (열/N, 행/N), 삼각형은 바깥에서 시계 방향(앞면)입니다. 면 경계는 tan(±π/4) 를 정확히 ±1 로 두고 거울 대칭으로 계산해서 이웃 면과 꼭짓점이 비트 단위로 같습니다. 이웃 면이 나누는 꼭짓점의 고도도 굽기가 같은 값으로 쓰므로 틈이 생기지 않습니다. N = 256 이면 꼭짓점이 약 40 만 개입니다.
 
 **셰이더** (`shaders/globe.gdshader`).
 
@@ -108,7 +109,7 @@ $G --path engine res://scenes/globe.tscn                               # 편집�
 - 해수면의 끊김: 색표 값은 늘 엄격히 늘어납니다(같은 값의 매듭 없음). 고도 색표는 바다의 마지막 매듭이 −0.5 m(가장 얕은 바다 색), 육지의 첫 매듭이 0 m(낮은 땅 초록)라서 그 사이 0.5 m 에서만 두 색이 섞이고, 고도 필드의 `color_break` = 0 이 위의 '섞지 않음'을 켭니다. 엔진은 같은 값의 매듭이 둘 와도 멈추지 않고 그 값부터 뒤 매듭의 색을 쓰지만, 굽기 코드와 검사는 엄격히 늘어나는 색표만 씁니다.
 - 겹쳐 보기: 강 등급과 호수 값을 바이트 그대로 담은 텍스처. 등급별 색과 문턱은 uniform 이라 텍스처를 다시 만들지 않습니다.
 - 그늘(기복만): 화면 공간 미분(dFdx, dFdy)으로 구한 면 법선 n_face 와 매끈한 구의 법선 n_sphere 가 카메라 왼쪽 위 앞에서 오는 빛 l 을 받는 정도의 차이만 밝기로 바꿉니다. lit = clamp(1 + 1.5 · (n_face·l − n_sphere·l), 0.6, 1.4). 구의 둥근 모양 자체는 어둡게 하지 않으므로 평평한 곳은 화면 가장자리에서도 lit = 1(범례 색 그대로)이고, 비탈만 밝거나 어둡습니다. 과장을 키우면 기복이 더 드러납니다. G 로 끄면(`shade_relief`) 대기 빛도 함께 꺼지고 모든 칸이 범례 색입니다.
-- 드문 범주의 점: `point_markers` 레이어(동굴)를 고르면 0 도 '값 없음' 도 아닌 칸마다 범주 색 점(7 px, 화면 크기 일정)을 칸 모서리 가운데 가장 높은 곳 바로 위에 찍습니다(`GlobeView.point_markers`).
+- 드문 범주의 점: `point_markers` 레이어(동굴)를 고르면 0 도 '값 없음' 도 아닌 칸마다 범주 색 점(7 px, 화면 크기 일정)을 칸 모서리 가운데 가장 높은 곳 바로 위에 찍습니다(`GlobeView.PointMarkers`).
 - 대기 빛(`shaders/atmosphere.gdshader`): 지구본보다 조금 큰 구에 그리되, 시선이 해수면 구를 지나는 자리는 버립니다. 그래서 빛은 지구본 바깥 테두리에만 있고 지구본 위의 색을 바꾸지 않습니다.
 - Godot 조명은 쓰지 않습니다(`unshaded`). 그래서 화면 색 = 범례 색 × 기복 그늘(평평하면 1)입니다.
 
@@ -116,7 +117,7 @@ $G --path engine res://scenes/globe.tscn                               # 편집�
 
 ## 파일 형식 요약 (`globe.json`)
 
-자세한 정의는 `src/bpcg/bake/globe.py` 의 모듈 설명에 있습니다. 엔진이 쓰는 키만 적습니다.
+자세한 정의는 `src/Bpcg/Bake/Globe.cs` 의 설명 주석에 있습니다. 엔진이 쓰는 키만 적습니다.
 
 | 키 | 뜻 |
 |---|---|
@@ -135,18 +136,20 @@ $G --path engine res://scenes/globe.tscn                               # 편집�
 ## 검사
 
 ```sh
-uv run pytest tests/test_engine_globe.py
+uv run pytest -m godot tests/test_engine.py
 ```
 
-직접 돌릴 때는 반드시 `--headless` 와 임시 HOME 을 씁니다(`README.md` 의 '연기 검사' 참고).
+직접 돌릴 때는 반드시 `--headless` 와 임시 HOME 을 씁니다(`README.md` 의 '검사' 참고).
 
 ```sh
-G=.tools/godot/Godot.app/Contents/MacOS/Godot
-HOME=$(mktemp -d) $G --headless --path engine --import
-HOME=$(mktemp -d) $G --headless --path engine --script res://tests/globe_smoke.gd -- --baked-dir=<폴더>
+G=.tools/godot-net/Godot_mono.app/Contents/MacOS/Godot
+dotnet build engine/Bpcg.Engine.csproj
+H=$(mktemp -d)
+HOME=$H $G --headless --path engine --import
+HOME=$H $G --headless --path engine res://Tests/globe_smoke.tscn -- --baked-dir=<굽기 폴더> --expect-globe
 ```
 
-`tests/globe_smoke.gd` 는 성공하면 `BPCG_GLOBE_OK`(자료가 없으면 `BPCG_GLOBE_OK (no data)`), 실패하면 `BPCG_GLOBE_FAIL: <이유>` 를 찍습니다. 보는 것은 다음과 같습니다.
+`Tests/globe_smoke.tscn`(`Tests/GlobeSmokeTest.cs`) 은 성공하면 `BPCG_GLOBE_OK`(자료가 없으면 `BPCG_GLOBE_OK (no data)`), 실패하면 `BPCG_GLOBE_FAIL: <이유>` 를 찍습니다. 보는 것은 다음과 같습니다.
 
 1. 면 메시 6 개, 면마다 꼭짓점 (N+1)², 삼각형 2N², 앞면이 바깥. 꼭짓점 (r, c) 의 UV 가 (c/N, r/N) 이고 방향이 문서의 사상과 같음(대각선 밖 꼭짓점도 보므로 행·열이 바뀐 메시는 실패)
 2. 면 경계 꼭짓점이 이웃 면과 비트 단위로 같고 고도 차 0 (틈 없음)
@@ -158,21 +161,21 @@ HOME=$(mktemp -d) $G --headless --path engine --script res://tests/globe_smoke.g
 8. 카메라: 화면 가운데를 고르면 카메라 쪽 방향, 확대 한계, 날아가기, Space
 9. 클릭 고정 상자에 모든 레이어와 겹쳐 보기가 이름과 함께 나옴, Esc 로 풀림
 
-pytest 는 네 번 돌립니다: tiny 행성을 `bake_globe` 로 구운 자료, 굽기 코드와 상관없이 위 형식만으로 쓴 작은 해석적 자료(NaN 칸, 로그 필드, 범주 14 개, `color_break`, 점으로 찍는 드문 범주와 rgb 가 null 인 범주·'값 없음' 범주 255, 문턱 아래 강 등급), 빈 굽기 폴더('자료가 없습니다'), `.bin` 크기가 틀린 자료('읽지 못했습니다').
+pytest 는 네 번 돌립니다: 엔진 안에서 만든 tiny 실행의 지구본, 굽기 코드와 상관없이 위 형식만으로 쓴 작은 해석적 자료(`tests/globe_fixture.py`: NaN 칸, 로그 필드, 범주 14 개, `color_break`, 점으로 찍는 드문 범주와 rgb 가 null 인 범주·'값 없음' 범주 255, 문턱 아래 강 등급), 빈 굽기 폴더('자료가 없습니다'), `.bin` 크기가 틀린 자료('읽지 못했습니다').
 
 ## 파일
 
 | 경로 | 역할 |
 |---|---|
-| `scenes/globe.tscn` | 지구본 장면: `GlobeMain`(globe_main.gd) 아래 WorldEnvironment, `Globe`, `Camera`, `Hud` |
-| `scripts/globe_data.gd` | `GlobeData`: globe.json·.bin 읽기와 크기 확인, 방향 ↔ 칸, 위도·경도, 값 읽기와 글, 색표 → 텍스처 |
-| `scripts/globe.gd` | `GlobeView`: 면 메시 6 개, 재질, 대기 빛, 히어로 핀, 고도 과장·겹쳐 보기·경위선, 화면 위치 → 방향 |
-| `scripts/globe_camera.gd` | 궤도 카메라: 끌기, 확대·축소, 자동 회전, 날아가기, 클릭 신호 |
-| `scripts/globe_hud.gd` | `GlobeHud`: 상태 글, 고정 상자, 레이어 패널, 범례, 도움말, 자료 없음 알림 |
-| `scripts/globe_main.gd` | 장면 뿌리: 자료 읽기, 키, 마우스 자리 읽기, 클릭 고정, 회랑으로 가기 |
+| `scenes/globe.tscn` | 지구본 장면: `GlobeMain`(GlobeMain.cs) 아래 WorldEnvironment, `Globe`, `Camera`, `Hud` |
+| `Scripts/GlobeData.cs` | `GlobeData`: globe.json·.bin 읽기와 크기 확인, 방향 ↔ 칸, 위도·경도, 값 읽기와 글, 색표 → 텍스처 |
+| `Scripts/GlobeView.cs` | `GlobeView`: 면 메시 6 개, 재질, 대기 빛, 히어로 핀, 고도 과장·겹쳐 보기·경위선, 화면 위치 → 방향 |
+| `Scripts/GlobeCamera.cs` | 궤도 카메라: 끌기, 확대·축소, 자동 회전, 날아가기, 클릭 신호 |
+| `Scripts/GlobeHud.cs` | `GlobeHud`: 상태 글, 고정 상자, 레이어 패널, 범례, 도움말, 자료 없음 알림 |
+| `Scripts/GlobeMain.cs` | 장면 뿌리: 자료 읽기, 키, 마우스 자리 읽기, 클릭 고정, 회랑·처음 화면으로 가기 |
 | `shaders/globe.gdshader` | 고도 밀어 내기, 레이어 색(종류가 같은 텍셀끼리만 보간), 강·호수, 경위선, 기복 그늘 |
 | `shaders/atmosphere.gdshader` | 지구본 바깥 테두리의 옅은 빛 (자료 아님) |
-| `tests/globe_smoke.gd` | headless 연기 검사 |
+| `Tests/globe_smoke.tscn`, `Tests/GlobeSmokeTest.cs` | headless 연기 검사 (pytest `tests/test_engine.py` 가 돌림) |
 
 ## 한계
 
@@ -180,4 +183,4 @@ pytest 는 네 번 돌립니다: tiny 행성을 `bake_globe` 로 구운 자료, 
 - 그늘은 삼각형마다 평평한 면 법선이라, 아주 가까이 당기면 삼각형 무늬가 보일 수 있습니다.
 - 값 없는 칸이나 `color_break` 의 경계에서는 보간하지 않고 가장 가까운 텍셀을 쓰므로, 해안선과 값 없음 경계가 칸 크기만큼 각져 보입니다(범례에 없는 색을 만들지 않으려는 것).
 - 드문 범주의 점은 칸이 있는 자리만 알려 줍니다. 점 크기는 넓이와 상관없고, 칸이 2 만 개를 넘으면 찍지 않습니다(그때는 텍스처 색만).
-- 지구본과 회랑 사이는 M 키로 오갑니다(지구본 → 회랑은 `globe_main.gd`, 회랑 → 지구본은 `main.gd`). 회랑에서 돌아오면 지구본은 처음 자리(히어로 유역)에서 다시 시작합니다.
+- 지구본과 회랑 사이는 M 키로 오갑니다(지구본 → 회랑은 `GlobeMain.cs`, 회랑 → 지구본은 `Main.cs`). 회랑에서 돌아오면 지구본은 처음 자리(히어로 유역)에서 다시 시작합니다.

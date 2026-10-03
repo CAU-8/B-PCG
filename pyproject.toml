@@ -11,7 +11,8 @@ dependencies = [
 ]
 
 [project.scripts]
-bpcg = "bpcg.cli:main"
+# studio 는 Python 스튜디오, planet·hero·bake·all 은 C# 콘솔(src/Bpcg.Cli)로 넘깁니다
+bpcg = "bpcg_studio.cli:main"
 
 # 패키지 묶음. 설치: uv sync (기본 = dev, data, mesh) / uv sync --group analysis / uv sync --all-groups
 [dependency-groups]
@@ -57,7 +58,7 @@ requires = ["uv_build>=0.12.17,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "bpcg"
+module-name = "bpcg_studio"
 
 [tool.ruff]
 line-length = 100
@@ -83,5 +84,5 @@ addopts = "-ra --strict-markers"
 markers = [
     "slow: 오래 걸리는 검사 (빼려면 -m 'not slow')",
     "data: data/pilot 이 있어야 도는 검사 (없으면 건너뜀)",
-    "godot: Godot 4.7.2 실행 파일이 있어야 도는 검사 (없으면 건너뜀)",
+    "godot: Godot 4.7.2 .NET 판과 dotnet 이 있어야 도는 검사 (없으면 건너뜀)",
 ]

@@ -2,6 +2,8 @@
 
 이 문서는 `src/bpcg`가 행성 하나를 만드는 계산을 공식과 함수 계약으로 고정합니다. 실제 지형 자료로 값을 맞추는 단계(설계도 6장)는 아직 쓰지 않고, 모든 상수는 `configs/planets/earth.toml`의 문헌 기본값을 씁니다. 맞춘 값이 생기면 `configs/learned/`가 같은 키를 덮어쓰고, 코드는 바꾸지 않습니다.
 
+2026-10-03부터 생성기는 C#(`src/Bpcg`)입니다. 이 문서의 파이썬 이름은 같은 자리의 C# 형·파일로 읽습니다: `bpcg.core.graph.CellGraph` → `Bpcg.Core.CellGraph`(`src/Bpcg/Core/Graph.cs`), `hero/flat.py` → `src/Bpcg/Hero/Flat.cs`, 모듈 함수 `load_config` → `Config.LoadConfig`처럼 PascalCase. 모듈마다의 대응은 [csharp_port.md](csharp_port.md) 3장 대응표에 있습니다. 공식·상수·필드 이름·설정 키·파일 형식은 옮기며 바꾸지 않았습니다.
+
 가이드(`docs/guide/planet_guide.md`)와 설계도(`docs/design/blueprint.md`)가 다르면 설계도를 따르고, 이 문서는 둘을 합친 구현 기준입니다. 바꾼 곳은 각 절에 '가이드와 다름'으로 적습니다.
 
 ## 1. 흐름

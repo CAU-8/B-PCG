@@ -1,12 +1,14 @@
 """큐브스피어 셀 중심을 면별 색으로 찍어 보는 데모 (예전 main.py 의 __main__ 부분).
 
 실행: uv run python analysis/demos/plot_cubesphere.py [--n 16]
+
+아직 돌지 않습니다: 이 스크립트는 지운 Python 생성기(bpcg)를 import 합니다. C# 이 쓴 결과 묶음
+(planet/·hero/·corridor/ 의 manifest·.npy)을 직접 읽게 고칠 때까지 남겨 둡니다.
 """
 
 import argparse
 
 import matplotlib.pyplot as plt
-
 from bpcg.core.cubesphere import FACE_NAMES, cubesphere_grid
 
 

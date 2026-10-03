@@ -10,7 +10,7 @@ import random
 
 import pytest
 
-from bpcg.core.paths import ROOT
+from bpcg_studio.paths import ROOT
 
 
 def _load_script():

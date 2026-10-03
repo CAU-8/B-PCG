@@ -23,16 +23,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from bundles import run_cli
 
-import bpcg.studio.server as server_mod
-import bpcg.studio.views as views_mod
-from bpcg.bake.bundle import read_manifest
-from bpcg.cli import main
-from bpcg.core.config import BareText, checked_overrides, load_config, parse_assignment
-from bpcg.core.paths import CONFIGS
-from bpcg.studio import godot as gd
-from bpcg.studio import summary as sm
-from bpcg.studio.jobs import (
+import bpcg_studio.server as server_mod
+import bpcg_studio.views as views_mod
+from bpcg_studio import godot as gd
+from bpcg_studio import summary as sm
+from bpcg_studio.bundle import read_manifest
+from bpcg_studio.config import BareText, checked_overrides, load_config, parse_assignment
+from bpcg_studio.jobs import (
     JobError,
     JobManager,
     cost_of,
@@ -42,28 +41,34 @@ from bpcg.studio.jobs import (
     toml_literal,
     validate_request,
 )
-from bpcg.studio.names import bare_name, relative_name, run_folder_name
-from bpcg.studio.params import (
+from bpcg_studio.names import bare_name, relative_name, run_folder_name
+from bpcg_studio.params import (
     CATEGORIES,
     build_schema,
     config_diff,
     config_missing,
     profile_names,
 )
-from bpcg.studio.progress import STAGE_INDEX, STAGES, ProgressTracker
-from bpcg.studio.server import Studio, StudioHTTPServer, create_server
-from bpcg.studio.views import PLANET_H, PLANET_W, ViewStore
+from bpcg_studio.paths import CONFIGS
+from bpcg_studio.progress import STAGE_INDEX, STAGES, ProgressTracker
+from bpcg_studio.server import Studio, StudioHTTPServer, create_server
+from bpcg_studio.views import PLANET_H, PLANET_W, ViewStore
 
 
 def _run_cli(args: list[str]) -> list[str]:
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        assert main(args) == 0
-    return buf.getvalue().splitlines()
+    """C# 콘솔을 돌리고 기록 줄을 돌려줍니다."""
+    return run_cli(*args).stdout.splitlines()
+
+
+def _cli_error(args: list[str]) -> str:
+    """실패해야 하는 C# 콘솔 명령. 반환: 오류 글 (stderr)."""
+    proc = run_cli(*args, check=False)
+    assert proc.returncode != 0, args
+    return proc.stderr
 
 
 @pytest.fixture(scope="module")
-def runs(tmp_path_factory):
+def runs(csharp_cli, tmp_path_factory):
     """tiny 실행 둘: 보통(θ 를 --set 으로 바꿈)과 평면 히어로. 반환: (out 폴더, {이름: 기록 줄})."""
     out = tmp_path_factory.mktemp("studio_out")
     logs = {
@@ -148,13 +153,11 @@ def test_checked_overrides_rejects_unknown_keys_and_bad_types():
         checked_overrides(cfg, {"plates.speed_m_per_yr": [0.1]})
 
 
-def test_cli_set_errors_clearly(tmp_path):
-    with pytest.raises(SystemExit, match="landscape.thetaa"):
-        main(["planet", "--profile", "tiny", "--out", str(tmp_path), "--set", "landscape.thetaa=1"])
-    with pytest.raises(SystemExit, match="--set"):
-        main(["planet", "--profile", "tiny", "--out", str(tmp_path), "--set", "nonsense"])
-    with pytest.raises(SystemExit, match="--flat"):
-        main(["hero", "--from", str(tmp_path), "--set", "landscape.theta=0.5"])
+def test_cli_set_errors_clearly(csharp_cli, tmp_path):
+    base = ["planet", "--profile", "tiny", "--out", str(tmp_path), "--set"]
+    assert "landscape.thetaa" in _cli_error(base + ["landscape.thetaa=1"])
+    assert "--set" in _cli_error(base + ["nonsense"])
+    assert "--flat" in _cli_error(["hero", "--from", str(tmp_path), "--set", "landscape.theta=0.5"])
 
 
 def test_cli_set_reaches_bundle_config(runs):
@@ -420,7 +423,7 @@ def test_validate_request_reports_bad_keys():
     assert spec["overrides"] == {}  # 기본값과 같은 값은 뺌
 
 
-def test_job_manager_runs_tiny_pipeline(tmp_path):
+def test_job_manager_runs_tiny_pipeline(csharp_cli, tmp_path):
     jm = JobManager(out_dir=tmp_path)
     job = jm.start(
         {"profile": "tiny", "seed": 2, "figures": False, "overrides": {"fans.enabled": False}}
@@ -462,14 +465,14 @@ def test_find_godot_uses_candidates_in_order(tmp_path, monkeypatch):
     other.write_text("가짜")
     found = gd.find_godot([tmp_path / "없음", fake], check_version=False)
     assert found["ok"] and found["path"] == str(fake)
-    versions = {str(other): "4.6.1.stable", str(fake): "4.7.2.stable.official"}
+    versions = {str(other): "4.7.2.stable.official", str(fake): "4.7.2.stable.mono.official"}
     found = gd.find_godot([other, fake], check_version=True, version_fn=lambda p: versions[str(p)])
     assert found["ok"] and found["path"] == str(fake) and found["version"].startswith("4.7.2")
-    assert found["seen"][0]["version"] == "4.6.1.stable"
+    assert found["seen"][0]["version"] == "4.7.2.stable.official"  # 표준판은 건너뜀
     none = gd.find_godot([other], check_version=True, version_fn=lambda p: "4.6.1")
     assert not none["ok"] and "4.7.2" in none["message"]
     assert not gd.find_godot([tmp_path / "없음"])["ok"]
-    monkeypatch.setenv("GODOT", str(fake))
+    monkeypatch.setenv("GODOT_NET", str(fake))
     assert gd.candidates()[0] == fake
 
 
@@ -565,14 +568,11 @@ def test_checked_overrides_rejects_non_finite_and_name_keys():
         toml_literal(float("nan"))
 
 
-def test_cli_set_rejects_inf_and_name_keys(tmp_path):
+def test_cli_set_rejects_inf_and_name_keys(csharp_cli, tmp_path):
     base = ["planet", "--profile", "tiny", "--out", str(tmp_path), "--set"]
-    with pytest.raises(SystemExit, match="nan·inf"):
-        main(base + ["landscape.stop_dz_m=inf"])
-    with pytest.raises(SystemExit, match="--planet"):
-        main(base + ['planet.name="earth_dry"'])
-    with pytest.raises(SystemExit, match="--profile"):
-        main(base + ['profile.name="laptop"'])
+    assert "nan·inf" in _cli_error(base + ["landscape.stop_dz_m=inf"])
+    assert "--planet" in _cli_error(base + ['planet.name="earth_dry"'])
+    assert "--profile" in _cli_error(base + ['profile.name="laptop"'])
     assert not any(tmp_path.iterdir()), "검사에서 멈춰야 하는데 결과를 썼습니다"
 
 
@@ -747,9 +747,7 @@ def test_scorecard_keeps_checks_that_failed_to_compute():
     rows = {r["key"]: r for r in sm._scorecard_rows(planet, None)}
     assert "law_consistency" in rows and rows["law_consistency"]["planet"]["pass"] is False
     assert "hack_exponent" not in rows
-    from bpcg.metrics.scorecard import DEFAULT_THRESHOLDS
-
-    assert rows["ocean_fraction"]["earth"] == f"{DEFAULT_THRESHOLDS['earth_ocean_fraction']:g}"
+    assert rows["ocean_fraction"]["earth"] == f"{sm.EARTH_OCEAN_FRACTION:g}"  # Scorecard.cs 기준값
     failed = sm.failed_checks(planet, None)
     assert [f["key"] for f in failed] == ["planet.law_consistency"] and failed[0]["compute_failed"]
     warns = sm._warnings(None, None, None, None, {}, {}, failed)
@@ -838,7 +836,7 @@ def test_job_survives_job_json_write_errors(tmp_path, monkeypatch):
     def locked(path, obj):
         raise PermissionError(13, "다른 프로그램이 파일을 쓰는 중", str(path))
 
-    monkeypatch.setattr("bpcg.studio.jobs.write_json", locked)
+    monkeypatch.setattr("bpcg_studio.jobs.write_json", locked)
     jm = JobManager(out_dir=tmp_path)
     _stub(jm, "print('[행성] 시작: x', flush=True); print('끝', flush=True)")
     job = jm.start({"profile": "tiny", "figures": False})

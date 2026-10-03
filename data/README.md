@@ -14,7 +14,7 @@
 | `cache/` | 지워도 되는 임시 파일 (zip 에서 꺼낸 파일 등) | 필요할 때 다시 생깁니다 |
 | `logs/` | 내려받기 기록 | 지워도 됩니다 |
 
-코드에서는 이 경로를 직접 쓰지 않고 `bpcg.core.paths` 의 `PILOT`, `EXTERNAL`, `DERIVED`, `CACHE` 를 씁니다.
+코드에서는 이 경로를 직접 쓰지 않고 `bpcg_studio.paths`(파이썬)·`Bpcg.Core.Paths`(C#) 의 `PILOT`, `EXTERNAL`, `DERIVED`, `CACHE` 를 씁니다.
 
 ## 자료 목록
 
@@ -144,7 +144,7 @@ uv run python tools/download_pilot.py --reselect --write-manifest
 
 ## 다른 디스크에 두기 (BPCG_DATA)
 
-자료가 크면 환경 변수 `BPCG_DATA` 로 데이터 폴더를 옮길 수 있습니다. 옮긴 폴더 안의 구조(`pilot/`, `external/`, ...)는 그대로 둡니다. `bpcg.core.paths` 와 `tools/download_pilot.py` 가 모두 이 값을 따릅니다. `manifest.json` 은 저장소의 `data/` 에 그대로 두고, 그 안의 경로는 데이터 폴더를 기준으로 읽습니다.
+자료가 크면 환경 변수 `BPCG_DATA` 로 데이터 폴더를 옮길 수 있습니다. 옮긴 폴더 안의 구조(`pilot/`, `external/`, ...)는 그대로 둡니다. `bpcg_studio.paths`, `Bpcg.Core.Paths`, `tools/download_pilot.py` 가 모두 이 값을 따릅니다. `manifest.json` 은 저장소의 `data/` 에 그대로 두고, 그 안의 경로는 데이터 폴더를 기준으로 읽습니다.
 
 ```bash
 # macOS, Linux
