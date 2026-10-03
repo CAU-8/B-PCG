@@ -37,6 +37,53 @@ public static class PyJson
         return sb.ToString();
     }
 
+    /// <summary>
+    /// json.loads: 객체는 순서 있는 dict, 배열은 List, 소수점·지수가 없는 수는 long(넘치면 double), 나머지 수는 double.
+    /// </summary>
+    public static object? Loads(string text)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(text, new System.Text.Json.JsonDocumentOptions { AllowTrailingCommas = false });
+        return FromElement(doc.RootElement);
+    }
+
+    private static object? FromElement(System.Text.Json.JsonElement e)
+    {
+        switch (e.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Object:
+                var d = new OrderedDictionary<string, object?>();
+                foreach (System.Text.Json.JsonProperty p in e.EnumerateObject())
+                {
+                    d[p.Name] = FromElement(p.Value);
+                }
+                return d;
+            case System.Text.Json.JsonValueKind.Array:
+                var l = new List<object?>();
+                foreach (System.Text.Json.JsonElement x in e.EnumerateArray())
+                {
+                    l.Add(FromElement(x));
+                }
+                return l;
+            case System.Text.Json.JsonValueKind.String:
+                return e.GetString();
+            case System.Text.Json.JsonValueKind.Number:
+                string raw = e.GetRawText();
+                bool isInt = raw.IndexOfAny(['.', 'e', 'E']) < 0;
+                if (isInt && long.TryParse(raw, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long lv))
+                {
+                    return lv;
+                }
+                // TODO(port): Python 은 아주 큰 정수를 임의 정밀도 int 로 읽습니다.
+                return double.Parse(raw, NumberStyles.Float, CultureInfo.InvariantCulture);
+            case System.Text.Json.JsonValueKind.True:
+                return true;
+            case System.Text.Json.JsonValueKind.False:
+                return false;
+            default:
+                return null;
+        }
+    }
+
     /// <summary>config digest 용: json.dumps(v, sort_keys=True, ensure_ascii=False).</summary>
     public static string DumpsSorted(object? value) =>
         Dumps(value, new Options(SortKeys: true, EnsureAscii: false));

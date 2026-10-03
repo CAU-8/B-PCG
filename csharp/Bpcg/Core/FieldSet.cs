@@ -34,6 +34,9 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
     /// <summary>np.asarray(fields[name], dtype=np.float64): double[] 는 그대로, float[] 는 정확히 넓힌 새 배열.</summary>
     public double[] GetFloat64(string name) => ToFloat64(this[name]);
 
+    /// <summary>원소 형에 상관없이 np.asarray(fields[name], dtype=np.float64).</summary>
+    public double[] GetFloat64Any(string name) => this[name] is double[] d ? d : (double[])CastTo(this[name], typeof(double));
+
     /// <summary>실수 배열을 double[] 로 (np.asarray(a, dtype=np.float64)).</summary>
     public static double[] ToFloat64(Array a) => a switch
     {
