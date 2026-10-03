@@ -9,7 +9,7 @@ analysis/ 는 패키지가 아니라 파일로 실행하는 스크립트 모음�
 import sys
 from pathlib import Path
 
-from bpcg.core.paths import DERIVED
+from bpcg_studio.paths import DERIVED
 
 _AFRISAR_SRC = Path(__file__).resolve().parents[1] / "afrisar"
 if str(_AFRISAR_SRC) not in sys.path:

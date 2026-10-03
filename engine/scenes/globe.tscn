@@ -1,9 +1,9 @@
-[gd_scene format=3 uid="uid://cldx05hymwvpb"]
+[gd_scene format=3]
 
-[ext_resource type="Script" uid="uid://w33geucyn3nd" path="res://scripts/globe_main.gd" id="1_main"]
-[ext_resource type="Script" uid="uid://dfyp641bftfvq" path="res://scripts/globe.gd" id="2_globe"]
-[ext_resource type="Script" uid="uid://dxa5reejlno2p" path="res://scripts/globe_camera.gd" id="3_camera"]
-[ext_resource type="Script" uid="uid://b6ifkoepadke1" path="res://scripts/globe_hud.gd" id="4_hud"]
+[ext_resource type="Script" path="res://Scripts/GlobeMain.cs" id="1_main"]
+[ext_resource type="Script" path="res://Scripts/GlobeView.cs" id="2_globe"]
+[ext_resource type="Script" path="res://Scripts/GlobeCamera.cs" id="3_camera"]
+[ext_resource type="Script" path="res://Scripts/GlobeHud.cs" id="4_hud"]
 
 [sub_resource type="Environment" id="Environment_globe"]
 background_mode = 1

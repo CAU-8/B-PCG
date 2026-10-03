@@ -45,13 +45,15 @@ out/
 # 예외: 1 MB 이하 시험 자료와 문서 근거용 작은 결과 (conventions 8절)
 !tests/fixtures/*.npz
 !analysis/*/results/*.npz
-# C# 대조 시험의 커밋하는 golden 자료 (각 1 MB 이하, csharp/golden/data/README.md)
-!csharp/golden/data/**/*.npz
-!csharp/golden/data/**/*.npy
+# C# 대조 시험의 커밋하는 golden 자료 (각 1 MB 이하, tests/golden/data/README.md)
+!tests/golden/data/**/*.npz
+!tests/golden/data/**/*.npy
 
-# --- C# (csharp/) ---
-csharp/**/bin/
-csharp/**/obj/
+# --- C# (src/Bpcg*, tests/Bpcg.Tests; engine 은 .godot/mono 에 빌드) ---
+/src/Bpcg*/bin/
+/src/Bpcg*/obj/
+/tests/Bpcg.Tests/bin/
+/tests/Bpcg.Tests/obj/
 TestResults/
 *.user
 *.binlog
@@ -70,7 +72,6 @@ Godot_v*
 # --- 엔진 (Godot 4) ---
 engine/.godot/
 engine/baked/
-csharp/Bpcg.Engine/.godot/
 engine/export/
 *.pck
 

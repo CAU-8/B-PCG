@@ -1,1 +1,1 @@
-- C# 포팅 작업(`csharp/`)을 이어 갈 때는 지시 원문 [docs/csharp_port_prompt.md](docs/csharp_port_prompt.md)와 진행 기록 [docs/csharp_port.md](docs/csharp_port.md)을 먼저 읽습니다.
+- C# 코드(`src/Bpcg`, `src/Bpcg.Cli`, `engine/`, `tests/Bpcg.Tests`) 작업을 이어 갈 때는 지시 원문 [docs/csharp_port_prompt.md](docs/csharp_port_prompt.md)와 진행 기록 [docs/csharp_port.md](docs/csharp_port.md)을 먼저 읽습니다.

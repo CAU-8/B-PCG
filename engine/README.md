@@ -1,43 +1,57 @@
-# engine/ — Godot 4.7.2 프로젝트
+# engine/ — Godot 4.7.2 .NET 프로젝트
 
-This folder is the Godot 4.7.2 (standard, non-.NET) project for B-PCG. It only loads files baked by the Python package (`engine/baked/`) and shows them: the corridor heightmap, the surrounding 25 m terrain, water surfaces, the water table, cave meshes and a strata cross-section. Each layer can be toggled or shown alone, and the player can fly through everything (noclip) or walk. The axis convention is X = east, Y = up, Z = south, in metres, in a local frame around a corridor reference point. A headless smoke test runs with `uv run pytest -m godot`.
+This folder is the Godot 4.7.2 .NET (C#) project for B-PCG. It can generate a planet inside the engine with the `Bpcg` C# library (`src/Bpcg`), bake the corridor and globe files into `user://runs/`, and show them: the corridor heightmap, the surrounding 25 m terrain, water surfaces, the water table, cave meshes, a strata cross-section, and the whole planet as a globe. The player can fly through everything (noclip) or walk. Axes: X = east, Y = up, Z = south, in metres, in a local frame around a corridor reference point. Smoke tests run with `uv run pytest -m godot tests/test_engine.py`.
 
-엔진은 지질·물·동굴을 계산하지 않습니다. 파이썬이 구운 파일을 불러와 보여 주고, 그 사이를 날거나 걷게 합니다.
+엔진은 C# 입니다. 처음 화면에서 행성을 만들면 `Bpcg` 라이브러리가 주 스레드 밖에서 행성 → 히어로 → 회랑 굽기 → 지구본을 돌리고, 끝나면 회랑 장면으로 넘어갑니다. 콘솔(`uv run bpcg all`)이나 스튜디오가 구운 폴더도 그대로 엽니다. 예전 GDScript 판(표준판)을 2026-10 에 C# 으로 옮겼습니다(아래 '예전 GDScript 판과의 대응').
 
 ## 한눈에 보기
 
 | 항목 | 정한 것 |
 |---|---|
-| Godot | 4.7.2 표준판(.NET 아님), 공식 빌드(단정밀도). 세 사람 모두 같은 버전 |
+| Godot | 4.7.2 **.NET 판** (`4.7.2.stable.mono.official.ed1daf0bf`), 공식 빌드(단정밀도). 표준판으로는 열리지 않습니다 |
+| .NET | SDK 10 (저장소 맨 위 `global.json`). 게임 어셈블리 `Bpcg.Engine` = net10.0, `../src/Bpcg` 를 ProjectReference 로 참조 (편집기 실행에서도 Bpcg 는 Release 로 빌드) |
 | 렌더러 | Forward+ (`config/features` 에 `"Forward Plus"`). macOS 는 Metal 로 돕니다 |
-| 물리 | Jolt Physics. `project.godot` 에 적어 둡니다 (4.7.2 의 값: `DEFAULT`, `Jolt Physics`, `GodotPhysics3D`, `Dummy`) |
+| 물리 | Jolt Physics (`project.godot`) |
 | 좌표 | X = 동, Y = 위, Z = 남. 단위 m. 회랑 기준점을 원점으로 한 지역 좌표 |
+| 장면 | `scenes/start.tscn`(처음 화면, 시작 장면) · `scenes/main.tscn`(회랑) · `scenes/globe.tscn`(지구본) |
+| 스크립트 | `Scripts/*.cs` (아래 '폴더') |
 | 지형 넘김 | 높이맵 `.bin`(float32) + `.json` → `ArrayMesh`(그리기) + `HeightMapShape3D`(충돌) |
-| 메시 넘김 | glb 타일. `NORMAL` 필수, 꼭짓점마다 붙는 값은 `COLOR_0` |
+| 메시 넘김 | glb. `NORMAL` 필수, 꼭짓점마다 붙는 값은 `COLOR_0` |
 | 카메라 | `far = 40000 m`. 주변 25 m 지형(한 변 32~40 km) 끝까지 보이게 |
-| 입력 | 아래 '조작' 표. `project.godot` 의 입력 동작(물리 키 위치 기준) + 숫자 키(레이어)는 `main.gd` 가 직접 받음 |
-| 검사 | `uv run pytest -m godot` (Godot 가 없으면 건너뜀) |
+| 생성 결과 | `user://runs/<날짜-시각>-<프로필>-s<시드>/{planet,hero,corridor,globe}` (macOS: `~/Library/Application Support/Godot/app_userdata/B-PCG/runs/`) |
+| 설정 | 저장소의 `configs/` 를 그대로 읽음 (프로젝트 폴더에서 위로 찾음, 환경 변수 `BPCG_CONFIGS` 로 바꿈) |
+| 검사 | `uv run pytest -m godot tests/test_engine.py` (Godot .NET 판이나 dotnet 이 없으면 건너뜀) |
 
-## 왜 4.7.2 표준판인가
+## 준비
 
-- **GDScript 로 충분합니다.** 엔진은 구운 파일을 읽어 그리기만 하므로 C# 이 필요 없습니다. .NET 판은 세 사람 모두 .NET SDK 를 따로 깔아야 합니다.
-- **버전을 하나로 고정합니다.** 버전이 섞이면 편집기가 `project.godot`, `.tscn`, `.import` 를 계속 고쳐 써서 PR 마다 쓸데없는 변경이 생깁니다. `tests/test_engine_smoke.py` 도 4.7.2 만 받아들입니다.
-- **공식 빌드는 단정밀도(float32)입니다.** float32 는 지구 반지름(6,371 km) 근처에서 0.5 m 단위로밖에 위치를 나타내지 못해 화면이 떨립니다. 8 km 안에서는 0.5 mm 단위라 충분합니다. 그래서 파이썬이 회랑 기준점에서 지역 좌표로 바꿔 굽고, 기준점은 manifest 에 적습니다. 배정밀도 빌드는 직접 컴파일해야 해서 쓰지 않습니다.
+.NET 10 SDK 와 Godot 4.7.2 .NET 판이 필요합니다. Godot 은 설치 스크립트가 SHA-512 를 확인하고 `.tools/godot-net/` 에 받습니다.
 
-Godot 실행 파일은 `.tools/godot/` 에 둡니다 (git 에서 빠짐). `scripts/setup.sh --godot` 가 받아 줍니다. 다른 곳에 있으면 환경 변수 `GODOT` 에 경로를 넣습니다.
+```sh
+./scripts/setup.sh --godot          # 윈도우: powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Godot
+```
+
+아래 명령은 저장소 맨 위에서 `GODOT=.tools/godot-net/Godot_mono.app/Contents/MacOS/Godot` (맥) 로 둔 것으로 씁니다. 리눅스는 `.tools/godot-net/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64`, 윈도우는 `.tools\godot-net\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe` 입니다. 다른 곳의 Godot .NET 판은 환경 변수 `GODOT_NET` 으로 알려 줍니다.
 
 ## 여는 법과 돌리는 법
 
-**편집기로 열기.** 편집기는 내 설정을 써야 하므로 HOME 을 바꾸지 않습니다.
-
 ```sh
-# macOS
-.tools/godot/Godot.app/Contents/MacOS/Godot --path engine -e
-# Windows
-.tools\godot\Godot_v4.7.2-stable_win64.exe --path engine -e
+# 편집기로 열기 (실행 F5 / Cmd+B 를 누르면 편집기가 C# 을 빌드하고 처음 화면이 뜸)
+$GODOT --path engine -e
+
+# 편집기 없이 바로 실행: 먼저 빌드하고 띄웁니다
+dotnet build engine/Bpcg.Engine.csproj
+$GODOT --path engine
+
+# 구운 폴더를 바로 보기 (처음 화면을 건너뜀). 콘솔·스튜디오가 구운 실행 폴더의 corridor/ 를 줍니다
+$GODOT --path engine -- --baked-dir=/절대/경로/<실행>/corridor
+
+# 화면 없이 생성만 (자동 실행·시험용). 끝나면 BPCG_GENERATE_OK <실행 폴더> 를 찍고 끝납니다
+$GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-when-done
 ```
 
-프로젝트 관리자에서 `engine/project.godot` 를 가져와도 됩니다. 시작 장면은 `scenes/main.tscn` 이고, 프로젝트 실행(F5, macOS 는 Cmd+B)으로 돌립니다. 편집기 없이 바로 돌리려면 `-e` 를 뺍니다. 처음 열 때는 동굴 메시(수십~100 MB)를 가져오느라 1분 안팎 걸릴 수 있습니다.
+처음 한 번(또는 장면·셰이더를 바꾼 뒤)은 `--headless --path engine --import` 로 가져오기를 해 둡니다. `engine/baked/` 에 큰 동굴 메시가 있으면 처음 가져오기에 1분 안팎 걸립니다.
+
+**처음 화면.** 행성 설정(`configs/planets`), 프로필(`configs/profiles`, 첫 줄 주석이 설명으로 나옴), 시드를 고르고 '행성 만들기'를 누릅니다. 기록 줄과 단계별 진행률(스튜디오의 단계 표를 옮긴 `StageProgress`)이 나오고, 끝나면 회랑 장면이 열립니다. 오른쪽 '지난 결과'에서 예전 실행을 회랑이나 지구본으로 다시 엽니다. tiny 프로필은 개발 맥(M4 Pro)에서 약 3 초입니다.
 
 **조작.** 시작은 노클립(날기)입니다. 화면 왼쪽 아래에 같은 표가 나옵니다(H 로 숨김).
 
@@ -57,7 +71,10 @@ Godot 실행 파일은 `.tools/godot/` 에 둡니다 (git 에서 빠짐). `scrip
 | G | 지형 색: 자연색 ↔ 지질도(흙 아래 10 m 안의 첫 기반암) |
 | F | 손전등 (동굴 안에서) |
 | Tab / H | 레이어 패널 / 도움말 숨기기 |
-| M | 지구본 장면(행성 전체)으로 가기. 지구본에서 M 을 누르면 돌아옴. 패널의 'M 지구본' 버튼도 같음 |
+| M | 지구본 장면(행성 전체)으로 가기. 지구본에서 M 을 누르면 돌아옴 |
+| N | 처음 화면(새 행성 만들기·지난 결과)으로 가기. 지구본에서도 같음 |
+
+지구본 장면의 조작(끌어서 돌리기, 휠, Space 자동 회전, F 히어로로, 1~9 레이어, R·K·L·G, [ ], 클릭 고정)은 [GLOBE.md](GLOBE.md) 에 있습니다.
 
 **레이어.** 오른쪽 패널에서 버튼으로도 켜고 끕니다. 줄마다 '만 보기' 버튼이 있습니다.
 
@@ -70,61 +87,57 @@ Godot 실행 파일은 `.tools/godot/` 에 둡니다 (git 에서 빠짐). `scrip
 | 5 | 동굴 | `caves.glb` | 동굴 벽. 앞면이 동굴 안을 보므로 밖(땅속, 단면)에서는 동굴 속이 들여다보입니다. 벽 색 = 벽 뒤 암석 |
 | 6 | 지층 단면 | `strata.u8`, `strata_top` | 자르는 면 위의 재질 부피. 지하수면 아래는 파랗게, 지하수면은 하늘색 선, 10 m 마다 가는 선·50 m 마다 굵은 선, 구운 깊이보다 깊은 곳은 회색 빗금, 동굴은 뚫려 보임 |
 | 7 | 동굴 입구 구멍 | `cave_mouth` | 지표가 동굴 빈 곳 안인 곳의 지형을 뚫음 (선택, '만 보기' 대상 아님) |
-| 8 | 프랙탈 디테일 | `heightmap_detail`, `cave_mouth_detail` | 켜면 회랑 지형이 50 m 보다 짧은 파장의 거칠기를 더한 지표로 바뀌고(그리기·충돌·단면 판의 지표선·입구 구멍 모두), 끄면 기본 `heightmap` 으로 돌아감. 파일이 있을 때만 있고 처음에 켜짐 (선택, '만 보기' 대상 아님) |
+| 8 | 프랙탈 디테일 | `heightmap_detail`, `cave_mouth_detail` | 켜면 회랑 지형이 50 m 보다 짧은 파장의 거칠기를 더한 지표로 바뀌고, 끄면 기본 `heightmap` 으로 돌아감. 파일이 있을 때만 있고 처음에 켜짐 (선택) |
 
-**프랙탈 디테일(8).** 히어로 격자(25 m)는 50 m(칸 2개)보다 짧은 파장을 그리지 못해서, 2 m 회랑 지표가 50 m 아래에서 실제 산지보다 매끈합니다. 굽기(`configs/planets/*.toml` 의 `[detail]`, 기본 세기 2)가 히어로가 그린 가장 짧은 옥타브(50~100 m)의 거칠기를 더 짧은 파장(50 m → 4 m)으로 이어 붙여 `heightmap_detail` 을 쓰고, 그 지표에서 다시 잰 동굴 거리를 `cave_mouth_detail` 로 씁니다. 흙·충적층이 덮인 곳과 완만한 곳은 줄이고, 물가·동굴 입구 둘레·원래 웅덩이·회랑 가장자리에는 넣지 않습니다. 보기용 지표이고 솔버(지형·물·동굴 계산) 결과가 아닙니다. 수면·재질 부피·동굴 메시는 기본 지표 그대로이고, 지형 색칠과 단면은 재질 부피의 층 깊이를 그린 지표에서 잽니다(두 높이맵의 차를 셰이더에 넘김). 다른 세기로 보려면 `uv run bpcg bake --hero <실행>/hero --engine --set detail.fractal_gain=1.0` 처럼 다시 굽습니다. 엔진은 두 높이맵의 메시·충돌 모양을 한 번씩 만들어 기억해 두므로, 처음 열 때 한 번 더 만드는 시간(501 × 3001 회랑에서 약 2 초)이 들고 그 뒤의 켜고 끄기는 바로 됩니다. 메시가 숨어 있었으면 바꾼 뒤에도 숨은 채이고, 걷는 중이면 새 지면 위로 올려 줍니다.
+**프랙탈 디테일(8).** 히어로 격자(25 m)는 50 m 보다 짧은 파장을 그리지 못해서, 2 m 회랑 지표가 50 m 아래에서 실제 산지보다 매끈합니다. 굽기(`configs/planets/*.toml` 의 `[detail]`)가 히어로가 그린 가장 짧은 옥타브의 거칠기를 더 짧은 파장(50 m → 4 m)으로 이어 붙여 `heightmap_detail` 을 쓰고, 그 지표에서 다시 잰 동굴 거리를 `cave_mouth_detail` 로 씁니다. 물가·동굴 입구 둘레·원래 웅덩이·회랑 가장자리에는 넣지 않는 보기용 지표이고 솔버 결과가 아닙니다. 다른 세기로 보려면 `uv run bpcg bake --hero <실행>/hero --set detail.fractal_gain=1.0` 처럼 다시 굽습니다. 엔진은 두 높이맵의 메시·충돌 모양을 한 번씩 만들어 기억해 두므로 그 뒤의 켜고 끄기는 바로 됩니다.
 
-왼쪽 위에는 지금 모드·속력, 위치(회랑 가운데 기준 동·북, 해발), 땅속이면 깊이와 그 자리 암석, 지하수면 깊이, 단면 거리, 동굴 입구 수가 나옵니다.
+**지구본 찾기.** 지구본은 `<굽기 폴더>/globe`, 없으면 실행 폴더의 `<굽기 폴더>/../globe` 에서 읽습니다. 그래서 `bpcg bake --engine`(engine/baked + engine/baked/globe)과 실행 폴더(runs/…/corridor + runs/…/globe)를 둘 다 읽습니다. 읽는 순서는 명령줄 `--baked-dir` → 처음 화면이 고른 실행 → `res://baked` (`Scripts/BakedPaths.cs`) 입니다.
 
-**연기 검사(smoke test).** 보통은 pytest 로 돌립니다. 임시 HOME 처리와 Godot 찾기를 대신 해 줍니다.
+## 검사
 
-```sh
-uv run pytest -m godot              # 또는 uv run pytest tests/test_engine_smoke.py
-```
-
-직접 돌릴 때는 반드시 `--headless` 와 임시 HOME 을 씁니다. HOME 을 그대로 두면 Godot 가 내 편집기 설정(`~/Library/Application Support/Godot/editor_settings-4.7.tres`)을 덮어씁니다. macOS 는 `XDG_*` 변수를 무시하므로 HOME 을 바꿔야 합니다. Windows 는 `APPDATA`, `LOCALAPPDATA` 를 바꿔야 해서 pytest 로 돌리는 편이 안전합니다.
+검사는 Python(pytest)이 돌립니다. [tests/test_engine.py](../tests/test_engine.py) 가 C# 빌드, 가져오기, 엔진 안 tiny 생성, 검사 장면 실행을 차례로 하고, 출력의 `BPCG_*` 표시와 굽기 결과 파일을 맞대어 판정합니다.
 
 ```sh
-G=.tools/godot/Godot.app/Contents/MacOS/Godot
-HOME=$(mktemp -d) $G --headless --path engine --import                       # 처음 한 번, 스크립트를 더한 뒤
-HOME=$(mktemp -d) $G --headless --path engine --script res://tests/smoke.gd   # BPCG_SMOKE_OK 가 찍혀야 통과
+uv run pytest -m godot tests/test_engine.py
 ```
 
-GDScript 구문 오류나 셰이더 컴파일 오류가 있어도 Godot 는 종료 코드 0 으로 끝납니다. 그래서 `tests/smoke.gd` 는 성공하면 `BPCG_SMOKE_OK` 를 찍고 `quit(0)`, 실패하면 `BPCG_SMOKE_FAIL: <이유>` 를 찍고 `quit(1)` 합니다. 검사하는 것은 다음과 같습니다.
+| 검사 | 보는 것 |
+|---|---|
+| `test_engine_imports_cleanly` | 가져오기가 프로젝트 폴더에 `.uid`·`.import` 만 만듦 |
+| `test_engine_without_bake` | 빈 굽기 폴더: 회랑은 표본 지형만, 지구본은 '자료가 없습니다' 알림 |
+| `test_engine_generates_and_loads` | 엔진 안 tiny 생성 → 회랑·지구본 검사, 동굴 삼각형·입구 수·필드 수가 굽기 결과와 같음 |
+| `test_engine_matches_cli` | 엔진 안 생성 결과 = 콘솔 `all` 결과 (manifest 의 `seconds` 만 뺌) |
+| `test_engine_loads_console_bake` | 콘솔로 구운 동굴 회랑과 지구본 약속 대체 자료(`tests/globe_fixture.py`)도 읽음 |
+| `test_engine_globe_malformed` | 크기가 틀린 지구본 자료에 '읽지 못했습니다' 알림 |
 
-1. `scripts/` 의 모든 `.gd` 가 구문 오류 없이 읽힘
-2. 단면 셰이더가 컴파일됨 (headless 의 가짜 렌더러도 셰이더를 컴파일합니다. 실패하면 uniform 목록이 비어 있음)
-3. 표본 높이맵: 꼭짓점 수 = width × height, 높이 범위가 `.json` 과 1e-3 m 안에서 같음, 법선이 위를 봄, 삼각형 앞면이 위를 봄, 충돌 모양 크기와 높이 범위가 맞음
-4. 시작 장면: 지형 메시·충돌체, 단면 셰이더 재질, 하늘·안개, 해, 카메라 `far ≥ 10000 m`, Baked·Hud·손전등 노드
-5. 물리: 위에서 쏜 광선이 높이맵 표본 높이를 0.05 m 안에서 맞힘(주변 지형 충돌면은 뺌), 걷기로 바꾼 플레이어가 땅에 내려섬
-6. 노클립: 충돌을 끄고, 중력 없이 앞으로·위로 날아간 거리가 속력 × 시간과 25 % 안에서 같음, 땅속에서 걷기로 바꾸면 지면 위로 올라옴
-7. 프랙탈 디테일: `heightmap_detail` 이 있으면 레이어가 맨 끝에 있고 처음에 켜져 있음, 숫자 키로 끄고 패널 버튼으로 켤 때 지형 높이·물리 광선·단면 판의 지표 텍스처·입구 구멍 텍스처·버튼 상태가 같이 바뀜, 지형을 숨긴 채 바꾸면 숨은 채, 걷는 중에 바꾸면 지면 위. 파일이 없으면 레이어도 없음
-8. 구운 묶음이 있으면 레이어: 모든 레이어가 있음, 동굴 삼각형 수·입구 수·재질 부피 크기가 manifest 와 같음, 레이어마다 끄고 켜기와 패널 버튼 상태, 만 보기, 모두 보기, 단면 켜기·밀기·끄기
-
-pytest 는 두 번 돌립니다. 한 번은 빈 굽기 폴더(`-- --baked-dir=<빈 폴더>`)로 표본 지형만, 한 번은 tiny 히어로를 임시 폴더에 구워 `--expect-baked` 로 모든 레이어를 검사합니다(동굴 메시는 실행 중 glTF 로 읽는 경로).
-
-**화면 캡처.** `tests/screenshots.gd` 는 시작 장면을 여러 시점·레이어 조합(시작, 하늘, 지질도, 단면, 동굴만, 물만, 동굴 입구)으로 찍어 PNG 로 남깁니다. 창이 떠야 그려지므로 `--headless` 없이, HOME 만 임시 폴더로 바꿔 돌립니다.
+엔진 안에서 노드를 들여다보는 부분(`Tests/SmokeTest.cs`, `Tests/GlobeSmokeTest.cs`)은 Godot 프로세스 안에서 돌아야 해서 C# 입니다. 손으로 돌릴 때는 HOME 을 임시 폴더로 바꿉니다(편집기 설정과 user:// 를 건드리지 않게).
 
 ```sh
-HOME=$(mktemp -d) .tools/godot/Godot.app/Contents/MacOS/Godot --path engine --resolution 1600x900 --script res://tests/screenshots.gd -- --shots-dir=$PWD/out/shots
+cd engine && dotnet build Bpcg.Engine.csproj
+H=$(mktemp -d)
+HOME=$H $GODOT --headless --path . --import
+HOME=$H $GODOT --headless --path . -- --generate --profile=tiny --quit-when-done      # BPCG_GENERATE_OK <실행>
+HOME=$H $GODOT --headless --path . res://Tests/smoke.tscn -- --baked-dir=<실행>/corridor --expect-baked
+HOME=$H $GODOT --headless --path . res://Tests/globe_smoke.tscn -- --baked-dir=<실행>/corridor --expect-globe
+HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --shots-dir=/절대/경로 --baked-dir=<실행>/corridor
 ```
+
+화면 캡처(`Tests/screenshots.tscn`)는 회랑·지구본을 여러 시점·레이어 조합으로 찍어 PNG 로 남깁니다. 창을 띄우며, 찍는 동안 키보드·마우스 입력을 받지 않습니다.
 
 ## 폴더
 
-| 경로 | 역할 | git |
-|---|---|---|
-| `project.godot` | 프로젝트 설정: 이름, 시작 장면, 입력, 물리 엔진, Blender 가져오기 끔 | 올림 |
-| `scenes/` | 장면(`.tscn`). `main.tscn` 이 시작 장면(회랑), `globe.tscn` 은 행성 전체 지구본([GLOBE.md](GLOBE.md)) | 올림 |
-| `scripts/` | GDScript. `heightmap_loader.gd`(높이맵 읽기), `terrain.gd`(지형 노드), `baked_layers.gd`(구운 레이어 불러오기·보이기·단면), `strata_volume.gd`(재질 부피 → 3D 텍스처), `baked_paths.gd`(굽기 폴더), `player.gd`(날기·걷기), `hud.gd`(상태·레이어 패널·도움말), `main.gd`(시작 장면, 키) | 올림 |
-| `shaders/` | `cross_section.gdshader`(지형: 자연색·지질도·층 무늬, 자르는 면, 입구 구멍), `strata_section.gdshader`(단면 판), `cave.gdshader`(동굴 벽), `water.gdshader`(수면·지하수면), 공통 `section.gdshaderinc`·`strata.gdshaderinc` | 올림 |
-| `tests/` | `smoke.gd`: headless 연기 검사, `screenshots.gd`: 화면 캡처 | 올림 |
-| `samples/` | 작은 표본. `sample.bin/.json` (129 × 129, 10 m 간격, 65 KB)과 이를 만드는 `make_sample.py` | 올림 |
-| `baked/` | 파이썬 굽기 결과. 없을 수 있습니다 | 빠짐 |
-| `.godot/` | Godot 캐시. 지워도 `--import` 로 다시 생깁니다 | 빠짐 |
+| 경로 | 내용 |
+|---|---|
+| `project.godot`, `Bpcg.Engine.csproj`, `Bpcg.Engine.sln`, `packages.lock.json` | Godot 프로젝트와 C# 프로젝트 (sln 은 편집기 빌드용) |
+| `scenes/` | `start.tscn`, `main.tscn`, `globe.tscn` |
+| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui` |
+| `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn` 과 그 C# |
+| `shaders/` | 단면·지층·동굴·물·지구본·대기 셰이더 (`.gdshader`, `.gdshaderinc`) |
+| `samples/` | 굽기 폴더가 없을 때 쓰는 작은 표본 높이맵 (`make_sample.py` 로 만듦) |
+| `GLOBE.md` | 지구본 장면과 `globe/` 파일 형식 |
+| `baked/` | (git 제외) `bpcg bake --engine`·스튜디오 'Godot로 보기' 가 회랑을 복사해 두는 곳 = `res://baked` |
 
-`terrain.gd` 는 먼저 `res://baked/heightmap` 을 찾고, 없으면 `res://samples/sample` 을 씁니다. 그래서 `baked/` 가 없어도 장면이 열립니다(그때는 레이어 패널에 회랑 지형만 있습니다). 명령줄 끝에 `-- --baked-dir=<폴더>` 를 주면 그 폴더의 굽기 결과를 씁니다(`baked_paths.gd`). 표본을 다시 만들 때는 저장소 맨 위에서 `uv run python engine/samples/make_sample.py` 를 돌립니다 (난수를 쓰지 않아 같은 파일이 나옵니다).
-
-## 파이썬 → Godot 넘김 형식
+## 굽기 → Godot 넘김 형식
 
 ### 좌표
 
@@ -132,12 +145,12 @@ Godot 지역 좌표는 X = 동, Y = 위, Z = 남인 오른손 좌표계이고 �
 
 ### 높이맵 (`<stem>.bin` + `<stem>.json`)
 
-파이썬은 `bpcg.bake.heightmap.write_heightmap()` 으로 쓰고, 엔진은 `HeightmapLoader.load_stem()` 으로 읽습니다.
+C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.LoadStem()` 으로 읽습니다.
 
 - `.bin`: float32 리틀 엔디언, 머리글 없음, 행 우선. 크기는 정확히 width × height × 4 바이트입니다.
-- 배열 `z[row, col]`: 열(col)이 늘면 동쪽(+X), 행(row)이 늘면 남쪽(+Z). 0번 행이 북쪽 끝이라 북쪽이 위인 래스터를 뒤집지 않고 넣습니다.
+- 배열 `z[row, col]`: 열(col)이 늘면 동쪽(+X), 행(row)이 늘면 남쪽(+Z). 0번 행이 북쪽 끝입니다.
 - 표본 `(row, col)` 의 위치 = `origin + (col × spacing_m, z[row, col], row × spacing_m)`. `origin` 은 북서쪽 모서리 표본을 높이 0 에 놓았을 때의 지역 좌표입니다.
-- NaN 이나 무한대는 받지 않습니다. 굽기 전에 채우거나 잘라 냅니다.
+- NaN 이나 무한대는 받지 않습니다.
 
 ```json
 {
@@ -154,18 +167,11 @@ Godot 지역 좌표는 X = 동, Y = 위, Z = 남인 오른손 좌표계이고 �
 }
 ```
 
-`width` 는 열 수(X), `height` 는 행 수(Z)이고 고도가 아닙니다. `min`, `max` 는 float32 로 바꾼 뒤의 값이라 `.bin` 과 정확히 같습니다.
+`width` 는 열 수(X), `height` 는 행 수(Z)이고 고도가 아닙니다. `min`, `max` 는 float32 로 바꾼 뒤의 값이라 `.bin` 과 정확히 같습니다. 메시는 배열을 직접 채워 `ArrayMesh.AddSurfaceFromArrays()` 로 만들고(법선은 중심 차분), 충돌은 `HeightMapShape3D` 에 같은 float 배열을 넣어 수평으로 `spacing_m` 배 늘입니다.
 
-엔진에서는 이렇게 씁니다.
+### 회랑 묶음
 
-- 메시: `PackedVector3Array` 등을 직접 채워 `ArrayMesh.add_surface_from_arrays()` 로 만듭니다. 법선은 중심 차분으로 직접 계산합니다. `SurfaceTool.generate_normals()` 는 느려서 쓰지 않습니다. 이 Mac 에서 잰 값: 100만 꼭짓점(1024 × 1024)에 0.35 초.
-- 충돌: `HeightMapShape3D` 에 같은 float 배열을 넣고, 수평으로 `spacing_m` 배 늘여 타일 가운데에 놓습니다 (`shape_transform()`). 100만 표본에 5.5 ms. 정사각형이 아닌 높이맵도 Jolt 에서 광선 오차 0.1 mm 안으로 맞는 것을 확인했습니다.
-- 한 장은 1024 × 1024 표본 안팎까지가 알맞습니다. 회랑이 더 크면 타일로 나눠 각 타일의 `origin` 을 다르게 줍니다.
-- `.bin` 은 Godot 자원이 아니어서 내보내기(export) 때 빠집니다. 내보내기 설정의 '자원이 아닌 파일 포함' 필터에 `*.bin` 을 넣습니다.
-
-### 회랑 묶음 (`baked/`)
-
-`bpcg bake --engine` 이 쓰는 파일과 엔진의 쓰임입니다. 형식은 `docs/pipeline.md` 11장.
+`bpcg bake`(`--engine` 이면 `engine/baked/` 에도)와 처음 화면의 생성이 쓰는 파일과 엔진의 쓰임입니다. 형식은 `docs/pipeline.md` 11장.
 
 | 파일 | 엔진의 쓰임 |
 |---|---|
@@ -176,50 +182,41 @@ Godot 지역 좌표는 X = 동, Y = 위, Z = 남인 오른손 좌표계이고 �
 | `water_table` | 지하수면 메시(처음 켤 때)와 단면의 지하수면 선 |
 | `strata.u8` + `strata.json` + `strata_top` | `R8` 3D 텍스처(가로 = 열, 세로 = 층, 깊이 = 행)와 윗면 `RF` 텍스처. 한 변이 2048 을 넘으면 쓰지 않습니다 |
 | `cave_mouth` | `RF` 텍스처. 음수인 곳의 지형을 뚫음 |
-| `caves.glb` | 편집기가 가져왔으면 `load()`, 아니면 실행 중 `GLTFDocument` |
+| `caves.glb` | 편집기가 가져왔으면 `GD.Load()`, 아니면 실행 중 `GltfDocument` |
 | `entrances.json` | 입구로 옮겨 가기 (T) |
-| `globe/` | 지구본 장면의 자료 (`globe.json` + 필드 `.bin`). `bpcg bake`·`bpcg all` 이 같은 실행의 행성 묶음으로 굽습니다 ([GLOBE.md](GLOBE.md)) |
+| `globe/` | 지구본 장면의 자료 (`globe.json` + 필드 `.bin`) ([GLOBE.md](GLOBE.md)) |
 
-### glb 타일
+### glb
 
-동굴·절벽처럼 높이맵으로 나타낼 수 없는 모양은 glb(glTF 2.0 바이너리)로 넘깁니다.
-
-- `NORMAL` 을 꼭 넣습니다.
-- 꼭짓점마다 붙는 값(지층 번호, 흙 두께 등)은 `COLOR_0` 에 넣습니다. Godot 에서는 메시의 `ARRAY_COLOR`, 셰이더의 `COLOR` 로 읽힙니다.
-- 불러오기는 두 가지가 다 됩니다. `res://` 안에 두면 편집기가 가져오며(`.import` 생김), `baked/` 처럼 git 에서 빠지는 곳은 실행 중에 `GLTFDocument.append_from_file()` 로 읽어도 됩니다.
-
-### manifest (지역 좌표 기준점)
-
-여러 타일을 묶는 manifest 형식은 `docs/bundle_format.md` 에서 정합니다 (아직 코드 없음). 엔진 쪽에서 필요한 것은 다음과 같습니다.
-
-- 지역 좌표의 원점이 된 회랑 기준점의 행성 위 위치 (float64 로 적음. 엔진은 표시용으로만 씀)
-- 축 약속 (`x_east_y_up_z_south`)과 단위 (m)
-- 타일 목록: 높이맵이나 glb 의 경로(stem)와 각 타일의 `origin`
-- 만든 bpcg 버전, git 커밋, 설정, 시드 (`docs/conventions.md` 의 기록 규칙)
+동굴처럼 높이맵으로 나타낼 수 없는 모양은 glb(glTF 2.0 바이너리)로 넘깁니다. `NORMAL` 을 꼭 넣고, 꼭짓점마다 붙는 값(재질 번호 등)은 `COLOR_0` 에 넣습니다. `res://` 안에 두면 편집기가 가져오며(`.import` 생김), git 에서 빠지는 곳은 실행 중에 `GltfDocument.AppendFromFile()` 로 읽습니다.
 
 ## 커밋하는 것과 하지 않는 것
 
-- **올림:** `project.godot`, `*.tscn`, `*.gd`, `*.gdshader`, 그리고 Godot 가 만든 `*.uid` 와 `*.import`. `.uid` 가 없으면 사람마다 다른 UID 가 생겨 장면 참조가 깨집니다.
-- **올리지 않음:** `.godot/` (캐시), `baked/` (파이썬 결과), `export/`, `*.pck`. 모두 저장소 맨 위 `.gitignore` 에 있습니다.
+- **올림:** `project.godot`, `*.tscn`, `*.cs`, `*.gdshader`, `Bpcg.Engine.csproj`·`.sln`·`packages.lock.json`, 그리고 Godot 가 만든 `*.uid` 와 `*.import`. `.uid` 가 없으면 사람마다 다른 UID 가 생겨 장면 참조가 깨집니다.
+- **올리지 않음:** `.godot/` (캐시, C# 빌드 출력 `.godot/mono/temp` 포함), `baked/`, `export/`, `*.pck`. 모두 저장소 맨 위 `.gitignore` 에 있습니다.
 - 새 스크립트나 셰이더를 더하면 `--import` 를 한 번 돌리거나 편집기로 열어 `.uid` 를 만든 뒤 같이 커밋합니다.
 
-## GDScript 스타일
+## C# 스타일
 
-[Godot 공식 스타일 가이드](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/gdscript_styleguide.html)를 따릅니다.
+저장소의 `.editorconfig` 와 `Directory.Build.props`(경고는 오류, 빌드 중 코드 스타일 검사)를 따르고, `dotnet format Bpcg.slnx --verify-no-changes` 가 통과해야 합니다. Godot 노드 클래스는 `partial` 이고 파일 이름과 클래스 이름이 같아야 합니다. 이름에 단위를 붙이고(`SpacingM`, `WalkSpeedMS`), 주석과 화면 글은 한국어 합니다체로 씁니다. 검사 표시(`BPCG_SMOKE_OK` 등)만 영어입니다. 계산 코드는 엔진에 두지 않고 `src/Bpcg` 에 둡니다(엔진은 Godot 자료형, Bpcg 는 쓰지 않음).
 
-- **이름.** 파일은 `snake_case.gd` / `.tscn` / `.gdshader`. 함수·변수·신호는 `snake_case`, `class_name` 과 노드 이름은 `PascalCase`, 상수는 `CONSTANT_CASE`, 밖에서 쓰지 않는 것은 앞에 `_`.
-- **단위.** 파이썬과 같이 이름에 단위를 붙입니다: `spacing_m`, `walk_speed_m_s`, `gravity_m_s2`, `mouse_sensitivity_rad`.
-- **들여쓰기.** 탭. 이어지는 줄은 탭 두 개. 한 줄은 100자 안. 함수 사이는 빈 줄 두 줄.
-- **타입.** 변수는 `:=` 나 타입을 적고, 함수 매개변수와 반환 타입을 적습니다.
-- **순서.** `class_name` → `extends` → `##` 설명 → 신호 → enum → 상수 → `@export` → 변수 → `@onready` → `_init`/`_ready` 등 내장 함수 → 공개 함수 → `_` 함수.
-- **주석과 메시지.** `##` 문서 주석, `#` 주석, `print` 메시지는 한국어 합니다체로 씁니다. 검사 표시(`BPCG_SMOKE_OK` 등)만 영어입니다.
+## 예전 GDScript 판과의 대응
 
-## 10/21 런타임 복셀 관문
+GDScript 판(표준판, 2026-10 까지)은 git 기록의 `engine/scripts/*.gd` 에 있습니다.
 
-10/21 점검에서 실행 중 복셀 지형과 파기를 시험합니다 (`docs/roadmap.md`). 쓸 도구는 godot_voxel v1.7x 의 GDExtension 판이고, 지금은 설치하지 않았습니다. 시험할 때는 Godot 4.7 용 GDExtension 판을 `engine/addons/` 아래에 넣고, 다음이 `true` 인지 headless 로 먼저 확인합니다.
+| 예전 (GDScript) | 지금 (C#) | 비고 |
+|---|---|---|
+| `scripts/baked_paths.gd` | `Scripts/BakedPaths.cs` | 명령줄 → 처음 화면이 고른 폴더(`RuntimeDir`) → `res://baked` |
+| `scripts/heightmap_loader.gd`, `terrain.gd` | `Scripts/HeightmapLoader.cs`, `HeightmapTerrain.cs` | 내보내기 속성 이름은 PascalCase (`Material`, `SkirtM`) |
+| `scripts/player.gd`, `hud.gd`, `main.gd` | `Scripts/Player.cs`, `Hud.cs`, `Main.cs` | N 키와 '처음 화면' 버튼을 더함 |
+| `scripts/strata_volume.gd`, `baked_layers.gd` | `Scripts/StrataVolume.cs`, `BakedLayers.cs` | |
+| `scripts/globe_*.gd`, `globe.gd` | `Scripts/GlobeData.cs`, `GlobeView.cs`, `GlobeCamera.cs`, `GlobeHud.cs`, `GlobeMain.cs` | 자료 없음 알림이 처음 화면을 안내 |
+| (스튜디오의 '실행' 탭) | `Scripts/StartMenu.cs`, `StageProgress.cs`, `EnginePaths.cs` | 새로 만듦 |
+| `tests/smoke.gd`, `globe_smoke.gd`, `screenshots.gd` | `Tests/SmokeTest.cs`, `GlobeSmokeTest.cs`, `Screenshots.cs` + `.tscn` | C# 은 `--script` 로 돌리기 어려워 검사 장면으로 돌림 |
 
-```gdscript
-ClassDB.class_exists("VoxelLodTerrain")   # 지금은 false
-```
+2026-10-03 확인: 같은 자료로 찍은 화면 14장 가운데 13장이 GDScript 판과 화면 가운데 픽셀까지 같았습니다(남은 1장은 날아가는 도중을 찍어 프레임 시간에 따라 다름).
 
-안 되면 미리 구운 회랑 메시(glb)와 단면 셰이더로 갑니다. 이 경우에도 위의 높이맵·glb 넘김 형식은 그대로 씁니다.
+## 남은 일
+
+- 내보낸 게임에는 저장소의 `configs/` 가 없으므로, 설정을 게임에 넣어 `user://` 로 풀어 쓰는 방법을 정해야 합니다(`Scripts/EnginePaths.cs` 의 TODO).
+- 10/21 런타임 복셀 관문(godot_voxel GDExtension, `docs/roadmap.md`)은 아직 시험하지 않았습니다. 넣을 때는 `engine/addons/` 아래에 두고 headless 로 `ClassDB.ClassExists("VoxelLodTerrain")` 부터 확인합니다. 안 되면 지금의 높이맵·glb 넘김 형식을 그대로 씁니다.

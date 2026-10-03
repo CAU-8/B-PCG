@@ -15,7 +15,7 @@ import sys
 import numba as nb
 import numpy as np
 
-from bpcg.core.paths import DERIVED
+from bpcg_studio.paths import DERIVED
 
 OUT_DIR = DERIVED / "afrisar"
 DI = np.array([-1, -1, -1, 0, 0, 1, 1, 1])

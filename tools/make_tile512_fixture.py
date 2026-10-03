@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from bpcg.core.paths import DERIVED, ROOT
+from bpcg_studio.paths import DERIVED, ROOT
 
 IN_DIR = DERIVED / "afrisar"
 OUT_DIR = ROOT / "tests" / "fixtures"

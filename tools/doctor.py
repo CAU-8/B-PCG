@@ -319,20 +319,20 @@ def import_quietly(name):
 
 
 def check_project_package():
+    """Python 패키지 bpcg_studio (스튜디오, `bpcg` 명령, 시험 도우미). 생성기는 C# 입니다."""
+    name = "패키지 bpcg_studio"
     try:
-        bpcg = import_quietly("bpcg")
+        pkg = import_quietly("bpcg_studio")
     except Exception as e:
-        return report(
-            FAIL, "패키지 bpcg", f"{type(e).__name__}: {e} — {setup_cmd()} 를 다시 실행하세요."
-        )
-    where = Path(bpcg.__file__).resolve().parent
+        return report(FAIL, name, f"{type(e).__name__}: {e} — {setup_cmd()} 를 다시 실행하세요.")
+    where = Path(pkg.__file__).resolve().parent
     if not is_under(where, ROOT / "src"):
         return report(
             FAIL,
-            "패키지 bpcg",
+            name,
             f"다른 위치에서 가져옵니다: {where}. .venv 를 지우고 {setup_cmd()} 를 다시 실행하세요.",
         )
-    return report(OK, "패키지 bpcg", f"{dist_version('b-pcg', bpcg)} [이 저장소, 편집 설치]")
+    return report(OK, name, f"{dist_version('b-pcg', pkg)} [이 저장소, 편집 설치]")
 
 
 def check_modules():
@@ -414,21 +414,41 @@ def check_tools():
     check("도구 curl", bool(curl), curl or "없음 — 파일럿 데이터 받기에 필요", required=False)
 
 
+# ---------------------------------------------------------------- .NET
+def check_dotnet():
+    """생성기(src/Bpcg)와 엔진(engine/)은 C# 이라 .NET 10 SDK 가 필요합니다 (global.json)."""
+    dotnet = shutil.which("dotnet")
+    if not dotnet:
+        return report(
+            FAIL,
+            ".NET SDK",
+            "없음 — .NET 10 SDK 를 설치하세요 (macOS: brew install --cask dotnet-sdk)",
+        )
+    try:
+        out = subprocess.run(
+            [dotnet, "--list-sdks"], capture_output=True, text=True, timeout=60, cwd=ROOT
+        )
+        sdks = [ln.split()[0] for ln in out.stdout.splitlines() if ln.strip()]
+    except (OSError, subprocess.SubprocessError) as e:
+        return report(FAIL, ".NET SDK", f"dotnet --list-sdks 실패: {e}")
+    ok = any(v.split(".")[0] == "10" for v in sdks)
+    detail = f"{', '.join(sdks) or 'SDK 없음'} ({dotnet})"
+    return check(".NET SDK", ok, detail if ok else detail + " — 10.x 가 필요합니다")
+
+
 # ---------------------------------------------------------------- Godot
 def godot_candidates():
-    tag = f"Godot_v{GODOT_VERSION}-stable"
-    tools = ROOT / ".tools" / "godot"
-    if os.environ.get("GODOT"):
-        yield Path(os.environ["GODOT"])
-    yield tools / "Godot.app" / "Contents" / "MacOS" / "Godot"
-    yield tools / "godot"  # Linux: scripts/setup.sh 가 이 이름으로 둡니다.
-    yield tools / f"{tag}_win64_console.exe"
-    yield tools / f"{tag}_windows_arm64_console.exe"
-    yield Path("/Applications/Godot.app/Contents/MacOS/Godot")
-    for name in ("godot", "godot4"):
-        found = shutil.which(name)
-        if found:
-            yield Path(found)
+    """Godot 4.7.2 .NET 판 후보 (engine/ 은 C# 프로젝트라 표준판으로는 열리지 않음)."""
+    tag = f"Godot_v{GODOT_VERSION}-stable_mono"
+    tools = ROOT / ".tools" / "godot-net"
+    for env in ("GODOT_NET", "GODOT"):
+        if os.environ.get(env):
+            yield Path(os.environ[env])
+    yield tools / "Godot_mono.app" / "Contents" / "MacOS" / "Godot"
+    yield tools / f"{tag}_linux_x86_64" / f"{tag}_linux.x86_64"
+    yield tools / f"{tag}_linux_arm64" / f"{tag}_linux.arm64"
+    yield tools / f"{tag}_win64" / f"{tag}_win64_console.exe"
+    yield tools / f"{tag}_windows_arm64" / f"{tag}_windows_arm64_console.exe"
 
 
 def console_exe(path):
@@ -482,12 +502,19 @@ def check_godot():
             continue
         seen.add(key)
         ver = godot_version(exe)
-        if ver.startswith(f"{GODOT_VERSION}.stable"):
-            return report(OK, "Godot", f"{ver} ({exe})")
+        if ver.startswith(f"{GODOT_VERSION}.stable.mono"):
+            return report(OK, "Godot .NET", f"{ver} ({exe})")
         report(
-            WARN, "Godot", f"{exe} 은 {ver or '버전을 알 수 없음'} — {GODOT_VERSION} 이 필요합니다"
+            WARN,
+            "Godot .NET",
+            f"{exe} 은 {ver or '버전을 알 수 없음'} — {GODOT_VERSION} .NET 판이 필요합니다",
         )
-    return report(WARN, "Godot", f"{GODOT_VERSION} 없음 — {setup_cmd('godot')} (엔진 담당은 필수)")
+    return report(
+        WARN,
+        "Godot .NET",
+        f"{GODOT_VERSION} .NET 판 없음 — engine/README.md 의 '준비' 대로 .tools/godot-net/ 에 "
+        "받으세요 (엔진 담당은 필수)",
+    )
 
 
 # ---------------------------------------------------------------- 데이터와 디스크
@@ -601,6 +628,7 @@ def main():
     check_modules()
     check_numba_jit()
     check_tools()
+    check_dotnet()
     check_godot()
     check_data(args.hash)
     check_disk()

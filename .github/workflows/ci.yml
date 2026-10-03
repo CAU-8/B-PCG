@@ -1,11 +1,14 @@
 # 저장소 점검 (CI). main 에 올리거나 PR 을 열면 돕니다.
 #
 #   lint    ruff 린트와 서식 검사 (Ubuntu)
-#   test    빠른 테스트(-m "not slow")와 설치 스크립트 점검 모드 (Ubuntu, Windows, macOS 15)
-#   engine  Godot 4.7.2 를 받아 엔진 연기 시험(tests/test_engine_smoke.py) (Ubuntu)
+#   csharp  C# 빌드(Bpcg.slnx: 생성기·콘솔·엔진·대조 시험), 대조 시험, dotnet format (macOS 15)
+#   test    빠른 테스트(-m "not slow": C# 콘솔 결과 검사·스튜디오)와 설치 스크립트 점검 모드
+#           (Ubuntu, Windows, macOS 15)
+#   engine  Godot 4.7.2 .NET 판을 받아 엔진 연기 시험(tests/test_engine.py) (Ubuntu)
 #   setup   설치 스크립트 전체 실행 (uv 설치부터 Godot 까지). Actions 탭에서 손으로만 돌립니다.
 #
-# data, godot 표시가 붙은 테스트는 데이터나 Godot 이 없으면 스스로 건너뜁니다.
+# data, godot 표시가 붙은 테스트는 데이터나 Godot .NET 판이 없으면 스스로 건너뜁니다.
+# 생성기는 C# 이므로 Python 테스트도 .NET SDK(global.json)가 있어야 합니다.
 name: ci
 
 on:
@@ -29,6 +32,8 @@ env:
   UV_LOCKED: "1"
   # Windows 러너의 표준 출력이 한글을 못 찍어 실패하지 않게. (파일 읽기 인코딩은 코드에서 정합니다.)
   PYTHONIOENCODING: utf-8
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 defaults:
   run:
@@ -55,6 +60,21 @@ jobs:
           test "$(head -c 3 scripts/setup.ps1 | od -An -tx1 | tr -d ' \n')" = "efbbbf" \
             || { echo "::error file=scripts/setup.ps1::UTF-8 BOM 이 없습니다"; exit 1; }
 
+  csharp:
+    name: C# 빌드·대조 시험
+    # golden 자료는 macOS arm64 의 Python 이 만든 비트 단위 기준값입니다(초월 함수가 libm 을 따름).
+    # 그래서 대조 시험은 같은 플랫폼에서 돌립니다. 큰 사례(out/golden)는 커밋하지 않아 건너뜁니다.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - run: dotnet build Bpcg.slnx -c Release
+      - run: dotnet test --solution Bpcg.slnx -c Release --no-build
+      - run: dotnet format Bpcg.slnx --verify-no-changes
+
   test:
     name: 테스트 (${{ matrix.os }})
     strategy:
@@ -65,6 +85,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # 시험은 C# 콘솔(src/Bpcg.Cli)을 빌드해 그 결과 파일을 봅니다.
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -80,16 +104,20 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup.ps1 -Check
 
   engine:
-    name: 엔진 연기 시험 (Godot 4.7.2)
+    name: 엔진 연기 시험 (Godot 4.7.2 .NET)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      # 이 액션은 Godot 을 받아 PATH 에 godot 을 두고, 환경 변수 GODOT 에 실행 파일 경로를 넣습니다.
+      # 엔진은 C# 이라 .NET SDK 가 먼저 있어야 합니다 (setup-godot 은 SDK 를 설치하지 않음).
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      # 이 액션은 Godot .NET 판(use-dotnet)을 받아 환경 변수 GODOT 에 실행 파일 경로를 넣습니다.
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: ${{ env.GODOT_VERSION }}
-          use-dotnet: false
+          use-dotnet: true
           include-templates: false
       - name: Godot 버전 확인 (임시 HOME 으로)
         run: |
@@ -97,14 +125,14 @@ jobs:
           v="$(HOME="$(mktemp -d)" "$GODOT" --headless --version)"
           echo "$v"
           case "$v" in
-            "$GODOT_VERSION".stable*) ;;
-            *) echo "::error::Godot $GODOT_VERSION 이 아닙니다: $v"; exit 1 ;;
+            "$GODOT_VERSION".stable.mono*) ;;
+            *) echo "::error::Godot $GODOT_VERSION .NET 판이 아닙니다: $v"; exit 1 ;;
           esac
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: ${{ env.UV_VERSION }}
       - run: uv sync --locked
-      - run: uv run pytest -m godot tests/test_engine_smoke.py
+      - run: uv run pytest -m godot tests/test_engine.py
 
   # 새 컴퓨터처럼 uv 도 없는 상태에서 설치 스크립트를 끝까지 돌려 봅니다 (Godot 포함).
   setup:
@@ -118,6 +146,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+      # .NET SDK 는 설치 스크립트가 받지 않고 안내만 하므로(시스템 설치), 사람이 미리 깐 상태를 흉내 냅니다.
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
       - name: 설치 (macOS, Linux)
         if: runner.os != 'Windows'
         run: bash scripts/setup.sh --godot

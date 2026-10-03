@@ -27,13 +27,14 @@ $UvVersion = '0.12.17'
 $GodotVersion = '4.7.2'
 $GodotTag = "$GodotVersion-stable"
 $GodotUrlBase = "https://github.com/godotengine/godot/releases/download/$GodotTag"
+# 엔진(engine\)은 C# 이라 Godot .NET(mono) 판을 받습니다.
 # 아래 값은 위 주소의 SHA512-SUMS.txt 에서 가져왔습니다. Godot 버전을 바꾸면 함께 바꿉니다.
-$ShaWin64 = '83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993'
-$ShaWinArm64 = '683f8dd9fb087db79dfbbc52d5b2209df98218a4fef0d10d8478ec2230ae8db6032a36929677479b9f9c5a6aa0c51ee359d7e57eb5abbcb6cef4998526dec5a6'
+$ShaWin64 = '79229fd112b0c9cbeab82363a4ef7be18ea70f1caf86bf912789335b136fbe7e01db0053a33461438c5da1c680c17bbb10040bd09bedc51221cd4423d0367757'
+$ShaWinArm64 = 'b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7010051f67b928caefb9378fdaac00559e57167b9cf0466d1'
 
 $Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $ToolsDir = Join-Path $Root '.tools'
-$GodotDir = Join-Path $ToolsDir 'godot'
+$GodotDir = Join-Path $ToolsDir 'godot-net'
 $Started = Get-Date
 
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
@@ -56,7 +57,7 @@ B-PCG 개발 환경 설치 (Windows)
   -Analysis    비교·분석 도구(pyflwdir, landlab)도 설치합니다.
   -Gpl         GPL 비교 도구(fastscapelib, TopoToolbox)도 설치합니다.
   -Notebook    JupyterLab 도 설치합니다.
-  -Godot       Godot 4.7.2 를 .tools\godot\ 에 받습니다 (약 85 MB).
+  -Godot       Godot 4.7.2 .NET 판을 .tools\godot-net\ 에 받습니다 (약 120 MB).
   -Data        파일럿 데이터를 받습니다 (약 4.5 GB, 오래 걸립니다. 끊겨도 다시 실행하면 이어 받습니다).
   -All         -Analysis -Gpl -Notebook -Godot 를 한꺼번에 (데이터는 빼고).
   -Check       아무것도 설치하지 않고 환경 점검(tools\doctor.py)만 합니다.
@@ -170,6 +171,18 @@ if (-not (Test-Tool 'curl.exe')) {
 }
 Say "$(& git --version), curl.exe 확인"
 
+# .NET 10 SDK: 생성기(src\Bpcg)·콘솔·엔진(engine\)이 C# 입니다. 시스템에 설치하도록 안내만 합니다
+# (탐색기에서 연 Godot 편집기도 SDK 를 찾게 하려는 것, docs\csharp_port.md 1장).
+$DotnetSdk = $null
+if (Test-Tool 'dotnet') {
+    $DotnetSdk = (& dotnet --list-sdks 2>$null | Where-Object { $_ -match '^10\.' } | Select-Object -Last 1)
+}
+if ($DotnetSdk) {
+    Say ".NET SDK $(($DotnetSdk -split ' ')[0]) 확인"
+} else {
+    Warn '.NET 10 SDK 가 없습니다. 생성기와 시험에 필요합니다: winget install --id Microsoft.DotNet.SDK.10 -e   (설치 뒤 새 터미널을 여세요)'
+}
+
 # ---------------------------------------------------------------- 3. uv (파이썬과 패키지 관리자)
 $UvInstalledNow = $false
 if (-not (Find-Uv)) {
@@ -271,9 +284,12 @@ function Get-GodotVersion([string]$Exe) {
 }
 function Find-Godot {
     $cands = @()
+    if ($env:GODOT_NET) { $cands += $env:GODOT_NET }
     if ($env:GODOT) { $cands += $env:GODOT }
-    $cands += (Join-Path $GodotDir "Godot_v${GodotTag}_win64_console.exe")
-    $cands += (Join-Path $GodotDir "Godot_v${GodotTag}_windows_arm64_console.exe")
+    # zip 은 실행 파일과 GodotSharp\ 를 한 폴더에 담습니다. Godot 은 GodotSharp\ 를 실행 파일 옆에서 찾습니다.
+    $mono = "Godot_v${GodotTag}_mono"
+    $cands += (Join-Path $GodotDir "${mono}_win64\${mono}_win64_console.exe")
+    $cands += (Join-Path $GodotDir "${mono}_windows_arm64\${mono}_windows_arm64_console.exe")
     foreach ($name in @('godot', 'godot4')) {
         $cmd = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($cmd) { $cands += $cmd.Source }
@@ -281,8 +297,8 @@ function Find-Godot {
     foreach ($c in $cands) {
         $v = Get-GodotVersion $c
         if (-not $v) { continue }
-        if ($v -like "$GodotVersion.stable*") { return $c }
-        Warn "Godot $v 이 있지만 $GodotVersion 이 아니라 쓰지 않습니다: $c"
+        if ($v -like "$GodotVersion.stable.mono*") { return $c }
+        Warn "Godot $v 이 있지만 $GodotVersion .NET 판이 아니라 쓰지 않습니다: $c"
     }
     return $null
 }
@@ -291,9 +307,9 @@ function Get-Sha512([string]$Path) {
 }
 function Install-Godot {
     if ($Arch -eq 'arm64') {
-        $zip = "Godot_v${GodotTag}_windows_arm64.exe.zip"; $sha = $ShaWinArm64
+        $zip = "Godot_v${GodotTag}_mono_windows_arm64.zip"; $sha = $ShaWinArm64
     } else {
-        $zip = "Godot_v${GodotTag}_win64.exe.zip"; $sha = $ShaWin64
+        $zip = "Godot_v${GodotTag}_mono_win64.zip"; $sha = $ShaWin64
     }
     $url = "$GodotUrlBase/$zip"
     $zipPath = Join-Path $ToolsDir $zip
@@ -302,7 +318,7 @@ function Install-Godot {
     if ((Test-Path -LiteralPath $part) -and ((Get-Sha512 $part) -eq $sha)) {
         Say "이미 받아 둔 $zip 을 씁니다."
     } else {
-        Say "Godot $GodotVersion 받기: $url"
+        Say "Godot $GodotVersion .NET 판 받기: $url"
         # 끊긴 파일이 있으면 이어 받고, 이어받기가 안 되면 처음부터 받습니다.
         & curl.exe -fL --retry 3 --retry-delay 2 --progress-bar -C - -o $part $url
         if ($LASTEXITCODE -ne 0) {
@@ -338,12 +354,12 @@ if ($Godot) {
     $t = Get-Date
     $GodotFound = Find-Godot
     if ($GodotFound) {
-        Say "Godot $GodotVersion 이 이미 있습니다: $GodotFound"
+        Say "Godot $GodotVersion .NET 판이 이미 있습니다: $GodotFound"
     } else {
         Install-Godot
         $GodotFound = Find-Godot
         if (-not $GodotFound) { Die "Godot 을 풀었지만 실행되지 않습니다. $GodotDir 을 지우고 다시 실행하세요." }
-        Say "Godot 설치 완료: $GodotFound"
+        Say "Godot .NET 판 설치 완료: $GodotFound"
     }
     Step-Time $t
 }
@@ -371,14 +387,16 @@ Say "설치가 끝났습니다. (전체 $Total 초)"
 Write-Host ''
 Write-Host '다음 단계'
 Write-Host '  - 가상환경을 켤(activate) 필요가 없습니다. 명령 앞에 uv run 을 붙이면 저장소의 .venv 로 돌아갑니다.'
-Write-Host '  - 빠른 테스트:      uv run pytest -m "not slow"'
+Write-Host '  - 빠른 테스트:      uv run pytest -m "not slow"   (C# 콘솔을 빌드해 결과를 봄, .NET 10 SDK 필요)'
+Write-Host '  - C# 빌드·시험:     dotnet build Bpcg.slnx   그리고   dotnet test --solution Bpcg.slnx'
+Write-Host '  - 행성 만들기:      uv run bpcg all --profile tiny   (C# 콘솔로 넘김)   ·   스튜디오: uv run bpcg studio'
 Write-Host '  - 린트와 서식:      uv run ruff check .   그리고   uv run ruff format .'
 Write-Host '  - 점검만 다시:      powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Check'
 if ($GodotFound) {
-    Write-Host "  - Godot:            $GodotFound"
-    Write-Host '                      (다른 위치의 Godot 을 쓰려면 환경 변수 GODOT 에 _console.exe 경로를 넣습니다)'
+    Write-Host "  - Godot .NET:       $GodotFound --path engine -e"
+    Write-Host '                      (다른 위치의 Godot .NET 판을 쓰려면 환경 변수 GODOT_NET 에 _console.exe 경로를 넣습니다)'
 } else {
-    Write-Host '  - Godot 4.7.2 받기: powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Godot   (엔진 담당은 필수)'
+    Write-Host '  - Godot 4.7.2 .NET 판 받기: powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Godot   (엔진 담당은 필수)'
 }
 if (-not $Data) {
     Write-Host '  - 파일럿 데이터:    powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Data   (약 4.5 GB)'

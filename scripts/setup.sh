@@ -10,16 +10,17 @@ UV_VERSION="0.12.17"
 GODOT_VERSION="4.7.2"
 GODOT_TAG="${GODOT_VERSION}-stable"
 GODOT_URL_BASE="https://github.com/godotengine/godot/releases/download/${GODOT_TAG}"
+# 엔진(engine/)은 C# 이라 Godot .NET(mono) 판을 받습니다.
 # 아래 값은 위 주소의 SHA512-SUMS.txt 에서 가져왔습니다. Godot 버전을 바꾸면 함께 바꿉니다.
-SHA_MAC="38aa16e5bba2083941fc5b3e54be0089bd4cc35e32415f5b9fd9a8a6a7b9818255d44532ea8ef94b5aef56c4b407c2d634fa4f657e4ebe681ebbf59b7bac69ca"
-SHA_LINUX_X64="9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65"
-SHA_LINUX_ARM64="dd59918da086bd49bde2f5450b5e567ff8650cbde9abbd7b8f4ca1197ff8c609baa38834666d032deafb47099078d7822279e2a0e06e5665745468f26533e7e2"
+SHA_MAC="0862c53d7158c7a67f745e2e46f90b68cf5343cbe8b95d6d4333c469e42ca104af9c121d1746a50e5d221a99d09d82ef7016495f8e0d09255842884ed0502795"
+SHA_LINUX_X64="1855960b27ee3ef5e66e5e228cced69d55637b24334a7411162687dcd077d8f9f645348cdb8eae984bec8135d49ed855a1e3a16476786b8bce60774fd8402d13"
+SHA_LINUX_ARM64="4b8b700ea21bea16b1a2ed8bc3a266431604f0d6452c819e022bfadea33eb431269bd680b11cd9dab93fc1f487ae4a60d15ee511e5691a82c22a2753b428d263"
 MIN_MACOS_MAJOR=15     # 잠근 rasterio 1.5.2 의 Apple Silicon wheel 이 macosx_15_0 용입니다.
 MIN_GLIBC="2.28"       # 여러 패키지의 Linux wheel 이 manylinux_2_28 (glibc 2.28 이상) 용입니다.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 TOOLS_DIR="$ROOT/.tools"
-GODOT_DIR="$TOOLS_DIR/godot"
+GODOT_DIR="$TOOLS_DIR/godot-net"
 cd "$ROOT"
 
 usage() {
@@ -29,10 +30,11 @@ B-PCG 개발 환경 설치 (macOS, Linux)
 쓰는 법: ./scripts/setup.sh [옵션...]
 
   (옵션 없음)   uv, 파이썬 3.13, 기본 패키지 묶음(dev, data, mesh)을 설치합니다.
+                생성기·엔진은 C# 이라 .NET 10 SDK 가 따로 있어야 합니다 (없으면 설치 명령을 알려 줌).
   --analysis    비교·분석 도구(pyflwdir, landlab)도 설치합니다.
   --gpl         GPL 비교 도구(fastscapelib, TopoToolbox)도 설치합니다. Linux ARM64 에서는 안 됩니다.
   --notebook    JupyterLab 도 설치합니다.
-  --godot       Godot 4.7.2 를 .tools/godot/ 에 받습니다 (macOS 약 170 MB, Linux 약 80 MB).
+  --godot       Godot 4.7.2 .NET 판을 .tools/godot-net/ 에 받습니다 (macOS 약 200 MB, Linux 약 110 MB).
   --data        파일럿 데이터를 받습니다 (약 4.5 GB, 오래 걸립니다. 끊겨도 다시 실행하면 이어 받습니다).
   --all         --analysis --gpl --notebook --godot 를 한꺼번에 (데이터는 빼고).
   --check       아무것도 설치하지 않고 환경 점검(tools/doctor.py)만 합니다.
@@ -227,6 +229,19 @@ if ! command -v unzip >/dev/null 2>&1; then
 fi
 say "$(git --version), curl 확인"
 
+# .NET 10 SDK: 생성기(src/Bpcg)·콘솔·엔진(engine/)이 C# 입니다. 시스템에 설치하도록 안내만 합니다
+# (Godot 편집기가 Finder·탐색기에서 열려도 SDK 를 찾게 하려는 것, docs/csharp_port.md 1장).
+dotnet_hint() {
+  if [ "$PLATFORM" = mac ]; then echo "brew install --cask dotnet-sdk   (또는 https://dotnet.microsoft.com/download)"
+  else echo "https://learn.microsoft.com/dotnet/core/install/linux 의 배포판 안내대로 dotnet-sdk-10.0 을 설치"
+  fi
+}
+if command -v dotnet >/dev/null 2>&1 && dotnet --list-sdks 2>/dev/null | grep -qE '^10\.'; then
+  say ".NET SDK $(dotnet --list-sdks | grep -E '^10\.' | tail -n 1 | awk '{print $1}') 확인"
+else
+  warn ".NET 10 SDK 가 없습니다. 생성기와 시험에 필요합니다: $(dotnet_hint)"
+fi
+
 # ---------------------------------------------------------------- 3. uv (파이썬과 패키지 관리자)
 UV_INSTALLED_NOW=0
 if ! find_uv; then
@@ -295,18 +310,16 @@ godot_version_of() {
   printf '%s\n' "$out"
 }
 find_godot() {
-  local c v
-  for c in "${GODOT:-}" \
-    "$GODOT_DIR/Godot.app/Contents/MacOS/Godot" \
-    "$GODOT_DIR/godot" \
-    "/Applications/Godot.app/Contents/MacOS/Godot" \
-    "$(command -v godot 2>/dev/null || true)" \
-    "$(command -v godot4 2>/dev/null || true)"; do
+  local c v mono="Godot_v${GODOT_TAG}_mono"
+  for c in "${GODOT_NET:-}" "${GODOT:-}" \
+    "$GODOT_DIR/Godot_mono.app/Contents/MacOS/Godot" \
+    "$GODOT_DIR/${mono}_linux_x86_64/${mono}_linux.x86_64" \
+    "$GODOT_DIR/${mono}_linux_arm64/${mono}_linux.arm64"; do
     [ -n "$c" ] || continue
     v="$(godot_version_of "$c")" || continue
     case "$v" in
-      "${GODOT_VERSION}.stable"*) printf '%s\n' "$c"; return 0 ;;
-      *) warn "Godot $v 이 있지만 $GODOT_VERSION 이 아니라 쓰지 않습니다: $c" ;;
+      "${GODOT_VERSION}.stable.mono"*) printf '%s\n' "$c"; return 0 ;;
+      *) warn "Godot $v 이 있지만 $GODOT_VERSION .NET 판이 아니라 쓰지 않습니다: $c" ;;
     esac
   done
   return 1
@@ -318,9 +331,9 @@ sha512_of() {
 install_godot() {
   local zip sha url part extract item
   case "$PLATFORM-$ARCH" in
-    mac-arm64) zip="Godot_v${GODOT_TAG}_macos.universal.zip"; sha="$SHA_MAC" ;;
-    linux-x86_64) zip="Godot_v${GODOT_TAG}_linux.x86_64.zip"; sha="$SHA_LINUX_X64" ;;
-    linux-arm64) zip="Godot_v${GODOT_TAG}_linux.arm64.zip"; sha="$SHA_LINUX_ARM64" ;;
+    mac-arm64) zip="Godot_v${GODOT_TAG}_mono_macos.universal.zip"; sha="$SHA_MAC" ;;
+    linux-x86_64) zip="Godot_v${GODOT_TAG}_mono_linux_x86_64.zip"; sha="$SHA_LINUX_X64" ;;
+    linux-arm64) zip="Godot_v${GODOT_TAG}_mono_linux_arm64.zip"; sha="$SHA_LINUX_ARM64" ;;
     *) die "이 운영체제($PLATFORM-$ARCH)용 Godot 내려받기는 준비돼 있지 않습니다." ;;
   esac
   url="$GODOT_URL_BASE/$zip"
@@ -329,7 +342,7 @@ install_godot() {
   if [ -f "$part" ] && [ "$(sha512_of "$part")" = "$sha" ]; then
     say "이미 받아 둔 $zip 을 씁니다."
   else
-    say "Godot $GODOT_VERSION 받기: $url"
+    say "Godot $GODOT_VERSION .NET 판 받기: $url"
     # 끊긴 파일이 있으면 이어 받고, 이어받기가 안 되면 처음부터 받습니다.
     if ! curl -fL --retry 3 --retry-delay 2 --progress-bar -C - -o "$part" "$url"; then
       rm -f "$part"
@@ -358,12 +371,11 @@ install_godot() {
   done
   rm -rf "$extract" "$part"
   if [ "$PLATFORM" = linux ]; then
-    # Linux 실행 파일은 이름을 .tools/godot/godot 로 맞춥니다 (tests/test_engine_smoke.py 가 찾는 곳).
-    for item in "$GODOT_DIR"/Godot_v"${GODOT_TAG}"_linux.*; do
-      [ -f "$item" ] || continue
-      mv -f "$item" "$GODOT_DIR/godot"
+    # Linux zip 은 실행 파일과 GodotSharp/ 를 한 폴더에 담습니다. Godot 은 GodotSharp/ 를 실행 파일
+    # 옆에서 찾으므로 폴더째 둡니다 (tests/test_engine.py 가 찾는 곳).
+    for item in "$GODOT_DIR"/Godot_v"${GODOT_TAG}"_mono_linux_*/Godot_v"${GODOT_TAG}"_mono_linux.*; do
+      [ -f "$item" ] && chmod +x "$item"
     done
-    chmod +x "$GODOT_DIR/godot"
   fi
 }
 
@@ -371,11 +383,11 @@ GODOT_FOUND=""
 if [ "$WITH_GODOT" = 1 ]; then
   t=$SECONDS
   if GODOT_FOUND="$(find_godot)"; then
-    say "Godot $GODOT_VERSION 이 이미 있습니다: $GODOT_FOUND"
+    say "Godot $GODOT_VERSION .NET 판이 이미 있습니다: $GODOT_FOUND"
   else
     install_godot
     GODOT_FOUND="$(find_godot)" || die "Godot 을 풀었지만 실행되지 않습니다. $GODOT_DIR 을 지우고 다시 실행하세요."
-    say "Godot 설치 완료: $GODOT_FOUND"
+    say "Godot .NET 판 설치 완료: $GODOT_FOUND"
   fi
   step_time "$t"
 fi
@@ -402,15 +414,17 @@ cat <<EOF
 
 다음 단계
   - 가상환경을 켤(activate) 필요가 없습니다. 명령 앞에 uv run 을 붙이면 저장소의 .venv 로 돌아갑니다.
-  - 빠른 테스트:      uv run pytest -m "not slow"
+  - 빠른 테스트:      uv run pytest -m "not slow"   (C# 콘솔을 빌드해 결과를 봄, .NET 10 SDK 필요)
+  - C# 빌드·시험:     dotnet build Bpcg.slnx   그리고   dotnet test --solution Bpcg.slnx
+  - 행성 만들기:      uv run bpcg all --profile tiny   (C# 콘솔로 넘김)   ·   스튜디오: uv run bpcg studio
   - 린트와 서식:      uv run ruff check .   그리고   uv run ruff format .
   - 점검만 다시:      ./scripts/setup.sh --check
 EOF
 if [ -n "$GODOT_FOUND" ]; then
-  echo "  - Godot:            $GODOT_FOUND"
-  echo "                      (다른 위치의 Godot 을 쓰려면 환경 변수 GODOT 에 실행 파일 경로를 넣습니다)"
+  echo "  - Godot .NET:       $GODOT_FOUND --path engine -e"
+  echo "                      (다른 위치의 Godot .NET 판을 쓰려면 환경 변수 GODOT_NET 에 경로를 넣습니다)"
 else
-  echo "  - Godot 4.7.2 받기: ./scripts/setup.sh --godot   (엔진 담당은 필수)"
+  echo "  - Godot 4.7.2 .NET 판 받기: ./scripts/setup.sh --godot   (엔진 담당은 필수)"
 fi
 if [ "$WITH_DATA" != 1 ]; then
   echo "  - 파일럿 데이터:    ./scripts/setup.sh --data   (약 4.5 GB)"

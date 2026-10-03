@@ -6,7 +6,7 @@
   아래 표의 '뒷받침하는 주장' 열이 그 연결입니다.
 - 여기서는 GPL 도구(fastscapelib, topotoolbox, pysheds, richdem)를 써도 됩니다. ruff 의 TID251 검사도 여기서는 꺼 둡니다.
 - **`src/bpcg` 는 절대 여기를 import 하지 않습니다.** 여기서 쓸 만한 코드가 나오면 MIT 로 다시 짜서 `src/bpcg` 로 옮깁니다.
-- 경로는 모두 `bpcg.core.paths` 로 찾습니다(`EXTERNAL`, `CACHE`, `DERIVED`). 절대 경로를 쓰지 않습니다.
+- 경로는 모두 `bpcg_studio.paths` 로 찾습니다(`EXTERNAL`, `CACHE`, `DERIVED`). 절대 경로를 쓰지 않습니다.
 - 스크립트는 저장소 루트에서 파일로 실행합니다: `uv run python analysis/<폴더>/<파일>.py ...`
   같은 폴더의 모듈은 그냥 `from hydro import d8` 처럼 가져옵니다. `analysis/veg` 는 `afrisar_link.py` 를 거쳐
   `analysis/afrisar` 의 `hydro`, `extract` 를 씁니다(옆 폴더 경로를 더하는 곳은 그 파일 하나뿐).

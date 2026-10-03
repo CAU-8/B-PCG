@@ -16,7 +16,7 @@ cd b-pcg
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-설치 스크립트는 운영체제를 확인하고 uv, 파이썬 3.13, 패키지를 설치한 뒤 `tools/doctor.py`로 점검합니다. 파일럿 자료(약 4.5 GB)가 필요하면 `--data`(윈도우는 `-Data`)를 붙입니다.
+생성기와 엔진은 C#이라 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)를 먼저 설치합니다(맥은 `brew install --cask dotnet-sdk`). 설치 스크립트는 운영체제를 확인하고 uv, 파이썬 3.13, 패키지를 설치하고 .NET SDK가 있는지 본 뒤 `tools/doctor.py`로 점검합니다. `--godot`는 Godot 4.7.2 .NET 판을 `.tools/godot-net/`에 받습니다. 파일럿 자료(약 4.5 GB)가 필요하면 `--data`(윈도우는 `-Data`)를 붙입니다.
 
 ## 매번
 
@@ -30,9 +30,13 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 2. 코드를 고치고 테스트와 린트를 돌립니다.
 
     ```bash
+    dotnet build Bpcg.slnx && dotnet test --solution Bpcg.slnx
+    dotnet format Bpcg.slnx --verify-no-changes
     uv run pytest -m "not slow"
     uv run ruff format . && uv run ruff check .
     ```
+
+    엔진을 고쳤으면 `uv run pytest -m godot tests/test_engine.py`도 돌립니다.
 
 3. 커밋합니다. 메시지 형식은 `종류(범위): 한국어 요약`입니다.
 
@@ -87,6 +91,6 @@ uv add <패키지> --group <dev|data|mesh|analysis|gpl|notebook>
 - 저장소 이름은 `b-pcg`로 합니다.
 - Settings → Branches → `main` 보호 규칙을 다음처럼 둡니다.
     - PR 필수, 승인 1명
-    - 상태 검사 `lint`, `test` 필수
+    - 상태 검사 `lint`, `test`, `csharp` 필수
     - 오래된 승인 무효화
 - Settings → General → Pull Requests에서 squash merge만 켜고, "Automatically delete head branches"를 켭니다.

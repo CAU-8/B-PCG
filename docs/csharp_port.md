@@ -2,16 +2,31 @@
 
 지시 원문은 [docs/csharp_port_prompt.md](csharp_port_prompt.md)에 있습니다. 이 파일은 `src/bpcg`를 C#(`csharp/`)으로 옮기는 작업의 현재 상태를 담고, 모듈 하나를 마칠 때마다 고칩니다. 처음 읽는 사람은 0장부터 읽습니다. 1장부터는 단계 0에서 조사한 근거 자료이고, 6장의 모듈별 절은 그 모듈을 옮길 때 다시 읽습니다.
 
+**폴더를 옮겼습니다(2026-10-03, 단계 5).** 아래 1장부터의 기록은 옮기기 전 경로로 적혀 있습니다. 읽을 때 `csharp/Bpcg` → `src/Bpcg`, `csharp/Bpcg.Cli` → `src/Bpcg.Cli`, `csharp/Bpcg.Tests` → `tests/Bpcg.Tests`, `csharp/Bpcg.Engine` → `engine/`, `csharp/golden/data` → `tests/golden/data`, `csharp/Bpcg.slnx` → `Bpcg.slnx`, `src/bpcg/studio` → `src/bpcg_studio` 로 바꿔 읽습니다. `src/bpcg/*.py`(Python 생성기)와 `engine/scripts/*.gd`(GDScript)는 지웠으므로 git 기록(커밋 3b5bbf6 까지)에서 봅니다. C# 코드 주석의 `(src/bpcg/….py)` 도 그 옮기기 전 원본을 가리킵니다.
+
 ## 0. 지금 상태와 다음 할 일
 
-### 단계 4: Godot .NET 전환 (2026-10-03, 진행 중)
+### 단계 5: 폴더 구조 바꾸기 (2026-10-03)
+
+- 사용자가 정한 방향: 포팅이 끝났다고 보고, `csharp/` 밖의 Python 가운데 같은 일을 하는 C# 이 있는 것은 지우고, `csharp/` 안의 폴더를 저장소 맨 위로 옮깁니다. 이름은 원래 자리에 맞춥니다.
+- 지금 구성: `Bpcg.slnx`·`Directory.Build.props`(맨 위), `src/Bpcg`(생성기), `src/Bpcg.Cli`(콘솔), `engine/`(Godot .NET 프로젝트, 예전 GDScript 판을 대체), `tests/Bpcg.Tests`(C# 단위·golden 시험), `tests/golden/data`(커밋한 golden).
+- 지운 것: `src/bpcg/` 의 생성기 묶음 전부(core·planet·geology·hydro·landscape·subsurface·metrics·hero·volume·bake·pipeline·cli), `engine/scripts/*.gd`·`engine/tests/*.gd`, `csharp/golden/export_golden.py`(golden 은 다시 만들 수 없음. 큰 사례 `out/golden` 이 없으면 그 시험만 건너뜀), Python 생성기를 직접 부르던 pytest.
+- 남긴 Python 과 바꾼 점:
+  - 스튜디오 → `src/bpcg_studio/`. `bpcg` 명령의 입구(`bpcg_studio.cli:main`)이고, `studio` 밖의 명령(`planet`·`hero`·`bake`·`all`)은 C# 콘솔로 넘깁니다. 실행은 C# 콘솔을 빌드해 부르고, 'Godot로 보기' 는 Godot .NET 판을 찾아 엔진 C# 을 빌드한 뒤 띄웁니다. 스튜디오가 쓰던 설정 읽기·필드 표·히어로 격자 크기·묶음 읽기는 작은 사본으로 `bpcg_studio/` 안에 두었습니다.
+  - pytest → C# 콘솔 결과를 검사하게 다시 씀(`tests/bundles.py`, `conftest.py` 의 tiny·평면·동굴 실행 고정물, 묶음별 `test_*.py`). 엔진 검사는 `tests/test_engine.py`.
+  - `analysis/` 6개 파일은 경로만 `bpcg_studio.paths` 로 고쳤고, `analysis/figures/render_results.py`·`analysis/demos/plot_cubesphere.py` 는 Python 생성기를 import 해서 지금은 돌지 않습니다(머리에 적어 둠). 스튜디오의 그림 단계는 그래서 건너뜁니다.
+  - `tools/doctor.py`·`scripts/setup.sh`·`setup.ps1`·CI 는 .NET 10 SDK 와 Godot 4.7.2 .NET 판(`.tools/godot-net/`)을 보게 고쳤습니다. CI 에 `csharp` 작업(macOS, build·test·format)을 더했습니다.
+- 문서: `README.md`, `CONTRIBUTING.md`, `docs/conventions.md`(폴더 구조·C# 규칙·엔진 규칙, 0장 쟁점 9 의 '엔진은 계산하지 않음' 을 바꿈), `docs/studio.md`, `docs/pipeline.md`(이름 읽는 법), `engine/README.md`, `engine/GLOBE.md`.
+- 남은 일: 그림 스크립트를 C# 결과에 맞추기, C# 콘솔에 지구본 `--face-res` 선택 더하기, 내보낸 게임의 configs(`engine/Scripts/EnginePaths.cs` 의 TODO), golden 대조를 macOS 밖에서 돌려 보기, 윈도우에서 스튜디오 시험의 글자 인코딩 실패(옮기기 전부터 있던 것).
+
+### 단계 4: Godot .NET 전환 (2026-10-03, 끝남, 단계 5 에서 정리)
 
 - 사용자가 정한 방향: 최종 목표는 Python 없이 C# 으로 진행하는 것이고, `csharp/` 안에서 돌아가면 전체를 대체합니다. GDScript 도 모두 C# 으로 옮기고(0장 쟁점 1 은 '(2) Godot 안에서 계산'), 생성은 Godot 안 처음 화면에서 시작합니다.
 - 만든 것: `csharp/Bpcg.Engine/`(Godot 4.7.2 .NET, net10.0, `Bpcg.slnx` 에 포함). `engine/scripts/*.gd` 13개와 `engine/tests/*.gd` 3개를 C# 으로 옮겼고, 처음 화면(`StartMenu`)·진행률(`StageProgress`)·설정 경로(`EnginePaths`)를 새로 만들었습니다. 쓰는 법과 대응표는 [csharp/Bpcg.Engine/README.md](../csharp/Bpcg.Engine/README.md).
 - 라이브러리: `cli.py` 의 실행 단위를 `csharp/Bpcg/Runs.cs`(+ `RunError`)로 옮겨 콘솔과 엔진이 같이 씁니다. 콘솔 출력은 그대로입니다(tiny 결과 바이트 일치, 걸린 시간만 다름).
 - Godot .NET 판은 `.tools/godot-net/Godot_mono.app` 에 손으로 받았습니다(SHA-512 일치, 1장 절차의 (나)). net10.0 게임 어셈블리가 편집기 빌드(`--build-solutions`)와 실행 모두에서 돕니다.
 - 확인: 엔진 안 tiny 생성 = 콘솔 결과, C# 연기 검사(회랑·지구본)가 C#·Python 굽기 모두에서 통과, 화면 13장이 GDScript 판과 픽셀 일치.
-- 남은 일: 설치 스크립트·doctor·CI·pytest 의 Godot 검사·스튜디오 'Godot로 보기' 를 .NET 판과 새 프로젝트로 바꾸기, 내보낸 게임의 configs, `engine/`·Python 대체 정리.
+- 남은 일이던 설치 스크립트·doctor·CI·pytest 의 Godot 검사·스튜디오 'Godot로 보기' 의 .NET 전환과 `engine/` 대체는 단계 5 에서 했습니다. 내보낸 게임의 configs 는 남았습니다.
 
 ### 지금 상태 (2026-10-03)
 
