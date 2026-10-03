@@ -460,9 +460,9 @@ def test_job_manager_runs_tiny_pipeline(csharp_cli, tmp_path):
 # ---------------------------------------------------------------- Godot (실행하지 않음)
 def test_find_godot_uses_candidates_in_order(tmp_path, monkeypatch):
     fake = tmp_path / "Godot"
-    fake.write_text("가짜")
+    fake.write_text("가짜", encoding="utf-8")
     other = tmp_path / "godot-old"
-    other.write_text("가짜")
+    other.write_text("가짜", encoding="utf-8")
     found = gd.find_godot([tmp_path / "없음", fake], check_version=False)
     assert found["ok"] and found["path"] == str(fake)
     versions = {str(other): "4.7.2.stable.official", str(fake): "4.7.2.stable.mono.official"}
@@ -495,7 +495,7 @@ def test_install_corridor_copies_manifest_files(runs, tmp_path):
     )
     (baked / "old_only.bin").write_bytes(b"old")
     (baked / "old_only.bin.import").write_text("x")
-    (baked / "keep_me.txt").write_text("사용자 파일")
+    (baked / "keep_me.txt").write_text("사용자 파일", encoding="utf-8")
     marker = gd.install_corridor(corridor, baked, run_key="tiny")
     names = gd.corridor_files(corridor)
     assert "manifest.json" in names and "heightmap.bin" in names

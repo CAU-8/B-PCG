@@ -75,6 +75,11 @@ ignore = ["E741"]  # 수식 기호 l, I, O 를 변수 이름으로 쓸 수 있�
 "pysheds".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
 "richdem".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
 
+[tool.ruff.lint.isort]
+# 지운 Python 생성기 bpcg 를 아직 import 하는 analysis 스크립트(돌지 않음)가 있습니다. 맥은 대소문자를
+# 구분하지 않아 src/Bpcg 를 bpcg 패키지로 보므로, 운영체제마다 import 정렬이 달라지지 않게 고정합니다.
+known-third-party = ["bpcg"]
+
 [tool.ruff.lint.per-file-ignores]
 "analysis/**" = ["TID251", "E501"]
 

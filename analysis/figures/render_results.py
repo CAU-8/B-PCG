@@ -17,13 +17,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from bpcg.bake.bundle import load_hero_state, load_planet_state  # noqa: E402
+from bpcg.core import cubesphere as cs  # noqa: E402
 from bpcg.core.config import load_config  # noqa: E402
 from bpcg.core.paths import PILOT  # noqa: E402
+from bpcg.geology import rocks  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.colors import LightSource, ListedColormap, TwoSlopeNorm  # noqa: E402
-
-from bpcg.core import cubesphere as cs  # noqa: E402
-from bpcg.geology import rocks  # noqa: E402
 
 for name in (
     "AppleGothic",
