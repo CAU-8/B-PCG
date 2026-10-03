@@ -42,6 +42,89 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
         _ => throw new InvalidCastException($"실수 배열이어야 합니다: {a.GetType().Name}"),
     };
 
+    /// <summary>
+    /// a.astype(t) (numpy 규칙): 실수 → float32 는 가장 가까운 값, 실수 → 정수는 0 쪽으로 자름, 정수끼리는 비트를 잘라 감쌈,
+    /// 불리언은 0/1. 형이 같으면 그대로 돌려줍니다.
+    /// </summary>
+    public static Array CastTo(Array a, Type t)
+    {
+        Type s = a.GetType().GetElementType()!;
+        if (s == t)
+        {
+            return a;
+        }
+        int n = a.Length;
+        Array o = Array.CreateInstance(t, n);
+        for (int i = 0; i < n; i++)
+        {
+            object v = a.GetValue(i)!;
+            o.SetValue(ConvertScalar(v, t), i);
+        }
+        return o;
+    }
+
+    private static object ConvertScalar(object v, Type t)
+    {
+        if (v is bool b)
+        {
+            v = b ? 1L : 0L;
+        }
+        if (t == typeof(bool))
+        {
+            return v switch
+            {
+                double d => d != 0.0,
+                float f => f != 0.0f,
+                _ => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture) != 0,
+            };
+        }
+        if (v is double or float)
+        {
+            double d = Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture);
+            if (t == typeof(double))
+            {
+                return d;
+            }
+            if (t == typeof(float))
+            {
+                return (float)d;
+            }
+            // TODO(port): numpy 는 NaN·inf·범위 밖 실수 → 정수가 정의되지 않습니다(플랫폼 값). 여기서는 0 쪽으로 자르고 감쌉니다.
+            long l = double.IsFinite(d) ? (long)Math.Truncate(d) : long.MinValue;
+            return WrapInt(l, t);
+        }
+        long x = v switch
+        {
+            ulong u => unchecked((long)u),
+            _ => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture),
+        };
+        if (t == typeof(double))
+        {
+            return (double)x;
+        }
+        if (t == typeof(float))
+        {
+            return (float)x;
+        }
+        return WrapInt(x, t);
+    }
+
+    private static object WrapInt(long x, Type t) => unchecked(t switch
+    {
+        Type u when u == typeof(long) => x,
+        Type u when u == typeof(int) => (int)x,
+        Type u when u == typeof(short) => (short)x,
+        Type u when u == typeof(sbyte) => (sbyte)x,
+        Type u when u == typeof(byte) => (byte)x,
+        Type u when u == typeof(ushort) => (ushort)x,
+        Type u when u == typeof(uint) => (uint)x,
+        Type u when u == typeof(ulong) => (ulong)x,
+        _ => throw new InvalidCastException($"바꿀 수 없는 형: {t.Name}"),
+    });
+
+    /// <summary>FIELDS 에 적힌 dtype 으로 바꿉니다 (v.astype(FIELDS[name].dtype)).</summary>
+    public static Array CastToField(string name, Array a) => CastTo(a, Fields.ElementType(Fields.All[name].Dtype));
+
     /// <summary>np.asarray(a)[idx]: 1차원 배열에서 idx 칸을 모읍니다 (원소 형 유지).</summary>
     public static Array Take(Array a, long[] idx)
     {

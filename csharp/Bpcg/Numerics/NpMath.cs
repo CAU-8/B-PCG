@@ -53,4 +53,18 @@ public static class NpMath
 
     /// <summary>Python min(a, b): b &lt; a 일 때만 b.</summary>
     public static double PyMin(double a, double b) => b < a ? b : a;
+
+    /// <summary>
+    /// numpy 배열 거듭제곱 x ** e (float64): 지수가 2·0.5·−1·1·0 이면 numpy 가 제곱·sqrt·역수로 바로 계산하므로 같게 하고,
+    /// 나머지는 libm pow(Math.Pow) 입니다. Python 스칼라 ** 와 numba 커널의 ** 는 Math.Pow 를 그대로 씁니다.
+    /// </summary>
+    public static double Power(double x, double e) => e switch
+    {
+        2.0 => x * x,
+        0.5 => Math.Sqrt(x),
+        -1.0 => 1.0 / x,
+        1.0 => x,
+        0.0 => 1.0,
+        _ => Math.Pow(x, e),
+    };
 }
