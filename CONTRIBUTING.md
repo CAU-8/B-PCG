@@ -56,7 +56,7 @@ uv run ruff format . && uv run ruff check .
 git commit -m "feat(hydro): 우선순위 홍수 채우기 추가"
 ```
 
-메시지는 `종류(범위): 한국어 요약` 입니다. 범위는 고친 묶음 이름입니다(`core`, `hydro`, `bake`, `cli`, `engine`, `studio`, `compare` 등).
+메시지는 `종류(범위): 한국어 요약` 입니다. 범위는 고친 곳의 이름입니다(`core`, `hydro`, `bake`, `cli`, `engine`, `studio`, `compare` 등).
 
 ### 4. 올리고 PR 열기
 
