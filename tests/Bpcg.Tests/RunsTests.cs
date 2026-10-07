@@ -8,17 +8,25 @@ namespace Bpcg.Tests;
 public sealed class RunsTests
 {
     [Theory]
-    [InlineData(0, -1)]
-    [InlineData(1, 1)]
-    [InlineData(2, 2)]
-    [InlineData(4, 4)]
-    public void ApplyThreadsConfiguresParallelKernels(long configured, int expected)
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void ApplyThreadsConfiguresParallelKernels(long configured)
     {
         Config cfg = Config.LoadConfig("earth", "tiny").WithOverrides(
-            [new System.Collections.Generic.KeyValuePair<string, object?>("profile.compute.numba_threads", configured)]);
+            [
+                new System.Collections.Generic.KeyValuePair<string, object?>(
+                    "profile.compute.numba_threads", configured
+                ),
+            ]
+        );
         int actual = Pipeline.ApplyThreads(cfg);
-        Assert.Equal(configured == 0 ? Environment.ProcessorCount : Math.Min(configured, Environment.ProcessorCount), actual);
-        Assert.Equal(expected < 0 ? Environment.ProcessorCount : expected, Parallelism.MaxDegreeOfParallelism);
+        int expected = configured == 0
+            ? Environment.ProcessorCount
+            : (int)Math.Min(configured, Environment.ProcessorCount);
+        Assert.Equal(expected, actual);
+        Assert.Equal(expected, Parallelism.MaxDegreeOfParallelism);
     }
 
     [Theory]
