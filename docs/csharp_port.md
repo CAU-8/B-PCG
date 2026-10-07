@@ -6,6 +6,16 @@
 
 ## 0. 지금 상태와 다음 할 일
 
+### 단계 5 뒤: Python 판으로 만든 기능 옮기기 (2026-10-08)
+
+- C# 으로 옮기는 동안 Python 판에서 따로 만든 기능을 C# 으로 옮겼습니다. Python 판 원본은 로컬 브랜치 `wip/python-compare-hud-2026-10-08` 에 보관했습니다.
+- 방법 비교([compare.md](compare.md)): `src/Bpcg/Compare/`(방법 11개, 지표, 그림, 실행·캐시), 콘솔 `bpcg compare {methods,run,list,render}`(`src/Bpcg.Cli/CompareCommand.cs`), 스튜디오 `/compare` 화면(`src/bpcg_studio/compare_api.py` 는 파일 읽기와 콘솔 부르기만), 시험 `tests/Bpcg.Tests/CompareTool/`·`tests/test_studio_compare.py`.
+  - 대조: Python 판과 n = 64·96, 시드 0·7 에서 12 개 인스턴스의 고도·연산 과정 지도가 비트 단위로 같습니다. 그림은 matplotlib 판과 눈으로 같습니다(LightSource soft 섞기 식을 옮김).
+  - 옮기며 맞춘 곳: 수력 침식 붓 무게는 `NpReduce.Sum`(numpy pairwise 합)과 `double.Hypot` 을 써야 물방울 경로가 같습니다. 스펙트럼 β 는 rfft 반쪽 평면에서 짝이 있는 열을 두 번 셉니다.
+  - 바꾼 것: 지표는 저장한 float32 고도로 잽니다. 캐시 키의 코드 판은 `Bpcg` 어셈블리 모듈 ID 입니다. 저장소 밖 방법 파일(플러그인)은 옮기지 않았습니다.
+  - 라이브러리에 더한 것: `Flat.FlatHero` 의 `capture` 갈고리(중간 지표 둘을 넘김, 주지 않으면 그대로), `Npz.Read(…, keys)`(고른 항목만 읽음, 예제 .npz 의 글자 배열을 건너뜀).
+- HUD 크기(`engine/Scripts/UiScale.cs`): 화면 배율에 맞춰 창·HUD 를 키우고 `[-]`·`[=]` 로 글자 크기를 바꿉니다(`user://settings.cfg` 에 저장). 엔진 C# 빌드와 형식 검사만 했고, Godot .NET 판이 없는 Mac 에서는 연기 검사(`CheckUiScale`)를 돌리지 못했습니다.
+
 ### 단계 5: 폴더 구조 바꾸기 (2026-10-03)
 
 - 사용자가 정한 방향: 포팅이 끝났다고 보고, `csharp/` 밖의 Python 가운데 같은 일을 하는 C# 이 있는 것은 지우고, `csharp/` 안의 폴더를 저장소 맨 위로 옮깁니다. 이름은 원래 자리에 맞춥니다.

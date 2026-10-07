@@ -93,7 +93,8 @@ public partial class GlobeCamera : Camera3D
             }
             if (_dragged)
             {
-                RotateBy(motion.Relative);
+                // 화면 픽셀 기준 (HUD 배율 UiScale 과 상관없이 같은 손맛)
+                RotateBy(motion.ScreenRelative);
                 GetViewport().SetInputAsHandled();
             }
         }

@@ -105,8 +105,9 @@ public partial class Player : CharacterBody3D
         }
         else if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
         {
-            RotateY(-motion.Relative.X * MouseSensitivityRad);
-            Head.RotateX(-motion.Relative.Y * MouseSensitivityRad);
+            // ScreenRelative: 화면 픽셀 기준이라 HUD 배율(UiScale)을 바꿔도 마우스 감도가 그대로입니다.
+            RotateY(-motion.ScreenRelative.X * MouseSensitivityRad);
+            Head.RotateX(-motion.ScreenRelative.Y * MouseSensitivityRad);
             Vector3 r = Head.Rotation;
             r.X = Mathf.Clamp(r.X, -Mathf.Pi * 0.49f, Mathf.Pi * 0.49f);
             Head.Rotation = r;

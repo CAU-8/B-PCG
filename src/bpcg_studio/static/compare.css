@@ -1,0 +1,110 @@
+/* 방법 비교 화면. 색은 style.css 의 토큰만 씁니다. 계열 색은 지도 색이 아니라 표시용입니다. */
+:root {
+  --fam-procedural: #2a64ad;
+  --fam-simulation: #a35a12;
+  --fam-example: #6b4fa0;
+  --fam-ours: #2f7d3e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fam-procedural: #72aaf0;
+    --fam-simulation: #f0a35e;
+    --fam-example: #b79cf0;
+    --fam-ours: #79d08a;
+  }
+}
+
+.cmp-layout { grid-template-columns: 330px minmax(0, 1fr); }
+.cmp-main { display: grid; gap: 18px; padding-top: 18px; align-content: start; }
+.cmp-main h2 { font-size: 1.05rem; }
+.cmp-main h3 { font-size: 0.98rem; }
+
+.cmp-groups { display: grid; gap: 12px; }
+.cmp-group { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); overflow: hidden; }
+.cmp-group h3 {
+  font-size: 0.86rem; padding: 7px 10px; background: var(--accent-soft); color: var(--fg-strong);
+  display: flex; justify-content: space-between;
+}
+.cmp-group ul { list-style: none; margin: 0; padding: 4px; display: grid; gap: 2px; }
+.cmp-item {
+  width: 100%; display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center;
+  border: 0; background: none; color: var(--fg); text-align: left; padding: 5px 7px;
+  border-radius: 6px; cursor: pointer; font-size: 0.86rem;
+}
+.cmp-item:hover { background: var(--line-soft); }
+.cmp-item[aria-current="true"] { background: var(--accent); color: var(--accent-fg); }
+.cmp-item .t { font-variant-numeric: tabular-nums; font-size: 0.76rem; opacity: 0.8; }
+.fam-dot { width: 10px; height: 10px; border-radius: 50%; }
+.fam-procedural { background: var(--fam-procedural); }
+.fam-simulation { background: var(--fam-simulation); }
+.fam-example { background: var(--fam-example); }
+.fam-ours { background: var(--fam-ours); }
+.fam-chip {
+  display: inline-block; font-size: 0.74rem; font-weight: 700; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid currentColor; margin-right: 6px;
+}
+.fam-chip.procedural { color: var(--fam-procedural); }
+.fam-chip.simulation { color: var(--fam-simulation); }
+.fam-chip.example { color: var(--fam-example); }
+.fam-chip.ours { color: var(--fam-ours); }
+
+.cmp-nav { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cmp-seg { display: inline-flex; gap: 4px; margin-right: 6px; }
+.chip-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+.cmp-figure { display: grid; grid-template-columns: minmax(0, 560px) minmax(220px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .cmp-figure { grid-template-columns: minmax(0, 1fr); } }
+.cmp-imgbox { position: relative; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line-soft); aspect-ratio: 1 / 1; }
+.cmp-imgbox img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.cmp-loading {
+  position: absolute; inset: auto 8px 8px auto; background: var(--card); color: var(--muted);
+  border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font-size: 0.8rem;
+}
+.cmp-figside { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.cmp-legend { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+.cmp-legend .bar { height: 12px; border-radius: 3px; border: 1px solid var(--line); }
+.cmp-legend .ends { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.cmp-legend .sw { display: inline-flex; gap: 6px; align-items: center; margin-right: 10px; }
+.cmp-legend .sw i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.cmp-pre { font-family: var(--mono); font-size: 0.78rem; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); max-height: 260px; overflow: auto; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 0.85rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.cmp-table { border-collapse: collapse; font-size: 0.82rem; width: 100%; }
+.cmp-table th, .cmp-table td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft); text-align: right; white-space: nowrap; }
+.cmp-table th { color: var(--muted); font-weight: 600; cursor: help; position: sticky; top: 0; background: var(--card); }
+.cmp-table th:first-child, .cmp-table td:first-child { text-align: left; }
+.cmp-table td { font-variant-numeric: tabular-nums; }
+.cmp-table tbody tr { cursor: pointer; }
+.cmp-table tbody tr:hover { background: var(--line-soft); }
+.cmp-table tbody tr[aria-current="true"] { background: var(--accent-soft); }
+.cmp-table .unit { font-weight: 400; font-size: 0.72rem; }
+
+.cmp-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.cmp-steps button {
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 999px;
+  padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
+}
+.cmp-steps button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#st-slider { width: 100%; }
+
+.cmp-charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.cmp-chart { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; background: var(--panel); }
+.cmp-chart h4 { font-size: 0.85rem; }
+.cmp-chart svg { width: 100%; max-width: 440px; height: auto; display: block; }
+.cmp-chart .axis { stroke: var(--line); }
+.cmp-chart .line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.cmp-chart text { fill: var(--muted); font-size: 10px; font-family: var(--sans); }
+.cmp-bars { display: grid; gap: 4px; font-size: 0.78rem; }
+.cmp-bars .row { display: grid; grid-template-columns: minmax(80px, 140px) 1fr auto; gap: 8px; align-items: center; }
+.cmp-bars .lbl { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-bars .b { height: 10px; background: var(--accent); border-radius: 2px; min-width: 1px; }
+.cmp-bars .v { font-variant-numeric: tabular-nums; color: var(--fg); }
+
+.cmp-run { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.cmp-run summary { cursor: pointer; padding: 8px 10px; font-weight: 600; }
+.cmp-run-body { display: grid; gap: 10px; padding: 0 10px 12px; }
+.cmp-progress { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+.cmp-progress div { height: 100%; width: 0; background: var(--accent); transition: width 0.3s; }
+.cmp-log { font-family: var(--mono); font-size: 0.72rem; max-height: 200px; overflow: auto; white-space: pre-wrap; color: var(--muted); background: var(--panel); border-radius: 6px; padding: 6px 8px; }

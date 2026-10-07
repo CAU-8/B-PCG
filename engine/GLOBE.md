@@ -49,6 +49,7 @@ $G --path engine res://scenes/globe.tscn -- --baked-dir=$PWD/out/tiny/corridor  
 | F | 히어로 유역으로 날아가기 (1.2 초) |
 | Tab / H | 패널 / 도움말 숨기기 |
 | M | 회랑으로 들어가기 (`scenes/main.tscn`) |
+| - / = | 글자·패널 크기 10 % 씩 줄이기 / 키우기 (회랑과 같은 배율, [README](README.md) '화면 크기') |
 
 ## 화면
 

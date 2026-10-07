@@ -125,8 +125,12 @@ public static class Flat
         return o;
     }
 
-    /// <summary>가짜 경계조건으로 평면 히어로를 만듭니다 (flat_hero).</summary>
-    public static HeroState FlatHero(Config cfg, Action<string>? log = null)
+    /// <summary>
+    /// 가짜 경계조건으로 평면 히어로를 만듭니다 (flat_hero). capture 를 주면 안에서만 쓰는 중간 지도
+    /// ("z_pre" 미리 푼 거친 지표, "z_init" 거친 격자 먼저 풀기의 시작 지형, 각각 (N,) [m])를 넘겨 줍니다
+    /// (방법 비교의 연산 과정 기록용, 결과는 바뀌지 않음).
+    /// </summary>
+    public static HeroState FlatHero(Config cfg, Action<string>? log = null, Action<string, double[]>? capture = null)
     {
         long tAll = Stopwatch.GetTimestamp();
         var sec = new OrderedDictionary<string, object?>();
@@ -157,6 +161,7 @@ public static class Flat
         long t = Stopwatch.GetTimestamp();
         double[] zPre = PresolveSurface(cfg, px, py);
         sec["presolve"] = Seconds(t);
+        capture?.Invoke("z_pre", zPre);
 
         t = Stopwatch.GetTimestamp();
         byte[] tid = Enumerable.Repeat(TemplateId, n).ToArray();
@@ -183,6 +188,10 @@ public static class Flat
         int maxIter = Pipeline.SolverMaxIter(cfg, "hero");
         (double[]? zInit, OrderedDictionary<string, object?> warm) = Warmstart.CoarseWarmStart(
             graph, isOutlet, [OutletZM], u, runoffEff, columns, cfg, maxIter: maxIter, log: log);
+        if (zInit is not null)
+        {
+            capture?.Invoke("z_init", zInit);
+        }
         StageResult st = Pipeline.RunStages2To4(
             graph, isOutlet, [OutletZM], u, runoffEff, precip, columns, cfg, log: log, runoff: runoff,
             temperatureSeaC: [TemperatureSeaC], maxIter: maxIter, zInit: zInit);

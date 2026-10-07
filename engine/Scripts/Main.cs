@@ -59,6 +59,7 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
+        UiScale.Apply(GetWindow());
         Terrain = GetNode<HeightmapTerrain>("Terrain");
         Baked = GetNode<BakedLayers>("Baked");
         Player = GetNode<Player>("Player");
@@ -112,6 +113,11 @@ public partial class Main : Node3D
             if (code == Key.N)
             {
                 OpenStart();
+                return;
+            }
+            if (UiScale.HandleKey(GetWindow(), code))
+            {
+                UpdateStatus();
                 return;
             }
         }
@@ -330,6 +336,11 @@ public partial class Main : Node3D
         {
             string at = _entranceIndex < 0 ? "" : $" (지금 {_entranceIndex + 1} 번)";
             lines.Add($"동굴 입구 {Baked.EntrancesInside.Count} 곳{at} · T 로 옮겨 가기");
+        }
+        string notice = UiScale.Notice();
+        if (notice.Length > 0)
+        {
+            lines.Add(notice);
         }
         Hud.SetStatus(string.Join("\n", lines));
     }

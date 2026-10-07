@@ -11,6 +11,7 @@ namespace Bpcg.Engine;
 /// 왼쪽 위: 지금 상태 (모드, 속력, 위치, 발밑 암석, 단면). 왼쪽 아래: 조작 도움말 (H 로 숨김).
 /// 오른쪽: 레이어 패널. 줄마다 켜기·끄기 버튼과 '만 보기' 버튼이 있고, 아래에 '모두 보기',
 /// 색 바꾸기, 손전등, 지구본, 처음 화면 버튼이 있습니다 (Tab 으로 숨김). 버튼을 누르려면 Esc 로 마우스를 놓습니다.
+/// 크기는 <see cref="UiScale"/> 가 화면 배율에 맞춰 키웁니다 ([-]·[=] 로 더 바꿈).
 /// </remarks>
 public partial class Hud : CanvasLayer
 {
@@ -25,6 +26,7 @@ public partial class Hud : CanvasLayer
         [X] 단면 켜기·끄기 (눈앞에 자르는 면)    [ [ ] ] 단면 당기기·밀기
         [T] 다음 동굴 입구로    [Shift+T] 이전 입구    [G] 색: 자연색 ↔ 지질도    [F] 손전등
         [M] 지구본 (행성 전체)    [N] 처음 화면 (새 행성)    [Tab] 레이어 패널 숨기기    [H] 도움말 숨기기
+        [-·=] 글자 크기
         """;
 
     private Label _status = null!;

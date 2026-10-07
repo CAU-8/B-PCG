@@ -23,6 +23,7 @@ uv run bpcg studio --no-browser    # 브라우저를 열지 않음
 | 부분 | 하는 일 |
 |---|---|
 | 볼 결과 | 결과를 고릅니다. 스튜디오에서 돌린 실행(`out/studio/`)과, `bpcg all` 로 만든 다른 실행(`out/<이름>/`, 예: `out/earth_v2`)이 함께 나옵니다. 다른 실행은 읽기 전용입니다. 폴더 이름에 한글·공백이 있어도 열리고(`out/지형 테스트`), 경로 문자(`/`, `\`, `:`)나 앞뒤 공백이 있는 폴더는 목록에서 빠집니다(`/api/runs` 의 `skipped`) |
+| 방법 비교 | 기존 지형 생성 방법론과 B-PCG 를 같은 시드로 비교하고 연산 과정을 보는 화면(`/compare`)을 엽니다. [compare.md](compare.md) 5장 |
 | Godot로 보기 | 고른 결과의 회랑 파일을 `engine/baked/` 로 복사하고 Godot 창을 띄워 걸어 봅니다 |
 | 편집기로 열기 | 같은 복사 뒤 Godot 편집기를 엽니다 |
 | 상태 글 | Godot 를 찾았는지, 지금 `engine/baked/` 에 무엇이 들어 있는지 보여 줍니다. 스튜디오가 복사했으면 실행 이름(`engine/baked/studio_run.json`), 명령(`bpcg bake --engine`)으로 구웠으면 "명령으로 구움" 과 프로필·커밋·설정 해시, 디테일 높이맵·지구본(`globe/globe.json`)이 있는지를 `engine/baked/manifest.json` 에서 읽습니다. 스튜디오가 복사한 뒤 명령으로 다시 구웠으면(설정 해시가 다르거나 manifest 가 더 새로움) 명령 쪽을 보여 줍니다 |

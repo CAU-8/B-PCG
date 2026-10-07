@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 
 namespace Bpcg.IO;
@@ -114,8 +115,11 @@ public static class Npz
         Write(fs, entries);
     }
 
-    /// <summary>.npz 를 읽습니다. 이름은 '.npy' 를 뗀 키이고 순서는 zip 항목 순서입니다.</summary>
-    public static OrderedDictionary<string, NpyArray> Read(Stream stream)
+    /// <summary>
+    /// .npz 를 읽습니다. 이름은 '.npy' 를 뗀 키이고 순서는 zip 항목 순서입니다.
+    /// keys 를 주면 그 항목만 읽습니다(나머지는 dtype 도 보지 않음).
+    /// </summary>
+    public static OrderedDictionary<string, NpyArray> Read(Stream stream, IReadOnlyCollection<string>? keys = null)
     {
         var result = new OrderedDictionary<string, NpyArray>();
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
@@ -124,6 +128,10 @@ public static class Npz
             string key = entry.FullName.EndsWith(".npy", StringComparison.Ordinal)
                 ? entry.FullName[..^4]
                 : entry.FullName;
+            if (keys is not null && !keys.Contains(key))
+            {
+                continue;
+            }
             using Stream s = entry.Open();
             var buf = new MemoryStream();
             s.CopyTo(buf);
@@ -134,10 +142,10 @@ public static class Npz
     }
 
     /// <summary>파일에서 읽습니다.</summary>
-    public static OrderedDictionary<string, NpyArray> ReadFile(string path)
+    public static OrderedDictionary<string, NpyArray> ReadFile(string path, IReadOnlyCollection<string>? keys = null)
     {
         using FileStream fs = File.OpenRead(path);
-        return Read(fs);
+        return Read(fs, keys);
     }
 }
 
