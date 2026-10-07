@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Numerics;
@@ -21,7 +20,7 @@ public static class Caves
         int[] nbr, double[] z, double[] zk, bool[] soluble, int m, double twoR, double band, double[] levelOut, byte[] entrance)
     {
         const int nSlots = CellGraph.NSlots;
-        Parallel.For(0, z.Length, c =>
+        Parallelism.For(0, z.Length, c =>
         {
             int bits = 0;
             for (int k = 0; k < m; k++)

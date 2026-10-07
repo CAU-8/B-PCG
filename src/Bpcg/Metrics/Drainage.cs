@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Hydro;
@@ -63,7 +62,7 @@ public static class Drainage
         int[] nbr = graph.Nbr;
         double[] dist = graph.Dist;
         double[] pos = graph.Pos;
-        Parallel.For(0, receiver.Length, c =>
+        Parallelism.For(0, receiver.Length, c =>
         {
             long r = receiver[c];
             if (r == c)
@@ -281,7 +280,7 @@ public static class Drainage
             throw new ArgumentException($"strata_bottom 은 ({n}, L) 이어야 합니다");
         }
         bool[] o = new bool[n];
-        Parallel.For(0, n, c =>
+        Parallelism.For(0, n, c =>
         {
             long r = receiver[c];
             if (r == c)
@@ -414,7 +413,7 @@ public static class Drainage
         }
         (int faceCells, int ny, int nx) = FaceLayout(graph);
         sbyte[] flag = new sbyte[n];
-        Parallel.For(0, n, c0 =>
+        Parallelism.For(0, n, c0 =>
         {
             flag[c0] = -1;
             if (!isRiver[c0])

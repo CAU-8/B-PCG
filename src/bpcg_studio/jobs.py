@@ -6,7 +6,7 @@
     job.log    파이프라인과 그림 스크립트가 찍은 줄 전체
     planet/ hero/ corridor/ globe/   C# 콘솔 `all` 의 결과 (figures/ 는 그림 스크립트가 돌 때만)
 
-명령: [dotnet, build, src/Bpcg.Cli, -c, Release …] (C# 콘솔을 바뀐 것만 빌드)
+명령: Release DLL이 없을 때만 [dotnet, build, src/Bpcg.Cli, -c, Release …]
 → [dotnet, Bpcg.Cli.dll, all, --planet, --profile, --seed, --out, (--flat), --set 키=값 …].
 결과 그림 스크립트(analysis/figures/render_results.py)는 아직 C# 결과를 읽게 고치지 않아
 FIGURES_READY 가 False 이고, 그림 단계는 건너뜁니다.
@@ -34,7 +34,7 @@ from typing import Any
 
 from bpcg_studio.bundle import write_json
 from bpcg_studio.config import Config, checked_overrides, load_config
-from bpcg_studio.csharp import CSharpError, build_command, cli_command
+from bpcg_studio.csharp import CLI_DLL, CSharpError, build_command, cli_command
 from bpcg_studio.names import run_folder_name
 from bpcg_studio.params import planet_names, profile_names
 from bpcg_studio.paths import OUT, ROOT
@@ -47,7 +47,6 @@ FIGURE_SCRIPT = ROOT / "analysis" / "figures" / "render_results.py"
 # 그림 스크립트가 C# 결과 묶음을 읽게 고쳐지면 True 로 바꿉니다 (지금은 Python 생성기를 import 함).
 FIGURES_READY = False
 FIGURES_SKIP_MSG = "결과 그림 스크립트는 아직 C# 결과를 읽게 고치지 않아 건너뜁니다"
-COMMAND_NAMES = ("C# 빌드", "파이프라인", "그림 스크립트")
 LOG_KEEP = 5_000  # 메모리에 남길 기록 줄 수 (파일에는 모두)
 SAVE_EVERY_S = 2.0  # job.json 을 이 간격보다 자주 쓰지 않음 (단계가 바뀔 때는 바로)
 CANCEL_WAIT_S = 5.0
@@ -443,7 +442,7 @@ class JobManager:
 
     def commands_for(self, spec: dict, run_dir: Path) -> list[list[str]]:
         try:
-            build = build_command()
+            build = build_command() if not CLI_DLL.is_file() else None
             cmd = cli_command(["all", "--planet", spec["planet"]])
         except CSharpError as e:
             raise JobError(str(e), status=500) from None
@@ -452,7 +451,7 @@ class JobManager:
             cmd.append("--flat")
         for key, value in spec["overrides"].items():
             cmd += ["--set", f"{key}={toml_literal(value)}"]
-        out = [build, cmd]
+        out = [build, cmd] if build is not None else [cmd]
         if spec["figures"] and not spec["flat"] and FIGURES_READY:
             out.append([self.python, "-u", str(FIGURE_SCRIPT), str(run_dir)])
         return out
@@ -549,7 +548,7 @@ class JobManager:
                 job.tracker.start(job.started)
             job.save(force=True)
             with open(log_path, "a", encoding="utf-8") as log_fh:
-                for i, cmd in enumerate(job.commands):
+                for cmd in job.commands:
                     head = "[스튜디오] 실행: " + " ".join(_quote(a) for a in cmd)
                     log_fh.write(head + "\n")
                     job.add_line(head)
@@ -561,7 +560,13 @@ class JobManager:
                         state, error = "cancelled", "사용자가 취소했습니다"
                         break
                     if rc != 0:
-                        what = COMMAND_NAMES[min(i, len(COMMAND_NAMES) - 1)]
+                        what = (
+                            "C# 빌드"
+                            if cmd[1] == "build"
+                            else "파이프라인"
+                            if cmd[1] == str(CLI_DLL)
+                            else "그림 스크립트"
+                        )
                         tail = " / ".join(list(job.log)[-3:])
                         state, error = "failed", f"{what}이 종료 코드 {rc} 로 멈췄습니다: {tail}"
                         break

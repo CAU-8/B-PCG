@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.IO;
@@ -233,7 +232,7 @@ public static class Globe
         }
         double[] tanT = Array.ConvertAll(t, v => Math.Tan(v * Math.PI / 4.0));
         double[] o = new double[6 * r * r * 3];
-        Parallel.For(0, 6, f =>
+        Parallelism.For(0, 6, f =>
         {
             for (int row = 0; row < r; row++)
             {
@@ -263,7 +262,7 @@ public static class Globe
         int[] fo = new int[m];
         int[] ro = new int[m];
         int[] co = new int[m];
-        Parallel.For(0, m, i =>
+        Parallelism.For(0, m, i =>
         {
             ReadOnlySpan<double> d = dirs.AsSpan(i * 3, 3);
             int best = 0;
@@ -482,7 +481,7 @@ public static class Globe
             int nc = centers.Length / 3;
             _k = Math.Min(KNearest, unit.Length / 3);
             _knn = new int[nc * _k];
-            Parallel.For(0, nc, i =>
+            Parallelism.For(0, nc, i =>
             {
                 (_, int[] idx) = _tree.Query(centers.AsSpan(i * 3, 3), _k);
                 Array.Copy(idx, 0, _knn, i * _k, _k);
@@ -574,7 +573,7 @@ public static class Globe
             }
             int k = Math.Min(KNearest, z.Length);
             double[] val = new double[uniq.Length];
-            Parallel.For(0, uniq.Length, q =>
+            Parallelism.For(0, uniq.Length, q =>
             {
                 (_, int[] idx) = _tree.Query(d.AsSpan(uniq[q] * 3, 3), k);
                 double[] zz = idx.Select(i => z[i]).ToArray();

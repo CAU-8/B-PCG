@@ -90,10 +90,8 @@ public static class Pipeline
         };
     }
 
-    /// <summary>
-    /// 설정 profile.compute.numba_threads 를 계산 스레드 수로 씁니다 (0 = 모든 코어). 쓴 스레드 수.
-    /// </summary>
-    /// <remarks>TODO(port): C# 쪽 Parallel.For 는 아직 이 값으로 스레드 수를 제한하지 않습니다(진단값만 같음).</remarks>
+    /// <summary>기존 profile.compute.numba_threads 를 C# 병렬 커널의 최대 실행 수로 씁니다 (0 = 자동).</summary>
+    /// <remarks>기존 설정 이름을 유지해 Python 설정과 하위 호환합니다.</remarks>
     public static int ApplyThreads(Config cfg)
     {
         Section profile = cfg.Sec("profile");
@@ -107,7 +105,9 @@ public static class Pipeline
             throw new ArgumentException($"profile.compute.numba_threads 는 0 이상이어야 합니다: {want}");
         }
         int top = Environment.ProcessorCount;
-        return want == 0 ? top : (int)Math.Min(want, top);
+        int threads = want == 0 ? top : (int)Math.Min(want, top);
+        Parallelism.Configure(threads);
+        return threads;
     }
 
     private static double[] Vector(double[] x, int n, string name)

@@ -140,7 +140,7 @@ public static class Finder
             return o;
         }
         var dry = new KdTree(dryPts.ToArray());
-        System.Threading.Tasks.Parallel.For(0, cells.Length, k =>
+        Parallelism.For(0, cells.Length, k =>
         {
             ReadOnlySpan<double> q = graph.Pos.AsSpan((int)cells[k] * 3, 3);
             double total = all.CountBallPoint(q, chord);

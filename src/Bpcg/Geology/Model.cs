@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Numerics;
 
@@ -431,7 +430,7 @@ public static class Model
         int n = strataBottom.Length / nLayers;
         int m = CheckZ(n, z);
         int[] output = new int[z.Length];
-        Parallel.For(0, n, c =>
+        Parallelism.For(0, n, c =>
         {
             for (int k = 0; k < m; k++)
             {
@@ -451,7 +450,7 @@ public static class Model
         }
         int m = CheckZ(n, z);
         byte[] output = new byte[z.Length];
-        Parallel.For(0, n, c =>
+        Parallelism.For(0, n, c =>
         {
             for (int k = 0; k < m; k++)
             {
@@ -477,7 +476,7 @@ public static class Model
             }
         }
         byte[] output = new byte[z.Length];
-        Parallel.For(0, z.Length, k =>
+        Parallelism.For(0, z.Length, k =>
         {
             int c = (int)cells[k];
             output[k] = strataRock[(c * (nLayers + 1)) + LayerIndexAt(strataBottom, nLayers, c, z[k])];

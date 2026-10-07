@@ -1,6 +1,6 @@
 using System;
 using System.Numerics;
-using System.Threading.Tasks;
+using Bpcg.Core;
 
 namespace Bpcg.Numerics;
 
@@ -135,7 +135,7 @@ public static class Fft
     {
         int nh = (nx / 2) + 1;
         var half = new Complex[ny * nh];
-        Parallel.For(0, ny, j =>
+        Parallelism.For(0, ny, j =>
         {
             var row = new Complex[nx];
             for (int i = 0; i < nx; i++)
@@ -145,7 +145,7 @@ public static class Fft
             Complex[] f = Transform(row, false);
             Array.Copy(f, 0, half, j * nh, nh);
         });
-        Parallel.For(0, nh, i =>
+        Parallelism.For(0, nh, i =>
         {
             var col = new Complex[ny];
             for (int j = 0; j < ny; j++)
@@ -166,7 +166,7 @@ public static class Fft
     {
         int nh = (nx / 2) + 1;
         var half = (Complex[])spec.Clone();
-        Parallel.For(0, nh, i =>
+        Parallelism.For(0, nh, i =>
         {
             var col = new Complex[ny];
             for (int j = 0; j < ny; j++)
@@ -180,7 +180,7 @@ public static class Fft
             }
         });
         double[] o = new double[ny * nx];
-        Parallel.For(0, ny, j =>
+        Parallelism.For(0, ny, j =>
         {
             var full = new Complex[nx];
             for (int k = 0; k < nh && k < nx; k++)

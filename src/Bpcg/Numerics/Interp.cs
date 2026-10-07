@@ -1,5 +1,5 @@
 using System;
-using System.Threading.Tasks;
+using Bpcg.Core;
 
 namespace Bpcg.Numerics;
 
@@ -53,7 +53,7 @@ public static class Interp
             throw new ArgumentException("격자와 값의 모양이 맞지 않습니다");
         }
         double[] output = new double[qy.Length];
-        Parallel.For(0, qy.Length, k =>
+        Parallelism.For(0, qy.Length, k =>
         {
             double y = qy[k];
             double x = qx[k];
