@@ -75,7 +75,8 @@ def test_single_and_auto_thread_results_match(csharp_cli, tmp_path):
                         "uplift_m_per_yr.npy",
                         "temperature_c.npy",
                         "precip_m_per_yr.npy",
-                        "discharge_m3_per_yr.npy", "water_table_m.npy",
+                        "discharge_m3_per_yr.npy",
+                        "water_table_m.npy",
                     }:
                         assert np.isfinite(got).all(), expected.relative_to(baseline)
                 else:

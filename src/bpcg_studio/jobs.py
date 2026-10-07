@@ -561,8 +561,10 @@ class JobManager:
                         break
                     if rc != 0:
                         what = (
-                            "C# 빌드" if cmd[1] == "build"
-                            else "파이프라인" if cmd[1] == str(CLI_DLL)
+                            "C# 빌드"
+                            if cmd[1] == "build"
+                            else "파이프라인"
+                            if cmd[1] == str(CLI_DLL)
                             else "그림 스크립트"
                         )
                         tail = " / ".join(list(job.log)[-3:])
