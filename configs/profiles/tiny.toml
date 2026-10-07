@@ -1,13 +1,13 @@
-# 테스트·CI 프로필: 몇 초 안에 파이프라인 전체를 한 번 돕니다. 결과의 모양은 보지 않습니다.
+# 시험·CI 프로필: 아주 작은 크기로 모든 단계가 끝까지 도는지만 봅니다. 칸이 커서 지형 모양은 보지 않습니다.
 
 [grid]
 coarse_n_per_face = 16
-l0_n_per_face = 32
+l0_n_per_face = 32             # 행성 지도(L0) 칸 약 310 km, 6,144칸
 
 [hero]
-max_flow_iterations = 400      # 히어로는 칸이 많아 반복이 더 필요 (1280² 에서 약 450~600회)
+max_flow_iterations = 400      # 히어로는 칸이 많아 반복이 더 필요 (1280² 칸에서 약 450~600회)
 spacing_m = 100.0
-size_m = 6_400.0
+size_m = 6_400.0               # 한 변 6.4 km, 64 × 64칸
 
 [corridor]
 voxel_m = 8.0
@@ -15,4 +15,4 @@ width_m = 400.0
 length_m = 1_200.0
 
 [compute]
-numba_threads = 0 # 기존 이름 유지: 0 = Auto, 1 = Single Thread, 그 외 = Manual 최대 수
+numba_threads = 0 # 옛 파이썬(Numba) 판의 이름을 그대로 씀. 1 = 한 스레드, 2 이상 = 쓸 스레드 수의 상한 (코어 수까지)

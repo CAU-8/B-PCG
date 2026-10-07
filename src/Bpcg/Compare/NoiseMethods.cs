@@ -20,10 +20,10 @@ public static class NoiseMethods
     private const long StreamOffset = StreamBase + 102;
     private const double OffsetSpan = 1000.0; // 옥타브마다 좌표를 옮기는 범위 (노이즈 칸 단위)
 
-    public static readonly Param Wavelength = new("wavelength_m", 6000.0, "가장 큰 무늬의 파장", Lo: 1.0, Unit: "m");
-    public static readonly Param Octaves = new("octaves", 8L, "더하는 노이즈 층 수", Kind: "int", Lo: 1, Hi: 16);
-    public static readonly Param Lacunarity = new("lacunarity", 2.0, "층마다 주파수 배율", Lo: 1.1, Hi: 4.0);
-    public static readonly Param Gain = new("gain", 0.5, "층마다 진폭 배율 (persistence)", Lo: 0.05, Hi: 1.0);
+    public static readonly Param Wavelength = new("wavelength_m", 6000.0, "가장 큰 물결의 파장 (산 하나의 크기쯤)", Lo: 1.0, Unit: "m");
+    public static readonly Param Octaves = new("octaves", 8L, "겹쳐 더하는 물결 수 (겹마다 파장이 짧아짐)", Kind: "int", Lo: 1, Hi: 16);
+    public static readonly Param Lacunarity = new("lacunarity", 2.0, "겹마다 파장을 몇 배 짧게 하나 (2면 반씩)", Lo: 1.1, Hi: 4.0);
+    public static readonly Param Gain = new("gain", 0.5, "겹마다 물결 높이를 몇 배로 하나 (0.5면 반씩, persistence)", Lo: 0.05, Hi: 1.0);
 
     /// <summary>fbm 과 침식 방법이 같이 쓰는 매개변수.</summary>
     public static readonly Param[] FbmParams = [Wavelength, Octaves, Lacunarity, Gain];
@@ -201,7 +201,7 @@ public static class NoiseMethods
         "fBm 노이즈",
         "procedural",
         "Galin 2019 3.1.3; Musgrave 외 1989, Ebert 외 1998",
-        "여러 주파수의 그래디언트 노이즈를 더한 단일 프랙탈. 산업용 도구에서 가장 흔한 방식",
+        "크기가 다른 무작위 물결(그래디언트 노이즈) 여러 겹을 더한 지형. 게임 지형 도구에서 가장 흔한 방식",
         FbmParams,
         (grid, seed, p, ctx) =>
         {
@@ -226,12 +226,12 @@ public static class NoiseMethods
         "능선 노이즈",
         "procedural",
         "Galin 2019 3.1.3 (그림 7·8); Ebert 외 1998",
-        "노이즈 절댓값을 뒤집어 산마루 선을 만들고, 앞 층 값으로 다음 층을 가중",
+        "물결의 절댓값을 뒤집어 날카로운 산마루 선을 만들고, 앞 겹이 높은 곳에서 다음 겹을 키움",
         [
             Wavelength, Octaves, Lacunarity,
-            new Param("h", 1.0, "층별 진폭 지수 H (a = lacunarity^−H·o)", Lo: 0.0, Hi: 2.0),
-            new Param("offset", 1.0, "능선 높이 기준", Lo: 0.0, Hi: 2.0),
-            new Param("ridge_gain", 2.0, "앞 층 신호로 다음 층을 키우는 배율", Lo: 0.0, Hi: 8.0),
+            new Param("h", 1.0, "겹마다 물결 높이를 줄이는 지수 H (o번째 겹 높이 = lacunarity^−H·o)", Lo: 0.0, Hi: 2.0),
+            new Param("offset", 1.0, "산마루로 뒤집을 기준 높이", Lo: 0.0, Hi: 2.0),
+            new Param("ridge_gain", 2.0, "앞 겹이 높은 곳에서 다음 겹을 얼마나 키우나", Lo: 0.0, Hi: 8.0),
         ],
         (grid, seed, p, ctx) =>
         {
@@ -256,11 +256,11 @@ public static class NoiseMethods
         "다중 프랙탈",
         "procedural",
         "Galin 2019 3.1.3 (다중 프랙탈 식); Ebert 외 1998",
-        "낮은 곳은 고주파를 줄여 평야를, 높은 곳은 키워 거친 산을 만드는 혼합 다중 프랙탈",
+        "낮은 곳은 잔 물결을 줄여 평야로, 높은 곳은 잔 물결을 키워 거친 산으로 만드는 방식",
         [
             Wavelength, Octaves, Lacunarity,
-            new Param("h", 0.25, "층별 진폭 지수 H", Lo: 0.0, Hi: 2.0),
-            new Param("offset", 0.7, "노이즈에 더하는 값 (클수록 거칠어짐)", Lo: 0.0, Hi: 2.0),
+            new Param("h", 0.25, "겹마다 물결 높이를 줄이는 지수 H", Lo: 0.0, Hi: 2.0),
+            new Param("offset", 0.7, "물결에 더하는 값 (클수록 거칠어짐)", Lo: 0.0, Hi: 2.0),
         ],
         (grid, seed, p, ctx) =>
         {
@@ -285,11 +285,11 @@ public static class NoiseMethods
         "비튼 fBm",
         "procedural",
         "Galin 2019 3.1.3 (영역 비틀기, 그림 8); de Carpentier & Bidarra 2009",
-        "낮은 주파수 벡터 노이즈로 좌표를 비튼 뒤 fBm 을 읽어 규칙적인 무늬를 깸",
+        "느린 물결로 좌표를 비튼 뒤 fBm 을 읽어, 규칙적인 무늬를 흐르는 듯한 무늬로 바꿈",
         [
             .. FbmParams,
-            new Param("warp", 0.6, "비트는 세기 (가장 큰 파장 대비)", Lo: 0.0, Hi: 4.0),
-            new Param("warp_octaves", 4L, "비틀기 노이즈 층 수", Kind: "int", Lo: 1, Hi: 8),
+            new Param("warp", 0.6, "좌표를 비트는 세기 (가장 큰 파장에 대한 비율)", Lo: 0.0, Hi: 4.0),
+            new Param("warp_octaves", 4L, "좌표를 비트는 물결의 겹 수", Kind: "int", Lo: 1, Hi: 8),
         ],
         (grid, seed, p, ctx) =>
         {

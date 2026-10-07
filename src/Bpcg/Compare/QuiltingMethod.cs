@@ -261,13 +261,13 @@ public static class QuiltingMethod
         "예제 패치 합성",
         "example",
         "Galin 2019 5.1 (그림 26·27); Zhou 외 2007, Efros & Freeman 2001",
-        "실제 DEM 조각을 오차가 가장 작은 경계선으로 이어 붙임. 국소는 진짜, 물길은 보장 없음",
+        "진짜 지형 조각을 이음매가 가장 덜 보이는 선으로 이어 붙임. 조각 안은 진짜지만 물길이 이어진다는 보장은 없음",
         [
             new Param("exemplar", "lope", "예제 지형: lope, rabi 또는 .npz 경로 (키 z, dx)", Kind: "str"),
-            new Param("patch_px", 48L, "패치 한 변 (칸)", Kind: "int", Lo: 8, Hi: 512),
-            new Param("overlap_px", 10L, "겹침 폭 (칸)", Kind: "int", Lo: 1, Hi: 128),
-            new Param("candidates", 64L, "자리마다 비교할 후보 수", Kind: "int", Lo: 1, Hi: 4096),
-            new Param("relative", true, "겹침 평균 높이를 맞춰 붙이기", Kind: "bool"),
+            new Param("patch_px", 48L, "붙이는 조각 한 변 (칸)", Kind: "int", Lo: 8, Hi: 512),
+            new Param("overlap_px", 10L, "조각끼리 겹치는 폭 (칸)", Kind: "int", Lo: 1, Hi: 128),
+            new Param("candidates", 64L, "자리마다 견줘 볼 조각 후보 수 (많을수록 이음매가 덜 보이지만 느림)", Kind: "int", Lo: 1, Hi: 4096),
+            new Param("relative", true, "겹치는 부분의 평균 높이를 맞춰 붙이기", Kind: "bool"),
             new Param("heights", "exemplar", "높이: exemplar 는 예제 높이 그대로(최저 0), grid 는 grid.relief_m 으로 맞춤", Kind: "str", Choices: ["exemplar", "grid"]),
         ],
         (grid, seed, p, ctx) =>

@@ -377,7 +377,11 @@ def make_handler(app: Studio, port: int) -> type[BaseHTTPRequestHandler]:
                     run_dir = resolve_run(key, app.out_dir)
                     corridor = run_dir / "corridor"
                     if not (corridor / "manifest.json").exists():
-                        raise JobError("이 실행에는 회랑(corridor/) 결과가 없습니다", status=409)
+                        raise JobError(
+                            "이 실행에는 회랑(corridor/) 결과가 없습니다. "
+                            "굽기까지 끝난 실행을 고르세요",
+                            status=409,
+                        )
                 app.godot.start(key, corridor, mode)
                 self._json(app.godot.status(), 202)
             else:

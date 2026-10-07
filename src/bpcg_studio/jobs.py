@@ -91,9 +91,15 @@ def validate_request(req: dict) -> dict:
     planet = str(req.get("planet") or "earth")
     profile = str(req.get("profile") or "laptop")
     if planet not in planet_names():
-        raise JobError(f"행성 설정 '{planet}' 이 없습니다")
+        raise JobError(
+            f"행성 설정 '{planet}' 이 없습니다. configs/planets/ 에 있는 이름: "
+            + ", ".join(planet_names())
+        )
     if profile not in [p["name"] for p in profile_names()]:
-        raise JobError(f"프로필 '{profile}' 이 없습니다")
+        raise JobError(
+            f"프로필 '{profile}' 이 없습니다. configs/profiles/ 에 있는 이름: "
+            + ", ".join(p["name"] for p in profile_names())
+        )
     try:
         seed = int(req.get("seed", 0))
     except (TypeError, ValueError):
@@ -464,7 +470,9 @@ class JobManager:
         """
         spec = validate_request(request)
         if (cur := self.active()) is not None:
-            raise JobError(f"이미 도는 실행이 있습니다: {cur.id}", status=409)
+            raise JobError(
+                f"이미 도는 실행이 있습니다: {cur.id}. 끝나거나 멈춘 뒤 다시 누르세요", status=409
+            )
         if (other := self._foreign_active()) is not None:
             raise JobError(
                 f"같은 out/ 을 쓰는 다른 스튜디오 서버(pid {other.get('server_pid')})가 실행 "

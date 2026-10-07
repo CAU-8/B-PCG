@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using Bpcg.Core;
 using Bpcg.Geology;
@@ -287,7 +288,7 @@ public static class Pipeline
 
         // --- 2단계: 정상상태 솔버
         long t = Stopwatch.GetTimestamp();
-        Say(log, $"[2단계] 솔버 시작: 칸 {n}, 출구 {isOutlet.Count(b => b)}");
+        Say(log, $"[2단계] 솔버 시작: 칸 {LogText.N(n)}개, 물이 빠지는 출구 칸 {LogText.N(isOutlet.Count(b => b))}개");
         SolverResult res = Solver.SolveSteadyState(
             graph, isOutlet, zOutlet, u, rEff, columns, cfg, zInit, inflow, maxIter, Every(log, SolverLogEvery));
         sec["solver"] = Seconds(t);
@@ -296,8 +297,9 @@ public static class Pipeline
             u = res.UpliftEffective;
         }
         OrderedDictionary<string, object?> sd = res.Diag();
-        Say(log, $"[2단계] 솔버 끝: 반복 {sd["iterations"]}, 수렴 {((bool)sd["converged"]! ? "True" : "False")}, "
-            + $"고정 칸 {sd["n_frozen"]}, {(double)sec["solver"]!:F2} s");
+        // '수렴 못 함' 은 스튜디오 경고(progress.py WARNINGS)가 찾는 글자입니다.
+        Say(log, $"[2단계] 솔버 끝: 반복 {sd["iterations"]}번, {((bool)sd["converged"]! ? "수렴함" : "반복 상한까지 수렴 못 함")}, "
+            + $"방향을 묶은 칸 {LogText.N((long)sd["n_frozen"]!)}개, {(double)sec["solver"]!:F2} s");
 
         // --- 3단계: 선상지 → 물길만 다시
         t = Stopwatch.GetTimestamp();
@@ -340,7 +342,7 @@ public static class Pipeline
             slope = res.Slope;
         }
         sec["fans"] = Seconds(t);
-        Say(log, $"[3단계] 선상지 {apexes.Count}개, 올린 칸 {fan.Count(b => b)}, 물길 바뀐 칸 {nRerouted}");
+        Say(log, $"[3단계] 선상지 {apexes.Count}개, 흙을 쌓아 올린 칸 {LogText.N(fan.Count(b => b))}개, 물길이 바뀐 칸 {LogText.N(nRerouted)}개");
 
         if (zSeafloor is not null)
         {
@@ -506,8 +508,8 @@ public static class Pipeline
             ["caves"] = cavesDiag,
             ["z_land_max_m"] = anyLand ? zLandMax : double.NaN,
         };
-        string caveText = "{" + string.Join(", ", caveCells.Select(kv => $"'{kv.Key}': {kv.Value}")) + "}";
-        Say(log, $"[4단계] 강 칸 {isRiver.Count(b => b)} (구간 {rivers.Count}), 호수 칸 {isLake.Count(b => b)}, "
+        string caveText = string.Join("·", caveCells.Select((kv, k) => $"{LogText.CaveLevel(k)} {LogText.N((long)kv.Value!)}칸"));
+        Say(log, $"[4단계] 강 칸 {LogText.N(isRiver.Count(b => b))}개(강 구간 {LogText.N(rivers.Count)}개), 호수 칸 {LogText.N(isLake.Count(b => b))}개, "
             + $"동굴 {caveText}, 2~4단계 {(double)sec["total"]!:F2} s");
         return new StageResult(output, rivers, apexes, res, diag);
     }
@@ -571,8 +573,8 @@ public static class Pipeline
             ["reduced_cells"] = reduced,
             ["seconds"] = Seconds(t),
         };
-        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: 첫 풀이 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
-            + $"융기를 줄인 칸 {reduced}, {(double)diag["seconds"]!:F1} s");
+        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: 첫 풀이의 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
+            + $"융기를 줄인 칸 {LogText.N(reduced)}개, {(double)diag["seconds"]!:F1} s");
         return (u2, res.Z, diag);
     }
 
@@ -593,13 +595,13 @@ public static class Pipeline
         CellGraph coarse = Graph.SphereGraph(nC, r);
         (FieldSet coarseFields, OrderedDictionary<string, object?> coarseInfo) = Materials.BuildMaterials(coarse, cfg);
         sec["materials_coarse"] = Seconds(t);
-        Say(log, $"[1단계] 거친 격자 면당 {nC}: 바다 {(double)coarseInfo["ocean_fraction"]!:F3}, {(double)sec["materials_coarse"]!:F2} s");
+        Say(log, $"[1단계] 거친 격자 면당 {nC} × {nC}칸: 바다 {LogText.Pct((double)coarseInfo["ocean_fraction"]!)}, {(double)sec["materials_coarse"]!:F2} s");
 
         t = Stopwatch.GetTimestamp();
         CellGraph l0 = Graph.SphereGraph(nL0, r, cfg.F("landscape.jitter"), cfg.I("planet.seed"));
         (FieldSet fields, OrderedDictionary<string, object?> info) = Materials.TransferMaterials(coarse, coarseFields, coarseInfo, l0, cfg);
         sec["transfer"] = Seconds(t);
-        Say(log, $"[1단계] L0 면당 {nL0} ({l0.NCells}칸): 바다 {(double)info["ocean_fraction"]!:F3}, "
+        Say(log, $"[1단계] L0 면당 {nL0} × {nL0}칸 (모두 {LogText.N(l0.NCells)}칸): 바다 {LogText.Pct((double)info["ocean_fraction"]!)}, "
             + $"해수면 {(double)info["sea_level_m"]!:F0} m, {(double)sec["transfer"]!:F2} s");
 
         t = Stopwatch.GetTimestamp();
@@ -607,8 +609,10 @@ public static class Pipeline
             Model.GenerateGeology(fields, cfg, l0.Unit());
         fields.Update(geoFields);
         sec["geology"] = Seconds(t);
-        string counts = "[" + string.Join(", ", (List<object?>)geoDiag["template_counts"]!) + "]";
-        Say(log, $"[1단계] 지질 템플릿 칸 수 {counts}, {(double)sec["geology"]!:F2} s");
+        string[] templateNames = ["탄산염 탁상지", "습곡충상대", "기반암 + 화산호"];
+        string counts = string.Join(", ", ((List<object?>)geoDiag["template_counts"]!).Select((v, k) =>
+            $"{(k < templateNames.Length ? templateNames[k] : $"{k}번")} {LogText.N(Convert.ToInt64(v, CultureInfo.InvariantCulture))}"));
+        Say(log, $"[1단계] 지질 템플릿 칸 수: {counts}, {(double)sec["geology"]!:F2} s");
 
         bool[] ocean = fields.Get<bool>("is_ocean");
         Config cfgL0 = L0Config(cfg);
@@ -637,7 +641,7 @@ public static class Pipeline
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = ScorecardSummary(card);
-        Say(log, $"[점수표] 항목 {summary["n_items"]}, 판정 {summary["n_judged"]}, 불합격 {PyListRepr((List<object?>)summary["failed"]!)}");
+        Say(log, $"[점수표] 항목 {summary["n_items"]}개 가운데 합격·불합격을 가리는 것 {summary["n_judged"]}개, 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
         Say(log, $"[행성] 끝: {(double)sec["total"]!:F2} s");
 
         object? plateInfo = coarseInfo.TryGetValue("plates", out object? pi) ? pi : new OrderedDictionary<string, object?>();
@@ -696,8 +700,15 @@ public static class Pipeline
         long t = Stopwatch.GetTimestamp();
         HeroSite site = Finder.FindHero(planet, cfg);
         double tFind = Seconds(t);
-        string parts = "{" + string.Join(", ", site.Parts.Select(kv => $"'{kv.Key}': {PyFormat.Repr(kv.Value)}")) + "}";
-        Say(log, $"[히어로] 후보: L0 칸 {site.L0Cell}, 위도 {site.LatDeg:F2}°, 경도 {site.LonDeg:F2}°, 점수 {site.Score:F3} {parts}, {tFind:F2} s");
+        var partNames = new Dictionary<string, string>
+        {
+            ["uplift_gradient"] = "융기 기울기",
+            ["carbonate"] = "지표 탄산염",
+            ["relief"] = "기복",
+            ["dry_fraction"] = "건조 칸 비율",
+        };
+        string parts = string.Join(", ", site.Parts.Select(kv => $"{partNames.GetValueOrDefault(kv.Key, kv.Key)} {kv.Value:F2}"));
+        Say(log, $"[히어로] 후보: L0 칸 {site.L0Cell}, 위도 {site.LatDeg:F2}°, 경도 {site.LonDeg:F2}°, 점수 {site.Score:F3} ({parts}), {tFind:F2} s");
         HeroState hero = Refine.RefineHero(planet, site, cfg, log);
         if (!hero.Diag.TryGetValue("seconds", out object? s) || s is not OrderedDictionary<string, object?>)
         {

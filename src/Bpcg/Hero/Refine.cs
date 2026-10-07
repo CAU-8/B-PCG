@@ -171,7 +171,7 @@ public static class Refine
         FieldSet sampled = SampleL0Fields(planet, unit);
         sec["sample"] = Seconds(t);
         int n = graph.NCells;
-        Pipeline.Say(log, $"[히어로] 평면 {graph.Shape[0]}×{graph.Shape[1]} ({n}칸), L0 값 표본 끝");
+        Pipeline.Say(log, $"[히어로] 평면 격자 {graph.Shape[0]} × {graph.Shape[1]}칸 ({LogText.N(n)}칸)에 L0 값을 옮겼습니다");
 
         t = Stopwatch.GetTimestamp();
         byte[] tid = sampled.Get<byte>("template_id");
@@ -184,8 +184,8 @@ public static class Refine
         t = Stopwatch.GetTimestamp();
         OrderedDictionary<string, object?> bc = HeroBoundary(planet, site, graph, sampled.Get<double>("runoff_eff_m_per_yr"), cfg);
         sec["boundary"] = Seconds(t);
-        Pipeline.Say(log, $"[히어로] 출구 {bc["outlet_edge"]} 가장자리 {OutletCells}칸, z = {(double)bc["z_outlet_m"]!:F1} m, "
-            + $"들어오는 물 {IO.PyFormat.General((double)bc["inflow_m3_per_yr"]!, 3)} m³/yr ({bc["inflow_edge"] ?? "None"})");
+        Pipeline.Say(log, $"[히어로] 출구: {LogText.Side(bc["outlet_edge"])} 가장자리 {OutletCells}칸, 높이 {(double)bc["z_outlet_m"]!:F1} m, "
+            + $"바깥에서 들어오는 물 {IO.PyFormat.General((double)bc["inflow_m3_per_yr"]!, 3)} m³/yr (들어오는 가장자리: {LogText.Side(bc["inflow_edge"])})");
 
         t = Stopwatch.GetTimestamp();
         double[]? inflow = (double)bc["inflow_m3_per_yr"]! > 0 ? (double[])bc["extra_inflow"]! : null;
@@ -230,7 +230,7 @@ public static class Refine
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = Pipeline.ScorecardSummary(card);
-        Pipeline.Say(log, $"[히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 불합격 {Pipeline.PyListRepr((List<object?>)summary["failed"]!)}");
+        Pipeline.Say(log, $"[히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
         var boundary = new OrderedDictionary<string, object?>();
         foreach (KeyValuePair<string, object?> kv in bc)
         {

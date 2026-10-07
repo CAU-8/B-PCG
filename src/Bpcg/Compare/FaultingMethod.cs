@@ -63,11 +63,11 @@ public static class FaultingMethod
         "단층",
         "procedural",
         "Galin 2019 3.1.2 (그림 6); Mandelbrot 1982, Voss 1991",
-        "무작위 직선 단층마다 한쪽을 올리고 다른 쪽을 내리는 것을 수백 번 되풀이",
+        "무작위 직선(단층)을 그을 때마다 한쪽을 올리고 다른 쪽을 내리기를 수백 번 되풀이",
         [
             new Param("faults", 400L, "단층 수", Kind: "int", Lo: 1, Hi: 5000),
-            new Param("radius_m", 300.0, "단층선 둘레 매끈한 폭 R", Lo: 1.0, Unit: "m"),
-            new Param("decay", 0.5, "뒤 단층의 변위가 줄어드는 지수 (a_i = (i+1)^−decay)", Lo: 0.0, Hi: 2.0),
+            new Param("radius_m", 300.0, "단층선 양쪽에서 높이가 바뀌는 폭 R (0이면 칼로 자른 계단)", Lo: 1.0, Unit: "m"),
+            new Param("decay", 0.5, "뒤에 그은 단층일수록 덜 솟게 하는 지수 (i번째 단층 높이 a_i = (i+1)^−decay)", Lo: 0.0, Hi: 2.0),
         ],
         (grid, seed, p, ctx) =>
         {
