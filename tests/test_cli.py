@@ -7,8 +7,8 @@ import shutil
 
 import numpy as np
 
-from bundles import load_bundle, read_json, run_cli
 from bpcg_studio.cli import main as bpcg_main
+from bundles import load_bundle, read_json, run_cli
 
 CORRIDOR_FILES = (
     "heightmap.bin",
