@@ -40,15 +40,16 @@ b-pcg/
 │   │   ├── Volume/      3D 샘플 함수 (가이드 7장)
 │   │   ├── Bake/        묶음·회랑 메시·높이맵·지구본을 엔진용 파일로 쓰기
 │   │   ├── Metrics/     점수표 지표
+│   │   ├── Compare/     기존 지형 생성 방법론과 같은 시드로 비교 (docs/compare.md)
 │   │   └── Pipeline.cs, Runs.cs   생성 순서, 실행 단위 (콘솔과 엔진이 같이 씀)
-│   ├── Bpcg.Cli/        콘솔 bpcg planet·hero·bake·all
+│   ├── Bpcg.Cli/        콘솔 bpcg planet·hero·bake·all·compare
 │   └── bpcg_studio/     웹 스튜디오 (파이썬). 계산은 C# 콘솔을 불러 시킴
 ├── engine/              Godot 4.7.2 .NET 프로젝트. 처음 화면에서 생성하고, 구운 파일을 보여 줌
 ├── tests/               pytest: C# 콘솔·엔진 결과 검사. Bpcg.Tests/: C# 단위·golden 대조 시험
 ├── analysis/            한 번 돌리는 연구 스크립트(파이썬). GPL 도구 허용
 ├── tools/               설치 전에도 도는 스크립트 (자료 받기, 환경 점검)
 ├── scripts/             설치 스크립트 (setup.sh, setup.ps1)
-├── configs/             planets/(행성 값), profiles/(해상도), learned/(맞춘 값)
+├── configs/             planets/(행성 값), profiles/(해상도), learned/(맞춘 값), compare/(방법 비교 설정)
 ├── docs/                규칙, 개발 단계, 설계도 사본, 가이드, 그림, 라이선스 원문
 ├── data/                (git 제외) pilot/ external/ derived/ cache/ logs/
 ├── out/                 (git 제외) 생성 결과
@@ -58,8 +59,10 @@ b-pcg/
 **의존 방향.** 아래쪽이 위쪽을 쓸 수 있고 거꾸로는 안 됩니다. `Metrics`는 무엇이든 쓸 수 있지만, 생성 단계 안에서 `Metrics`를 부르는 곳은 점수표를 만드는 `Pipeline`뿐입니다.
 
 ```text
-Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → Hero, Volume → Bake → Runs
+Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → Hero, Volume → Bake → Runs, Compare
 ```
+
+`Compare`는 비교 도구라 생성 단계 어디서도 부르지 않습니다. 평면 히어로(`Hero`)와 물길(`Hydro`), 색표(`Bake`)를 씁니다.
 
 `src/Bpcg.Cli`와 `engine/`은 `src/Bpcg`를 참조하고, `src/Bpcg`는 둘을 모릅니다. 파이썬(`bpcg_studio`, `analysis/`, `tools/`, `tests/`)은 C#을 콘솔 명령으로만 부르고 C# 결과 파일을 읽습니다. `src/bpcg_studio`는 `analysis/`와 `tools/`를 import하지 않습니다.
 

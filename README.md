@@ -58,7 +58,7 @@ uv run python tools/doctor.py     # 환경 점검
 | 폴더 | 내용 |
 |---|---|
 | `src/Bpcg/` | 생성기 본체 (C# 라이브러리, net10.0). `Core/`·`Planet/`·`Hydro/` … 단계별 묶음, `Runs.cs` 실행 단위 |
-| `src/Bpcg.Cli/` | 콘솔 `bpcg planet·hero·bake·all` (C#) |
+| `src/Bpcg.Cli/` | 콘솔 `bpcg planet·hero·bake·all·compare` (C#) |
 | `src/bpcg_studio/` | 파이썬 스튜디오와 `bpcg` 명령(studio, 나머지는 C# 콘솔로 넘김), 저장소 경로 |
 | `engine/` | Godot 4.7.2 .NET 프로젝트 (C#). 처음 화면에서 행성을 만들고 회랑·지구본을 봄. [engine/README.md](engine/README.md) |
 | `tests/` | 파이썬 시험(C# 콘솔이 쓴 결과 파일과 엔진·스튜디오 검사), `tests/Bpcg.Tests/` C# 대조 시험, `tests/golden/` golden 자료 |
@@ -82,6 +82,7 @@ uv run python tools/doctor.py     # 환경 점검
 - [엔진](engine/README.md)
 - [C# 포팅 기록](docs/csharp_port.md) (Python 생성기를 C# 으로 옮긴 과정과 대조 결과)
 - [스튜디오: 매개변수를 바꿔 돌리고 지도·그림·Godot 로 보기](docs/studio.md) (`uv run bpcg studio`)
+- [방법 비교: 기존 지형 생성 방법론과 같은 시드로 비교하고 연산 과정 보기](docs/compare.md) (`uv run bpcg compare run`, 스튜디오 '방법 비교')
 
 ## 라이선스
 
