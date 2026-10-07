@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B-PCG 방법 비교</title>
+<link rel="icon" type="image/gif" href="/static/logo.gif">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/compare.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img class="logo" src="/static/logo.gif" alt="" width="38" height="38" onerror="this.hidden=true">
+    <div>
+      <h1>방법 비교</h1>
+      <p class="sub">Galin 외 2019 의 지형 생성 방법론 ↔ B-PCG, 같은 시드끼리</p>
+    </div>
+  </div>
+  <div class="run-picker">
+    <label for="set-select">비교 묶음</label>
+    <select id="set-select"></select>
+    <button id="sets-refresh" class="icon-btn" type="button" title="목록 새로 고침" aria-label="목록 새로 고침">↻</button>
+    <span id="set-info" class="status-pill" hidden></span>
+  </div>
+  <div class="godot">
+    <a class="btn ghost" href="/">← 스튜디오</a>
+  </div>
+</header>
+
+<div class="layout cmp-layout">
+  <aside class="panel" aria-label="시드 묶음과 실행">
+    <div class="panel-head"><h2>시드 묶음</h2><span class="hint">같은 시드끼리 묶었습니다</span></div>
+    <div id="groups" class="cmp-groups"><p class="hint">비교 묶음을 고르세요.</p></div>
+
+    <details class="cmp-run" id="run-box">
+      <summary>비교 실행</summary>
+      <div class="cmp-run-body">
+        <div class="grid2">
+          <label class="field"><span>설정 (configs/compare)</span><select id="run-config"></select></label>
+          <label class="field"><span>묶음 이름</span><input id="run-name" type="text" placeholder="설정 이름과 같게"></label>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>시드 (쉼표)</span><input id="run-seeds" type="text" placeholder="설정 값"></label>
+          <label class="field"><span>인스턴스만 (쉼표)</span><input id="run-only" type="text" placeholder="모두"></label>
+        </div>
+        <div class="grid2">
+          <label class="field"><span>한 변 칸 수 n</span><input id="run-n" type="number" min="16" max="2049" placeholder="설정 값"></label>
+          <label class="field"><span>칸 간격 dx [m]</span><input id="run-dx" type="number" min="1" step="any" placeholder="설정 값"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="run-force"><span>캐시가 있어도 다시 만들기</span></label>
+        <div class="actions">
+          <button id="run-start" class="btn primary" type="button">실행</button>
+          <button id="run-cancel" class="btn danger" type="button" hidden>멈춤</button>
+        </div>
+        <div class="cmp-progress" id="run-progress" hidden><div id="run-bar"></div></div>
+        <p id="run-msg" class="msg" role="status" aria-live="polite"></p>
+        <pre id="run-log" class="cmp-log" hidden></pre>
+      </div>
+    </details>
+  </aside>
+
+  <main class="cmp-main">
+    <div id="empty" class="empty">비교 결과가 없습니다. 왼쪽 '비교 실행' 을 열거나<br><code>uv run bpcg compare run</code> 을 돌리세요.</div>
+
+    <section class="card" id="view" hidden>
+      <div class="card-head">
+        <div>
+          <h2 id="v-title">—</h2>
+          <p class="hint" id="v-sub"></p>
+        </div>
+        <div class="cmp-nav">
+          <div class="cmp-seg" role="group" aria-label="색 범위">
+            <button type="button" class="chip-btn" data-scale="self" aria-pressed="true" title="이 지형의 최저~최고">이 지형</button>
+            <button type="button" class="chip-btn" data-scale="group" aria-pressed="false" title="같은 시드 묶음 전체의 최저~최고">같은 시드 묶음</button>
+          </div>
+          <button class="icon-btn" id="prev-m" type="button" title="이전 방법 (←)" aria-label="이전 방법">◀</button>
+          <button class="icon-btn" id="next-m" type="button" title="다음 방법 (→)" aria-label="다음 방법">▶</button>
+          <button class="icon-btn" id="prev-s" type="button" title="이전 시드, 같은 방법 (↑)" aria-label="이전 시드">▲</button>
+          <button class="icon-btn" id="next-s" type="button" title="다음 시드, 같은 방법 (↓)" aria-label="다음 시드">▼</button>
+        </div>
+      </div>
+      <div class="cmp-figure">
+        <div class="cmp-imgbox">
+          <img id="elev" alt="고도 그림" width="768" height="768">
+          <div class="cmp-loading" id="elev-loading" hidden>그리는 중…</div>
+        </div>
+        <div class="cmp-figside">
+          <div class="cmp-legend" id="elev-legend"></div>
+          <p class="hint">음영: 북서 315°, 고도각 45°, 과장 1배. 모든 방법이 같은 빛·같은 색표입니다. 그림은 한 번에 한 장씩 그립니다.</p>
+          <dl class="kv" id="v-facts"></dl>
+          <details><summary>매개변수와 진단값</summary><pre class="cmp-pre" id="v-params"></pre></details>
+          <p class="hint">키보드: ←/→ 방법, ↑/↓ 시드, [ / ] 과정 단계</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="table-card" hidden>
+      <div class="card-head">
+        <h2 id="t-title">지표</h2>
+        <p class="hint">모든 고도에 같은 코드로 잽니다(네 가장자리를 출구로 둔 D8 물길). 줄을 누르면 그 방법을 봅니다. 머리글에 마우스를 올리면 설명이 나옵니다.</p>
+      </div>
+      <div class="table-wrap"><table class="cmp-table" id="m-table"></table></div>
+    </section>
+
+    <section class="card" id="process-card" hidden>
+      <div class="card-head">
+        <div>
+          <h2>연산 과정</h2>
+          <p class="hint" id="p-sub">방법이 지형을 만드는 순서대로 중간 결과를 한 장씩 봅니다.</p>
+        </div>
+        <div class="cmp-nav">
+          <button class="icon-btn" id="prev-st" type="button" title="이전 단계 ([)" aria-label="이전 단계">◀</button>
+          <span id="st-count" class="hint"></span>
+          <button class="icon-btn" id="next-st" type="button" title="다음 단계 (])" aria-label="다음 단계">▶</button>
+        </div>
+      </div>
+      <div class="cmp-steps" id="st-chips" role="tablist" aria-label="과정 단계"></div>
+      <input type="range" id="st-slider" min="0" max="0" value="0" aria-label="과정 단계">
+      <div class="cmp-figure">
+        <div class="cmp-imgbox">
+          <img id="stage" alt="과정 단계 그림" width="768" height="768">
+          <div class="cmp-loading" id="stage-loading" hidden>그리는 중…</div>
+        </div>
+        <div class="cmp-figside">
+          <h3 id="st-label">—</h3>
+          <p class="hint" id="st-kind"></p>
+          <p id="st-note" class="explain"></p>
+          <div class="cmp-legend" id="st-legend"></div>
+        </div>
+      </div>
+      <div id="p-empty" class="empty" hidden>이 결과에는 연산 과정 기록이 없습니다 (run.snapshots = false 로 만들었거나 이전 판).</div>
+      <div class="cmp-charts" id="charts"></div>
+    </section>
+  </main>
+</div>
+<div class="tooltip" id="tip" hidden></div>
+<script src="/static/compare.js"></script>
+</body>
+</html>

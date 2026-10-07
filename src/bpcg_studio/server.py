@@ -20,6 +20,7 @@ ThreadingHTTPServer 만 쓰고, 화면(static/)도 바깥 자원(CDN·글꼴) �
 | GET /api/figure?run=&name= | 그림 PNG |
 | GET /api/godot | Godot 상태 (찾은 경로, engine/baked 에 있는 실행) |
 | POST /api/godot/launch | 회랑 복사 → 가져오기 → 실행 {run, mode: play|editor} |
+| /compare, /api/compare/* | 방법 비교 화면 (compare_api.py 의 표) |
 
 v= 는 브라우저 캐시를 가르는 값이라 서버는 읽지 않습니다(늘 지금 파일을 보냄).
 
@@ -51,6 +52,7 @@ import numpy as np
 
 from bpcg_studio import __version__
 from bpcg_studio import godot as gd
+from bpcg_studio.compare_api import CompareService
 from bpcg_studio.config import load_config
 from bpcg_studio.jobs import JobError, JobManager, list_runs, resolve_run, validate_request
 from bpcg_studio.params import build_schema, planet_names, profile_names
@@ -94,6 +96,7 @@ class Studio:
         self.jobs = JobManager(self.out_dir)
         self.views = ViewStore(self.out_dir / "studio" / ".cache")
         self.godot = gd.GodotRunner(baked_dir=baked_dir, log_dir=self.out_dir)
+        self.compare = CompareService(self.out_dir / "compare")
 
     def run_dir(self, q: dict) -> Path:
         return resolve_run(_one(q, "run"), self.out_dir)
@@ -318,8 +321,36 @@ def make_handler(app: Studio, port: int) -> type[BaseHTTPRequestHandler]:
                 self._send(200, p.read_bytes(), "image/png")
             elif path == "/api/godot":
                 self._json(app.godot.status())
+            elif path in ("/compare", "/compare.html"):
+                self._static("compare.html")
+            elif path.startswith("/api/compare/"):
+                self._route_compare(path.removeprefix("/api/compare/"), q)
             else:
                 self._error(404, f"없는 주소입니다: {path}")
+
+        def _route_compare(self, sub: str, q: dict) -> None:
+            cs = app.compare
+            if sub == "sets":
+                self._json(cs.sets())
+            elif sub == "set":
+                self._json(cs.set_data(_one(q, "name")))
+            elif sub == "methods":
+                self._json(cs.methods())
+            elif sub == "process":
+                self._json(cs.process(_one(q, "name"), _int(q, "seed"), _one(q, "id")))
+            elif sub == "elevation.png":
+                body = cs.elevation_png(
+                    _one(q, "name"), _int(q, "seed"), _one(q, "id"), _one(q, "scale", "self")
+                )
+                self._send(200, body, "image/png")
+            elif sub == "stage.png":
+                body = cs.stage_png(_one(q, "name"), _int(q, "seed"), _one(q, "id"), _int(q, "i"))
+                self._send(200, body, "image/png")
+            elif sub == "run":
+                since = _int(q, "since") if q.get("since") else None
+                self._json(cs.run_state(since))
+            else:
+                self._error(404, f"없는 주소입니다: /api/compare/{sub}")
 
         def _route_post(self, path: str, body: dict) -> None:
             if path == "/api/jobs":
@@ -334,6 +365,10 @@ def make_handler(app: Studio, port: int) -> type[BaseHTTPRequestHandler]:
                     self._json({"ok": True, "overrides": spec["overrides"], "errors": {}})
                 except JobError as e:
                     self._json({"ok": False, "message": str(e), "errors": e.details})
+            elif path == "/api/compare/run":
+                self._json(app.compare.start(body), 201)
+            elif path == "/api/compare/cancel":
+                self._json(app.compare.cancel())
             elif path == "/api/godot/launch":
                 mode = str(body.get("mode") or "play")
                 key = str(body.get("run") or "")
