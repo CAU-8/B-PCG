@@ -1,76 +1,238 @@
 # C# 포팅 진행 기록
 
-지시 원문은 [docs/csharp_port_prompt.md](csharp_port_prompt.md)에 있습니다. 이 파일은 `src/bpcg`를 C#(`csharp/`)으로 옮기는 작업의 현재 상태를 담고, 모듈 하나를 마칠 때마다 고칩니다. 처음 읽는 사람은 0장부터 읽습니다. 1장부터는 단계 0에서 조사한 근거 자료이고, 6장의 모듈별 절은 그 모듈을 옮길 때 다시 읽습니다.
+> 이 생성기는 처음에 Python으로 짰고, 2026-10-03에 C#으로 옮겼습니다. Godot 게임 엔진의 .NET 판이 생성기를 그대로 불러 쓰게 하려는 것이었습니다. 옮길 때는 계산 방법을 하나도 바꾸지 않고, 같은 입력이면 Python 판과 같은 값이 나오는지 시험으로 확인했습니다. 이 문서는 그 작업의 단계별 기록, 조사한 근거, 남은 일을 모읍니다.
 
-**폴더를 옮겼습니다(2026-10-03, 단계 5).** 아래 1장부터의 기록은 옮기기 전 경로로 적혀 있습니다. 읽을 때 `csharp/Bpcg` → `src/Bpcg`, `csharp/Bpcg.Cli` → `src/Bpcg.Cli`, `csharp/Bpcg.Tests` → `tests/Bpcg.Tests`, `csharp/Bpcg.Engine` → `engine/`, `csharp/golden/data` → `tests/golden/data`, `csharp/Bpcg.slnx` → `Bpcg.slnx`, `src/bpcg/studio` → `src/bpcg_studio` 로 바꿔 읽습니다. `src/bpcg/*.py`(Python 생성기)와 `engine/scripts/*.gd`(GDScript)는 지웠으므로 git 기록(커밋 3b5bbf6 까지)에서 봅니다. C# 코드 주석의 `(src/bpcg/….py)` 도 그 옮기기 전 원본을 가리킵니다.
+## 읽는 법
+
+지시 원문은 [docs/csharp_port_prompt.md](csharp_port_prompt.md)에 있습니다. 이 파일은 `src/bpcg`를 C#(`csharp/`)으로 옮기는 작업의 현재 상태를 담고, 모듈 하나를 마칠 때마다 고칩니다.
+
+처음 읽는 사람은 0장부터 읽습니다. C# 코드를 고치기 전에도 지시 원문과 0장을 먼저 읽습니다. 1장부터는 단계 0에서 조사한 근거 자료입니다. 4장부터는 장 머리의 요약만 읽고, 필요할 때 '자세히'를 엽니다.
+
+| 장 | 무엇이 있나 | 언제 읽나 |
+|---|---|---|
+| 0 | 지금 상태, 단계별 기록, 결정이 필요한 쟁점 | 처음, 그리고 C# 코드를 고치기 전 |
+| 1 | .NET SDK와 Godot .NET 판을 무엇으로 어떻게 깔지 조사한 기록 | 개발 환경이 맞지 않을 때 |
+| 2 | C# 폴더 계획과 옮기는 규칙 | C# 코드를 새로 쓸 때 |
+| 3 | Python 모듈과 C# 파일의 대응표 | Python 이름으로 적힌 문서를 읽을 때 |
+| 4 | scipy 같은 라이브러리를 무엇으로 바꿨나 | `Numerics`·`IO` 코드를 고칠 때 |
+| 5 | numpy·numba와 같은 값을 내는 공통 규칙 | 새 수치 코드를 짤 때 |
+| 6 | 모듈마다 값이 달라지기 쉬운 곳 | 그 모듈을 옮기거나 고칠 때 |
+| 7 | golden 자료와 대조 시험 규칙 | 대조 시험을 쓰거나 실패 까닭을 찾을 때 |
+| 8 | 출력 파일 목록과 끝에서 끝 대조 계획 | 결과 파일의 형식을 바꿀 때 |
+| 9 | 함께 고칠 규칙·설치 스크립트·CI | 설치 스크립트나 CI를 고칠 때 |
+| 10 | 결정한 사항과 이유 (D1~D13) | '왜 이렇게 했지?' 싶을 때 |
+| 11 | Python 쪽 의심 버그 66개 | C# 결과가 이상해 보일 때 |
+| 12 | 단계별 남은 일 확인 목록 | 단계마다 하기로 한 일을 볼 때 (표시가 단계 2 도중에 멈춤) |
+| 13 | 분석이 남긴 질문 | 그 묶음을 고치기 전 |
+
+**폴더를 옮겼습니다(2026-10-03, 단계 5).** 0장의 단계 4 절부터 아래쪽과 1장부터의 기록은 옮기기 전 경로로 적혀 있습니다. 읽을 때 아래 표처럼 바꿔 읽습니다.
+
+| 옮기기 전 | 지금 |
+|---|---|
+| `csharp/Bpcg` | `src/Bpcg` |
+| `csharp/Bpcg.Cli` | `src/Bpcg.Cli` |
+| `csharp/Bpcg.Tests` | `tests/Bpcg.Tests` |
+| `csharp/Bpcg.Engine` | `engine/` |
+| `csharp/golden/data` | `tests/golden/data` |
+| `csharp/Bpcg.slnx` | `Bpcg.slnx` |
+| `src/bpcg/studio` | `src/bpcg_studio` |
+
+- `src/bpcg/*.py`(Python 생성기)와 `engine/scripts/*.gd`(GDScript)는 지웠습니다. git 기록(커밋 3b5bbf6 까지)에서 봅니다.
+- C# 코드 주석의 `(src/bpcg/….py)`도 그 옮기기 전 원본을 가리킵니다.
 
 ## 0. 지금 상태와 다음 할 일
 
+이 장은 포팅이 어디까지 왔는지를 적습니다. 새 기록을 위에 쌓으므로 맨 위 절이 가장 최근 일입니다.
+
+포팅은 단계를 나눠 했습니다. 아래 절에 나오는 '단계 N'은 이 표의 번호입니다.
+
+| 단계 | 한 일 | 자세한 기록 |
+|---|---|---|
+| 0 | 조사만 했습니다. 개발 환경, Python이 쓰던 라이브러리를 무엇으로 바꿀지, 모듈마다 값이 달라지기 쉬운 곳을 찾았습니다. 그때 컴퓨터에 .NET SDK가 없어 코드는 쓰지 않았습니다(10장 D1) | 1장, 4~6장, 13장 |
+| 1 | 뼈대와 core. C# 프로젝트 파일, 파일 읽기·쓰기, 공통 수치 코드, core 묶음 | 아래 '단계 2 도중의 상태', 12장 |
+| 2 | 묶음별 포팅. 묶음마다 golden 사례 → C# → 대조 시험 → 기록 → 커밋 | 아래 '단계 2 도중의 상태', 3장, 6장 |
+| 3 | 끝에서 끝 대조. C# 콘솔로 `all --profile tiny`를 돌려 Python 결과와 파일별로 비교 | 8장 |
+| 4 | Godot .NET 전환 (2026-10-03) | 아래 절 |
+| 5 | 폴더 구조 바꾸기 (2026-10-03) | 아래 절 |
+| 5 뒤 | Python 판으로 만든 기능 옮기기 (2026-10-08) | 아래 절 |
+
+이 장에 자주 나오는 말입니다.
+
+- **묶음.** 이 문서에서는 두 뜻으로 씁니다. 포팅 단위로 말할 때(묶음별 포팅, 끝낸 묶음)는 Python 생성기의 폴더 하나, 곧 core, hydro, planet 같은 패키지입니다. 묶음 하나에 모듈(.py 파일)이 여러 개 있습니다. '묶음 읽기·쓰기'처럼 결과 파일을 말할 때는 [용어집](glossary.md)의 뜻, 곧 한 단계의 결과 폴더입니다.
+- **golden 자료.** Python 판에 입력을 넣어 얻은 출력을 정답으로 저장해 둔 파일입니다. C# 시험은 같은 입력을 C#에 넣고, 출력이 이 정답과 같은지 봅니다(golden 대조 시험). Python 생성기를 지웠으므로 golden은 더 만들 수 없습니다. 커밋한 `tests/golden/data`가 고정된 기준입니다.
+- **비트 단위 일치.** 실수 하나는 64개(float32는 32개)의 0과 1, 곧 비트로 저장됩니다. 두 값의 비트가 모두 같으면 출력해 볼 때 마지막 자리까지 같습니다. 실수 계산은 순서만 바뀌어도 마지막 자리가 달라질 수 있습니다. 예를 들어 (0.1 + 0.2) + 0.3 은 0.6000000000000001 이고, 0.1 + (0.2 + 0.3) 은 0.6 입니다. 그래서 C#은 Python과 같은 순서로 계산합니다.
+- **pairwise 합.** numpy가 긴 배열을 더하는 방식입니다. 앞에서부터 차례로 더하지 않고, 배열을 조각으로 나눠 따로 더한 뒤 그 합들을 합칩니다. 위의 예처럼 순서가 다르면 끝자리가 달라지므로, C#도 같은 방식으로 더합니다(`Bpcg.Numerics.NpReduce`, 5장).
+
 ### 단계 5 뒤: Python 판으로 만든 기능 옮기기 (2026-10-08)
 
-- C# 으로 옮기는 동안 Python 판에서 따로 만든 기능을 C# 으로 옮겼습니다. Python 판 원본은 로컬 브랜치 `wip/python-compare-hud-2026-10-08` 에 보관했습니다.
-- 방법 비교([compare.md](compare.md)): `src/Bpcg/Compare/`(방법 11개, 지표, 그림, 실행·캐시), 콘솔 `bpcg compare {methods,run,list,render}`(`src/Bpcg.Cli/CompareCommand.cs`), 스튜디오 `/compare` 화면(`src/bpcg_studio/compare_api.py` 는 파일 읽기와 콘솔 부르기만), 시험 `tests/Bpcg.Tests/CompareTool/`·`tests/test_studio_compare.py`.
-  - 대조: Python 판과 n = 64·96, 시드 0·7 에서 12 개 인스턴스의 고도·연산 과정 지도가 비트 단위로 같습니다. 그림은 matplotlib 판과 눈으로 같습니다(LightSource soft 섞기 식을 옮김).
-  - 옮기며 맞춘 곳: 수력 침식 붓 무게는 `NpReduce.Sum`(numpy pairwise 합)과 `double.Hypot` 을 써야 물방울 경로가 같습니다. 스펙트럼 β 는 rfft 반쪽 평면에서 짝이 있는 열을 두 번 셉니다.
-  - 바꾼 것: 지표는 저장한 float32 고도로 잽니다. 캐시 키의 코드 판은 `Bpcg` 어셈블리 모듈 ID 입니다. 저장소 밖 방법 파일(플러그인)은 옮기지 않았습니다.
-  - 라이브러리에 더한 것: `Flat.FlatHero` 의 `capture` 갈고리(중간 지표 둘을 넘김, 주지 않으면 그대로), `Npz.Read(…, keys)`(고른 항목만 읽음, 예제 .npz 의 글자 배열을 건너뜀).
-- HUD 크기(`engine/Scripts/UiScale.cs`): 화면 배율에 맞춰 창·HUD 를 키우고 `[-]`·`[=]` 로 글자 크기를 바꿉니다(`user://settings.cfg` 에 저장). 엔진 C# 빌드와 형식 검사만 했고, Godot .NET 판이 없는 Mac 에서는 연기 검사(`CheckUiScale`)를 돌리지 못했습니다.
+C#으로 옮기는 동안에도 Python 판에서 따로 만든 기능이 있었습니다. 방법 비교와 HUD 크기입니다. 이 둘을 C#으로 옮겼습니다. Python 판 원본은 로컬 브랜치 `wip/python-compare-hud-2026-10-08`에 보관했습니다.
+
+**방법 비교** ([compare.md](compare.md)). 기존 지형 생성 방법과 B-PCG를 같은 칸, 같은 시드로 돌려 견주는 도구입니다.
+
+| 무엇 | 어디 |
+|---|---|
+| 계산: 방법 11개, 지표, 그림, 실행·캐시 | `src/Bpcg/Compare/` |
+| 콘솔 명령 `bpcg compare {methods,run,list,render}` | `src/Bpcg.Cli/CompareCommand.cs` |
+| 스튜디오 `/compare` 화면 | `src/bpcg_studio/compare_api.py` (파일 읽기와 콘솔 부르기만 함) |
+| 시험 | `tests/Bpcg.Tests/CompareTool/`, `tests/test_studio_compare.py` |
+
+Python 판과 같은지 이렇게 확인했습니다.
+
+- 격자 한 변 n = 64·96칸, 시드 0·7에서 인스턴스 12개를 돌렸습니다. 인스턴스는 방법 하나에 매개변수를 정한 것입니다(같은 방법을 매개변수만 바꿔 여러 개 둘 수 있음).
+- 고도와 연산 과정 지도(방법이 지형을 만드는 동안의 중간 지도)가 비트 단위로 같았습니다.
+- 그림은 matplotlib 판과 눈으로 보아 같았습니다. 높이 지도에 빛과 그림자를 얹는 식은 matplotlib `LightSource`의 'soft' 섞기 식을 옮겼습니다.
+
+옮기며 Python과 값을 맞춘 곳은 둘입니다.
+
+- **수력 침식의 붓 무게.** 수력 침식은 물방울을 하나씩 굴려 땅을 깎는 방법입니다. 물방울은 깎은 양을 둘레 칸에 나눠 줍니다. 칸마다 받는 몫을 붓 무게라고 부르고, 무게를 모두 더한 값으로 나눠 합이 1이 되게 합니다. 이 합을 `NpReduce.Sum`(numpy pairwise 합)으로 더하고, 칸까지 거리를 `double.Hypot`으로 재야 무게의 마지막 자리가 같습니다. 그래야 물방울 경로가 같습니다.
+- **스펙트럼 β.** 큰 무늬와 작은 무늬의 세기가 얼마나 빨리 줄어드는지 재는 지표입니다. 고도를 푸리에 변환해 셉니다. 실수용 변환(rfft)은 주파수 평면의 절반(kx ≥ 0)만 돌려줍니다. 그래서 빠진 반쪽에 짝(−kx)이 있는 열은 두 번 셉니다. 그래야 numpy가 평면 전체로 평균한 값과 같습니다.
+
+Python 판과 일부러 다르게 한 곳도 있습니다.
+
+- 지표는 저장한 float32 고도로 잽니다. Python 판은 새로 만들 때 float64 고도로 재서, 저장본으로 잰 값과 웅덩이 점 수가 달랐습니다([compare.md](compare.md)).
+- 한 번 만든 결과는 저장해 두고, 매개변수·땅 크기·시드·기록 여부·코드 판이 같으면 다시 씁니다(캐시). C#에서는 이 캐시 키의 코드 판으로 `Bpcg` 어셈블리의 모듈 ID를 씁니다.
+- 저장소 밖 방법 파일(플러그인)은 옮기지 않았습니다.
+
+라이브러리에 더한 것은 둘입니다.
+
+- `Flat.FlatHero`의 `capture` 갈고리. 평면 히어로(행성 없이 정해 둔 융기와 출구로 바로 만드는 강 유역 지형)를 만드는 동안의 중간 지표 높이 둘(`z_pre`, `z_init`)을 밖으로 넘깁니다. 주지 않으면 전과 같습니다.
+- `Npz.Read(…, keys)`. .npz 파일에서 고른 항목만 읽습니다. 예제 .npz에 든 글자 배열을 건너뛰려고 더했습니다.
+
+**HUD 크기** (`engine/Scripts/UiScale.cs`). HUD는 3D 화면 위에 겹쳐 그리는 글자와 패널입니다.
+
+- 화면 배율에 맞춰 창과 HUD를 키웁니다.
+- `[-]`·`[=]` 키로 글자 크기를 바꿉니다. 바꾼 값은 `user://settings.cfg`에 저장합니다.
+- 확인은 엔진 C# 빌드와 형식 검사까지만 했습니다. Godot .NET 판이 없는 Mac에서는 엔진을 띄워 보는 짧은 검사(연기 검사, `CheckUiScale`)를 돌리지 못했습니다.
 
 ### 단계 5: 폴더 구조 바꾸기 (2026-10-03)
 
-- 사용자가 정한 방향: 포팅이 끝났다고 보고, `csharp/` 밖의 Python 가운데 같은 일을 하는 C# 이 있는 것은 지우고, `csharp/` 안의 폴더를 저장소 맨 위로 옮깁니다. 이름은 원래 자리에 맞춥니다.
-- 지금 구성: `Bpcg.slnx`·`Directory.Build.props`(맨 위), `src/Bpcg`(생성기), `src/Bpcg.Cli`(콘솔), `engine/`(Godot .NET 프로젝트, 예전 GDScript 판을 대체), `tests/Bpcg.Tests`(C# 단위·golden 시험), `tests/golden/data`(커밋한 golden).
-- 지운 것: `src/bpcg/` 의 생성기 묶음 전부(core·planet·geology·hydro·landscape·subsurface·metrics·hero·volume·bake·pipeline·cli), `engine/scripts/*.gd`·`engine/tests/*.gd`, `csharp/golden/export_golden.py`(golden 은 다시 만들 수 없음. 큰 사례 `out/golden` 이 없으면 그 시험만 건너뜀), Python 생성기를 직접 부르던 pytest.
-- 남긴 Python 과 바꾼 점:
-  - 스튜디오 → `src/bpcg_studio/`. `bpcg` 명령의 입구(`bpcg_studio.cli:main`)이고, `studio` 밖의 명령(`planet`·`hero`·`bake`·`all`)은 C# 콘솔로 넘깁니다. 실행은 C# 콘솔을 빌드해 부르고, 'Godot로 보기' 는 Godot .NET 판을 찾아 엔진 C# 을 빌드한 뒤 띄웁니다. 스튜디오가 쓰던 설정 읽기·필드 표·히어로 격자 크기·묶음 읽기는 작은 사본으로 `bpcg_studio/` 안에 두었습니다.
-  - pytest → C# 콘솔 결과를 검사하게 다시 씀(`tests/bundles.py`, `conftest.py` 의 tiny·평면·동굴 실행 고정물, 묶음별 `test_*.py`). 엔진 검사는 `tests/test_engine.py`.
-  - `analysis/` 6개 파일은 경로만 `bpcg_studio.paths` 로 고쳤고, `analysis/figures/render_results.py`·`analysis/demos/plot_cubesphere.py` 는 Python 생성기를 import 해서 지금은 돌지 않습니다(머리에 적어 둠). 스튜디오의 그림 단계는 그래서 건너뜁니다.
-  - `tools/doctor.py`·`scripts/setup.sh`·`setup.ps1`·CI 는 .NET 10 SDK 와 Godot 4.7.2 .NET 판(`.tools/godot-net/`)을 보게 고쳤습니다. CI 에 `csharp` 작업(macOS, build·test·format)을 더했습니다.
-- 문서: `README.md`, `CONTRIBUTING.md`, `docs/conventions.md`(폴더 구조·C# 규칙·엔진 규칙, 0장 쟁점 9 의 '엔진은 계산하지 않음' 을 바꿈), `docs/studio.md`, `docs/pipeline.md`(이름 읽는 법), `engine/README.md`, `engine/GLOBE.md`.
-- 남은 일: 그림 스크립트를 C# 결과에 맞추기, C# 콘솔에 지구본 `--face-res` 선택 더하기, 내보낸 게임의 configs(`engine/Scripts/EnginePaths.cs` 의 TODO), golden 대조를 macOS 밖에서 돌려 보기, 윈도우에서 스튜디오 시험의 글자 인코딩 실패(옮기기 전부터 있던 것).
+사용자는 포팅이 끝났다고 보고 저장소를 정리하기로 했습니다. 정한 방향은 셋입니다.
+
+- `csharp/` 밖의 Python 가운데, 같은 일을 하는 C#이 있는 것은 지웁니다.
+- `csharp/` 안의 폴더를 저장소 맨 위로 옮깁니다.
+- 옮긴 폴더의 이름은 원래 자리에 맞춥니다.
+
+**지금 구성.**
+
+| 경로 | 무엇 |
+|---|---|
+| `Bpcg.slnx`, `Directory.Build.props` | 저장소 맨 위. 솔루션 파일과, 모든 C# 프로젝트가 같이 쓰는 빌드 설정 |
+| `src/Bpcg` | 생성기 |
+| `src/Bpcg.Cli` | 콘솔 |
+| `engine/` | Godot .NET 프로젝트. 예전 GDScript 판을 대체 |
+| `tests/Bpcg.Tests` | C# 단위 시험과 golden 시험 |
+| `tests/golden/data` | 커밋한 golden |
+
+**지운 것.**
+
+- `src/bpcg/`의 생성기 묶음 전부: core·planet·geology·hydro·landscape·subsurface·metrics·hero·volume·bake·pipeline·cli
+- `engine/scripts/*.gd`, `engine/tests/*.gd`
+- `csharp/golden/export_golden.py`. 그래서 golden은 다시 만들 수 없습니다. 큰 사례(`out/golden`)가 없으면 그 사례를 쓰는 시험만 건너뜁니다.
+- Python 생성기를 직접 부르던 pytest
+
+**남긴 Python과 바꾼 점.**
+
+- 스튜디오는 `src/bpcg_studio/`로 옮겼습니다.
+  - `bpcg` 명령의 입구(`bpcg_studio.cli:main`)입니다. `studio` 밖의 명령(`planet`·`hero`·`bake`·`all`)은 C# 콘솔로 넘깁니다.
+  - '실행'은 C# 콘솔을 빌드해 부릅니다. 'Godot로 보기'는 Godot .NET 판을 찾아 엔진 C#을 빌드한 뒤 띄웁니다.
+  - 스튜디오가 쓰던 설정 읽기, 필드 표, 히어로 격자 크기, 묶음 읽기는 작은 사본으로 `bpcg_studio/` 안에 두었습니다.
+- pytest는 C# 콘솔 결과를 검사하게 다시 썼습니다. `tests/bundles.py`, `conftest.py`의 실행 고정물(여러 시험이 같이 쓰는 미리 돌려 둔 tiny·평면·동굴 실행), 묶음별 `test_*.py`입니다. 엔진 검사는 `tests/test_engine.py`입니다.
+- `analysis/`의 6개 파일은 경로만 `bpcg_studio.paths`로 고쳤습니다. `analysis/figures/render_results.py`·`analysis/demos/plot_cubesphere.py`는 Python 생성기를 import 해서 지금은 돌지 않습니다(파일 머리에 적어 둠). 그래서 스튜디오의 그림 단계는 건너뜁니다.
+- `tools/doctor.py`·`scripts/setup.sh`·`setup.ps1`·CI는 .NET 10 SDK와 Godot 4.7.2 .NET 판(`.tools/godot-net/`)을 보게 고쳤습니다. CI에 `csharp` 작업(macOS, build·test·format)을 더했습니다.
+
+**고친 문서.** `README.md`, `CONTRIBUTING.md`, `docs/conventions.md`(폴더 구조, C# 규칙, 엔진 규칙. 0장 쟁점 9의 '엔진은 계산하지 않음'을 바꿈), `docs/studio.md`, `docs/pipeline.md`(이름 읽는 법), `engine/README.md`, `engine/GLOBE.md`.
+
+**남은 일.**
+
+- 그림 스크립트를 C# 결과에 맞추기
+- C# 콘솔에 지구본 `--face-res` 선택 더하기
+- 내보낸 게임의 configs. 내보낸 게임에는 저장소가 없어서, 설정 파일을 게임에 넣어 쓰는 방법을 정해야 합니다(`engine/Scripts/EnginePaths.cs`의 TODO).
+- golden 대조를 macOS 밖에서 돌려 보기
+- 윈도우에서 스튜디오 시험의 글자 인코딩 실패 (옮기기 전부터 있던 것)
 
 ### 단계 4: Godot .NET 전환 (2026-10-03, 끝남, 단계 5 에서 정리)
 
-- 사용자가 정한 방향: 최종 목표는 Python 없이 C# 으로 진행하는 것이고, `csharp/` 안에서 돌아가면 전체를 대체합니다. GDScript 도 모두 C# 으로 옮기고(0장 쟁점 1 은 '(2) Godot 안에서 계산'), 생성은 Godot 안 처음 화면에서 시작합니다.
-- 만든 것: `csharp/Bpcg.Engine/`(Godot 4.7.2 .NET, net10.0, `Bpcg.slnx` 에 포함). `engine/scripts/*.gd` 13개와 `engine/tests/*.gd` 3개를 C# 으로 옮겼고, 처음 화면(`StartMenu`)·진행률(`StageProgress`)·설정 경로(`EnginePaths`)를 새로 만들었습니다. 쓰는 법과 대응표는 [csharp/Bpcg.Engine/README.md](../csharp/Bpcg.Engine/README.md).
-- 라이브러리: `cli.py` 의 실행 단위를 `csharp/Bpcg/Runs.cs`(+ `RunError`)로 옮겨 콘솔과 엔진이 같이 씁니다. 콘솔 출력은 그대로입니다(tiny 결과 바이트 일치, 걸린 시간만 다름).
-- Godot .NET 판은 `.tools/godot-net/Godot_mono.app` 에 손으로 받았습니다(SHA-512 일치, 1장 절차의 (나)). net10.0 게임 어셈블리가 편집기 빌드(`--build-solutions`)와 실행 모두에서 돕니다.
-- 확인: 엔진 안 tiny 생성 = 콘솔 결과, C# 연기 검사(회랑·지구본)가 C#·Python 굽기 모두에서 통과, 화면 13장이 GDScript 판과 픽셀 일치.
-- 남은 일이던 설치 스크립트·doctor·CI·pytest 의 Godot 검사·스튜디오 'Godot로 보기' 의 .NET 전환과 `engine/` 대체는 단계 5 에서 했습니다. 내보낸 게임의 configs 는 남았습니다.
+Godot는 C#을 쓰려면 .NET 판이 따로 있어야 합니다. 그때까지 엔진은 Godot 표준판과 GDScript(Godot 자체 스크립트 언어)로 짜여 있었습니다. 사용자가 정한 방향은 이렇습니다.
 
-### 지금 상태 (2026-10-03)
+- 최종 목표는 Python 없이 C#으로 해 나가는 것입니다. `csharp/` 안에서 돌아가면 전체를 대체합니다.
+- GDScript도 모두 C#으로 옮깁니다. 0장 쟁점 1의 답은 '(2) Godot 안에서 계산'입니다.
+- 행성 생성은 Godot 안의 처음 화면에서 시작합니다.
 
-- **단계 2(묶음별 포팅)를 진행 중입니다.** 사용자가 core 검토를 따로 하지 않고 순서대로 계속하라고 했습니다(10장 D13). 끝낸 묶음: core, hydro.
-- **대조 결과: C# 시험 119개가 모두 통과했고, 실수 비교는 모두 비트 단위 일치입니다**(macOS 26.6 arm64, .NET SDK 10.0.401·런타임 10.0.12, numpy 2.5.3, numba 0.68.0). 다른 OS 에서는 아직 돌려 보지 않았습니다.
-- hydro(2026-10-03): `Depressions`, `Routing`, `AccumulateModule`(파일 `Accumulate.cs`, 0장 쟁점 6 규칙), `Network`. golden 은 구면 n=32·7, 평면 64², 정수 고도 평면(경사 동률·넓은 평지), ±0 부호 손 사례입니다. 채움·D8(히스테리시스 포함)·순서·누적·유역·강 구간이 모두 비트 단위로 같습니다.
-- 만든 것:
+**만든 것.**
+
+- `csharp/Bpcg.Engine/`: Godot 4.7.2 .NET 프로젝트입니다. net10.0이고 `Bpcg.slnx`에 들어 있습니다.
+- `engine/scripts/*.gd` 13개와 `engine/tests/*.gd` 3개를 C#으로 옮겼습니다.
+- 처음 화면(`StartMenu`), 진행률(`StageProgress`), 설정 경로(`EnginePaths`)를 새로 만들었습니다.
+- 쓰는 법과 예전 GDScript 판과의 대응표는 [engine/README.md](../engine/README.md)에 있습니다(옮기기 전 `csharp/Bpcg.Engine/README.md`).
+
+**라이브러리.** `cli.py`의 실행 단위를 `csharp/Bpcg/Runs.cs`(+ `RunError`)로 옮겨, 콘솔과 엔진이 같이 씁니다. 콘솔 출력은 그대로입니다. tiny 결과가 바이트까지 같고, 걸린 시간만 다릅니다.
+
+**Godot .NET 판.** `.tools/godot-net/Godot_mono.app`에 손으로 받았습니다(SHA-512 일치, 1장 절차의 (나)). 1장에서 걱정한 것은 Godot 4.7.2의 C# 라이브러리가 .NET 8 기준이라는 점이었습니다. 실제로 net10.0 게임 어셈블리가 편집기 빌드(`--build-solutions`)와 실행 모두에서 돕니다.
+
+**확인.**
+
+- 엔진 안에서 만든 tiny 결과가 콘솔 결과와 같습니다.
+- C# 연기 검사(회랑·지구본)가 C# 굽기와 Python 굽기 모두에서 통과합니다.
+- 화면 13장이 GDScript 판과 픽셀까지 같습니다.
+
+**남은 일.** 설치 스크립트, doctor, CI, pytest의 Godot 검사, 스튜디오 'Godot로 보기'의 .NET 전환과 `engine/` 대체가 남아 있었습니다. 이것은 단계 5에서 했습니다. 내보낸 게임의 configs는 남았습니다.
+
+### 단계 2 도중의 상태 (2026-10-03)
+
+이 절과 다음 절은 단계 2 도중, hydro 묶음까지 끝낸 때의 기록입니다. 그 뒤의 일은 위의 단계 4·5 절에 있습니다. 지금 저장소에는 planet부터 bake까지 모든 묶음의 C# 파일이 `src/Bpcg/` 아래에 있습니다(3장 대응표의 파일 이름 그대로).
+
+- **단계 2(묶음별 포팅)를 하는 중이었습니다.** 사용자가 core 검토를 따로 하지 않고 순서대로 계속하라고 했습니다(10장 D13). 끝낸 묶음은 core와 hydro입니다.
+- **대조 결과.** C# 시험 119개가 모두 통과했고, 실수 비교는 모두 비트 단위로 같았습니다. 잰 환경은 macOS 26.6 arm64, .NET SDK 10.0.401·런타임 10.0.12, numpy 2.5.3, numba 0.68.0입니다. 다른 OS에서는 아직 돌려 보지 않았습니다.
+- **hydro (2026-10-03).** 물이 흐르는 길을 정하는 묶음입니다.
+  - 옮긴 것: `Depressions`(웅덩이 메우기), `Routing`(물을 보낼 이웃 고르기, 하류부터 순서), `AccumulateModule`(물 모으기. 파일 이름은 `Accumulate.cs`, 이름은 0장 쟁점 6 규칙), `Network`(유역과 강 구간).
+  - golden 사례: 공 모양 격자(n = 32·7, n은 면 한 변의 칸 수), 평면 64 × 64칸, 높이가 정수인 평면(두 이웃의 경사가 같은 칸과 넓은 평지가 생김), +0과 −0의 부호를 보는 손 사례.
+  - 채움, D8(둘레 여덟 칸 가운데 가장 가파르게 내려가는 칸으로 물을 보내는 규칙. 히스테리시스 포함), 순서, 누적, 유역, 강 구간이 모두 비트 단위로 같았습니다. 히스테리시스는 새 방향이 2% 넘게 더 가파를 때만 방향을 바꾸는 규칙입니다.
+- **만든 것.**
   - 저장소 설정: `.gitignore`(C# 빌드 출력, golden 예외), `.gitattributes`, `.editorconfig`(`[*.cs]`), `global.json`(SDK 10.0, 시험 실행기 Microsoft.Testing.Platform, 10장 D11).
   - 프로젝트: `csharp/Directory.Build.props`, `Bpcg`·`Bpcg.Cli`(뼈대만)·`Bpcg.Tests`, `Bpcg.slnx`, 잠금 파일 `packages.lock.json`, `csharp/README.md`.
-  - `Bpcg.IO`: `Npy`·`Npz`(numpy 와 바이트까지 같음)·`Crc32`, `PyJson`(Python `json.dumps` 와 같은 글자), `Toml`(Python `tomllib` 이식, 10장 D9).
-  - `Bpcg.Numerics`: `NpReduce`(numpy pairwise 합, 10장 D10), `LinAlg`(3성분), `NpGrid.Linspace`.
+  - `Bpcg.IO`(파일 형식): `Npy`·`Npz`(numpy와 바이트까지 같음)·`Crc32`, `PyJson`(Python `json.dumps`와 같은 글자), `Toml`(Python `tomllib` 이식, 10장 D9).
+  - `Bpcg.Numerics`(numpy 대신 쓰는 수치 코드): `NpReduce`(numpy pairwise 합, 10장 D10), `LinAlg`(3성분 벡터), `NpGrid.Linspace`.
   - core: `Package`, `Constants`, `Fields`(Python 표에서 생성), `Paths`, `Config`(+`DiffLib`), `Hashing`, `Noise`, `Cubesphere`, `Graph`, `Distance`, `Resample`.
-  - golden: `csharp/golden/export_golden.py` 가 core·IO 사례 97개(10.3 MB)를 `out/golden/` 에, 작은 사례(파일마다 1 MB 이하, 합계 약 4 MB)를 `csharp/golden/data/` 에 씁니다. 커밋한 사례만 있을 때는 큰 사례를 쓰는 시험 18개가 '사례 없음'으로 실패합니다(건너뛰지 않는 규칙, 7장).
-  - 시험: `csharp/Bpcg.Tests/` 의 `Golden`·`Compare` 와 모듈별 시험 클래스(`IO/IoTests`, `Core/<모듈>Tests`).
-- **4~6장은 대부분 독립 비평을 거치지 않은 초안입니다**(10장 D4). 5장(numpy·numba 공통 규칙)과 4장 끝(FFT·polyfit)은 비어 있거나 일부만 채웠습니다(10장 D7).
+  - golden: `csharp/golden/export_golden.py`가 core·IO 사례 97개(10.3 MB)를 `out/golden/`에 썼습니다. 작은 사례(파일마다 1 MB 이하, 합계 약 4 MB)는 `csharp/golden/data/`에 썼습니다. 그때는 커밋한 사례만 있으면 큰 사례를 쓰는 시험 18개가 '사례 없음'으로 실패했습니다(건너뛰지 않는 규칙, 7장). 이 규칙은 단계 5에서 '건너뜀'으로 바뀌었습니다.
+  - 시험: `csharp/Bpcg.Tests/`의 `Golden`(golden 사례 읽기)·`Compare`(정답과 견주는 도우미. 방법 비교 도구와 다름)와 모듈별 시험 클래스(`IO/IoTests`, `Core/<모듈>Tests`).
+- **4~6장은 대부분 독립 비평을 거치지 않은 초안입니다**(10장 D4). 독립 비평은 단계 0에서 분석 결과를 다른 분석자가 한 번 더 따져 보는 단계였습니다. 5장(numpy·numba 공통 규칙)과 4장 끝(FFT·polyfit)은 비어 있거나 일부만 채웠습니다(10장 D7).
 
-### 다음 할 일
+### 단계 2 도중에 적은 다음 할 일
 
-1. 단계 2 를 순서대로 잇습니다: planet → geology → landscape → subsurface → metrics → pipeline·hero → volume → bake → cli. 묶음마다 golden 사례 추가(6장 해당 절 '(f)') → `csharp/Bpcg/<Pkg>/*.cs` → 대조 시험 → 3장·이 장 갱신 → 커밋.
-2. 다음 묶음은 planet 입니다(6장 planet ①·② 절).
-3. 확인 명령: `uv run python csharp/golden/export_golden.py` → `dotnet build csharp/Bpcg.slnx` → `dotnet test --solution csharp/Bpcg.slnx` → `dotnet format csharp/Bpcg.slnx --verify-no-changes` → `uv run pytest -m "not slow"`. macOS 에서 SDK 가 PATH 에 없으면 `/usr/local/share/dotnet` 을 앞에 둡니다.
+아래 명령의 경로와 golden 스크립트는 단계 5 전의 것이라, 지금은 그대로 돌지 않습니다. 지금 쓰는 확인 명령은 [CLAUDE.md](../CLAUDE.md) 6.2에 있습니다.
+
+1. 단계 2를 순서대로 잇습니다: planet → geology → landscape → subsurface → metrics → pipeline·hero → volume → bake → cli. 묶음마다 golden 사례 추가(6장의 그 묶음 절 '(f)') → `csharp/Bpcg/<Pkg>/*.cs` → 대조 시험 → 3장·이 장 갱신 → 커밋 순서로 합니다.
+2. 다음 묶음은 planet입니다(6장 planet ①·② 절).
+3. 확인 명령은 이 순서로 돌립니다. macOS에서 SDK가 PATH에 없으면 `/usr/local/share/dotnet`을 앞에 둡니다.
+
+```bash
+uv run python csharp/golden/export_golden.py
+dotnet build csharp/Bpcg.slnx
+dotnet test --solution csharp/Bpcg.slnx
+dotnet format csharp/Bpcg.slnx --verify-no-changes
+uv run pytest -m "not slow"
+```
 
 ### 결정이 필요한 쟁점
 
-단계 1은 '기본값' 열의 선택으로 진행하고, 사용자가 바꾸면 따릅니다.
+단계 0 분석이 남긴 질문 가운데, 사람이 정해야 할 쟁점 10개를 모았습니다. 단계 1은 '기본값' 열의 선택으로 하고, 사용자가 바꾸면 따릅니다. 2026-10-03에 사용자는 기본값(이름 규칙, 원소형, 예외 형 등)을 그대로 쓰고 순서대로 계속하라고 했습니다(10장 D13).
+
+그 뒤 이 기록에 결과가 적힌 쟁점은 다섯입니다.
+
+- 쟁점 1: 단계 4에서 '(2) Godot 안에서 계산'으로 정했습니다.
+- 쟁점 3: tomllib 이식으로 정했습니다(10장 D9).
+- 쟁점 8: 설치 스크립트와 CI는 단계 5에서 고쳤습니다.
+- 쟁점 9: 단계 5에서 `docs/conventions.md`의 '엔진은 계산하지 않음'을 바꿨습니다.
+- 쟁점 10: 단계 5에서 커밋하는 golden을 `tests/golden/data`로 옮겼습니다.
 
 | 번호 | 쟁점 | 선택지 | 기본값 (추천) |
 |---|---|---|---|
-| 1 | 단계 4의 목표 (사용자에게 물었고 답을 기다림) | (1) 스튜디오가 계산 엔진으로 C# 콘솔을 고름, (2) Godot 안에서 C# 노드가 계산해 `user://`에 씀, (3) 웹 ↔ 떠 있는 Godot 실시간 연결 | 단계 3 뒤 (1), 단계 4에서 (2), (3)은 필요할 때만 (2장 끝) |
+| 1 | 단계 4의 목표 (사용자에게 물었고 답을 기다림) | (1) 스튜디오가 계산 엔진으로 C# 콘솔을 고름, (2) Godot 안에서 C# 노드가 계산해 `user://`(Godot가 주는 사용자 자료 폴더)에 씀, (3) 웹 ↔ 떠 있는 Godot 실시간 연결 | 단계 3 뒤 (1), 단계 4에서 (2), (3)은 필요할 때만 (2장 끝) |
 | 2 | C# 콘솔의 진행 로그 줄 | Python `cli`와 똑같이 / 자유롭게 | 똑같이. 스튜디오(`studio/progress.py`)가 그 줄을 읽으므로, 실행 명령만 바꿔 C# 엔진을 쓸 수 있습니다 |
-| 3 | TOML 읽기 | Tomlyn + 정수 원문 범위 검사 / tomllib(810줄) 이식 | tomllib 이식으로 정함(10장 D9) |
-| 4 | FIELDS의 bool·int8 원소형 (지시의 다섯 형 목록에 없음) | `bool[]`·`sbyte[]` / `byte[]`로 통일 | `bool[]`·`sbyte[]` (npy `\|b1`·`\|i1`와 1:1) |
-| 5 | 셀 번호 배열의 원소형 | numpy dtype 그대로(이웃 표 int32, src·order int64) / 모두 int | numpy dtype 그대로 |
-| 6 | 같은 이름 충돌(CS0542) | 모듈 정적 클래스와 같은 이름의 Python 클래스·함수가 있을 때의 규칙 | 클래스가 겹치면 모듈 함수를 그 클래스의 static으로(`Config.LoadConfig`), 함수가 겹치면 정적 클래스에 `Module` 접미사(`AccumulateModule.Accumulate`) |
+| 3 | TOML 읽기 | Tomlyn(NuGet 패키지) + 정수 원문 범위 검사 / tomllib(Python 표준 라이브러리, 810줄) 이식 | tomllib 이식으로 정함(10장 D9) |
+| 4 | FIELDS(필드 이름·단위·원소형 표)의 bool·int8 원소형. 지시의 다섯 형 목록에 없음 | `bool[]`·`sbyte[]` / `byte[]`로 통일 | `bool[]`·`sbyte[]` (npy `\|b1`·`\|i1`와 1:1) |
+| 5 | 칸 번호 배열의 원소형 | numpy dtype 그대로(이웃 표 int32, src·order int64) / 모두 int | numpy dtype 그대로 |
+| 6 | 같은 이름 충돌(CS0542: C# 형 안에 그 형과 같은 이름의 멤버를 둘 수 없음) | 모듈 정적 클래스와 같은 이름의 Python 클래스·함수가 있을 때의 규칙 | 클래스가 겹치면 모듈 함수를 그 클래스의 static으로(`Config.LoadConfig`), 함수가 겹치면 정적 클래스에 `Module` 접미사(`AccumulateModule.Accumulate`) |
 | 7 | golden 입력 얻기 | src 함수를 직접 부름 / 실행 중 함수를 감싸 호출 지점 입력을 기록 | 단계 1은 직접 부름. 감싸기는 '부르기만 한다' 규칙과 맞는지 확인 뒤 단계 2에서 |
 | 8 | CI·설치 스크립트를 고칠 시점 | 지시대로 단계 4 / 단계 1로 앞당김(9장 제안) | 지시대로 단계 4. 단계 1~3은 로컬에서 build·test를 확인 |
 | 9 | 엔진은 계산하지 않는다는 규칙(conventions 12절)과 단계 4 | 단계 4에서 규칙을 고침 | 단계 4 시작 전 확인 때 함께 정함 |
@@ -80,16 +242,26 @@
 
 ## 1. 환경
 
+C# 코드를 빌드하고 시험하려면 .NET SDK가 있어야 합니다. SDK는 C# 컴파일러와 `dotnet` 명령을 묶은 개발 도구입니다. Godot에서 C#을 쓰려면 Godot의 .NET 판도 따로 있어야 합니다. 이 장은 단계 0(조사일 2026-10-02)에 둘을 어떤 판으로, 어디에, 어떻게 깔지 조사한 기록입니다.
+
+그 뒤 정해진 것은 이렇습니다.
+
+- SDK는 사용자가 `brew install --cask dotnet-sdk`로 시스템에 깔기로 했습니다(10장 D6). 단계 1에서 `dotnet --info`로 SDK 10.0.401, 런타임 10.0.12, osx-arm64를 확인했습니다(12장).
+- Godot 4.7.2 .NET 판은 단계 4에서 `.tools/godot-net/Godot_mono.app`에 받았고, net10.0 게임 어셈블리가 편집기 빌드와 실행에서 돌았습니다(0장 단계 4).
+- 새로 합류해 환경을 갖추려면 이 장 대신 [CONTRIBUTING.md](../CONTRIBUTING.md)의 '처음 한 번'을 따릅니다.
+
 ### 환경: SDK·Godot .NET·NuGet 패키지
 
-조사일은 2026-10-02입니다. 아래 사실은 근거 링크나 이 컴퓨터에서 읽기만 한 명령으로 확인했고, 확인하지 못한 것은 '(확인 안 함)'으로 적습니다.
+아래 사실은 근거 링크나 이 컴퓨터에서 읽기만 한 명령으로 확인했습니다. 확인하지 못한 것은 '(확인 안 함)'으로 적습니다.
 
-- 이 컴퓨터에는 .NET SDK가 없습니다. 지시 원문대로 설치 방법만 보고하고 C# 코드는 쓰지 않습니다.
-- .NET 10의 최신판은 런타임 10.0.12, SDK 10.0.401(2026-09-08)이고 LTS로 2028-11-14까지 지원됩니다. .NET 8과 .NET 9는 2026-11-10에 지원이 끝납니다.
-- Godot 4.7.2 .NET 판은 나와 있고, 그 C# 묶음(GodotSharp 4.7.2)의 최소 대상은 net8.0입니다. 편집기 런타임은 설치된 가장 높은 정식 런타임으로 올라가므로 net10.0 프로젝트가 돌 것으로 봅니다. 로컬 확인은 '설치 뒤 확인 절차'로 합니다.
+- 조사 때 이 컴퓨터에는 .NET SDK가 없었습니다. 그래서 지시 원문대로 설치 방법만 보고하고 C# 코드는 쓰지 않았습니다.
+- .NET 10의 최신판은 런타임 10.0.12, SDK 10.0.401(2026-09-08)입니다. LTS(오래 지원하는 판)로 2028-11-14까지 지원됩니다. .NET 8과 .NET 9는 2026-11-10에 지원이 끝납니다.
+- Godot 4.7.2 .NET 판은 나와 있습니다. 그 C# 패키지(GodotSharp 4.7.2)의 최소 대상은 net8.0입니다. 곧 .NET 8 이상이면 된다는 뜻입니다. 편집기 런타임은 설치된 가장 높은 정식 런타임으로 올라가므로, net10.0 프로젝트도 돌 것으로 봤습니다. 로컬 확인은 아래 '설치 뒤 확인 절차'로 합니다.
 - 'Godot 4.8은 net10.0이 최소'는 맞습니다. 다만 4.8은 아직 dev 판입니다(4.8.0-dev.7).
 
 #### dotnet --info 결과
+
+조사 때 이 컴퓨터의 상태입니다.
 
 | 항목 | 결과 | 확인 방법 |
 |---|---|---|
@@ -101,6 +273,8 @@
 
 #### .NET 판과 지원 기간
 
+.NET은 판마다 지원 기간이 다릅니다. LTS는 오래 지원하는 판이고, STS는 짧게(24개월) 지원하는 판입니다. 지시 원문이 정한 대상은 net10.0이고, 아래 표에서 가장 늦게까지 지원되는 판도 10.0입니다.
+
 | 채널 | 최신 런타임 | 최신 SDK | 발표일 | 종류 | 지원 끝 |
 |---|---|---|---|---|---|
 | 10.0 | 10.0.12 | 10.0.401 (1xx 띠는 10.0.112) | 2026-09-08 | LTS | 2028-11-14 |
@@ -109,9 +283,11 @@
 | 11.0 | 11.0.0-rc.1 | 11.0.100-rc.1.26425.128 | 2026-09-08 | STS(go-live) | - |
 
 - 근거: <https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json>, <https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json> (10.0.12의 C# 판은 14.0), <https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core> (STS는 24개월).
-- 다음 정기 패치는 둘째 화요일인 2026-10-13로 예상합니다(확인 안 함). 그래서 SDK 판은 global.json에서 범위만 고정합니다.
+- 다음 정기 패치는 둘째 화요일인 2026-10-13로 예상합니다(확인 안 함). 판이 곧 또 오르므로, SDK 판은 global.json에서 범위만 고정합니다.
 
 #### 설치 방법 (운영체제별 표와 추천)
+
+SDK를 까는 방법은 운영체제마다 여럿입니다. 표의 마지막 열은 Godot이 그 SDK를 스스로 찾는지입니다. 이 열은 추천안을 고른 이유 가운데 하나입니다(10장 D6).
 
 | 운영체제 | 방법 | 명령 또는 파일 | 설치 위치 | 관리자 권한 | Godot이 찾는가 |
 |---|---|---|---|---|---|
@@ -124,9 +300,12 @@
 | Ubuntu 24.04 이상 | 배포판 패키지 | `sudo apt-get install -y dotnet-sdk-10.0` (Canonical 빌드, 1xx 띠) | `/usr/lib/dotnet` (확인 안 함) | 필요 | PATH의 `dotnet`으로 찾음 |
 | Ubuntu 22.04 | backports PPA | `sudo add-apt-repository ppa:dotnet/backports` 뒤 위와 같음 | 같음 | 필요 | 같음 |
 
-- Homebrew 버전 cask는 `dotnet-sdk@8`(8.0.425), `dotnet-sdk@9`(9.0.318), `dotnet-sdk@preview`(11.0.100-rc.1)가 있고 `@10`은 없습니다. 기본 `dotnet-sdk`가 10입니다. `@8`·`@9`는 `dotnet-sdk`에 기대고, `@preview`와는 함께 깔 수 없습니다. 이는 `brew info --cask`(읽기만)와 <https://github.com/Homebrew/homebrew-cask/blob/HEAD/Casks/d/dotnet-sdk.rb>에서 확인했습니다. formula `dotnet`은 Microsoft의 비공개 구성 요소가 빠진 소스 빌드이고 DOTNET_ROOT 안내가 붙습니다.
-- dotnet-install 스크립트는 Microsoft가 CI와 관리자 권한이 없는 설치용이라고 밝히고, 개발 PC에는 설치 프로그램을 권합니다. 스크립트는 PATH를 그 셸에만 더하고 DOTNET_ROOT는 정하지 않으며, ICU 같은 의존 라이브러리도 설치하지 않습니다(<https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-install-script>). `--dry-run --channel 10.0`으로 돌리면 `dotnet-sdk-10.0.401-osx-arm64.tar.gz`를 고릅니다(이 컴퓨터에서 확인, 설치하지 않음).
-- 지금 설치 스크립트는 uv를 공식 스크립트로 `~/.local/bin`에, Godot을 SHA-512 확인 뒤 `.tools/godot/`에 받고, git·curl 같은 시스템 도구는 설치하지 않고 명령만 안내합니다(`scripts/setup.sh:206-240`, `:318-368`, `scripts/setup.ps1:292-334`).
+- Homebrew에서 판마다 따로 있는 cask는 `dotnet-sdk@8`(8.0.425), `dotnet-sdk@9`(9.0.318), `dotnet-sdk@preview`(11.0.100-rc.1)가 있고, `@10`은 없습니다. 기본 `dotnet-sdk`가 10입니다. `@8`·`@9`는 `dotnet-sdk`에 기대고, `@preview`와는 함께 깔 수 없습니다. 이는 `brew info --cask`(읽기만)와 <https://github.com/Homebrew/homebrew-cask/blob/HEAD/Casks/d/dotnet-sdk.rb>에서 확인했습니다.
+- Homebrew formula `dotnet`은 Microsoft의 비공개 구성 요소가 빠진 소스 빌드이고, DOTNET_ROOT 안내가 붙습니다.
+- Microsoft는 dotnet-install 스크립트를 CI와 관리자 권한이 없는 설치용이라고 밝히고, 개발 PC에는 설치 프로그램을 권합니다. 스크립트는 PATH를 그 셸에만 더하고, DOTNET_ROOT는 정하지 않으며, ICU 같은 의존 라이브러리도 설치하지 않습니다(<https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-install-script>). `--dry-run --channel 10.0`으로 돌리면 `dotnet-sdk-10.0.401-osx-arm64.tar.gz`를 고릅니다(이 컴퓨터에서 확인, 설치하지 않음).
+- 그때의 설치 스크립트는 uv를 공식 스크립트로 `~/.local/bin`에, Godot을 SHA-512 확인 뒤 `.tools/godot/`에 받았습니다. git·curl 같은 시스템 도구는 설치하지 않고 명령만 안내했습니다(`scripts/setup.sh:206-240`, `:318-368`, `scripts/setup.ps1:292-334`).
+
+우리 설치 스크립트가 고를 수 있는 안은 셋이었습니다.
 
 | 안 | 장점 | 단점 |
 |---|---|---|
@@ -134,9 +313,9 @@
 | (나) `--dotnet`이 `.tools/dotnet`에 설치 | 권한 불필요, 판 고정, `.tools/` 관례와 같음 | 모든 셸·IDE·Godot 실행에 PATH와 DOTNET_ROOT가 필요함. macOS의 Godot은 `/usr/local/share/dotnet/dotnet`이 있으면 빌드에 그것을 먼저 씀(godot#97501). 저장소를 옮기면 경로가 깨짐 |
 | (다) `--dotnet`이 `~/.dotnet`에 설치 | 권한 불필요, 저장소 위치와 무관, uv(`~/.local/bin`)와 같은 사용자 범위 | (나)와 같은 환경 변수 문제 |
 
-추천은 (가)입니다. setup.sh·setup.ps1은 `dotnet --list-sdks`에 10.0.x가 없으면 위 표의 명령을 보여 주고, doctor.py가 같은 점검을 합니다. 관리자 권한이 없는 Linux를 위해 (다)를 `--dotnet` 선택 옵션으로 둘지는 단계 4에서 정합니다. (나)는 권하지 않습니다.
+추천은 (가)입니다. setup.sh·setup.ps1은 `dotnet --list-sdks`에 10.0.x가 없으면 위 표의 명령을 보여 줍니다. doctor.py도 같은 점검을 합니다. 관리자 권한이 없는 Linux를 위해 (다)를 `--dotnet` 선택 옵션으로 둘지는 단계 4에서 정합니다. (나)는 권하지 않습니다.
 
-저장소 최상위에 둘 global.json(단계 1 제안)은 아래와 같습니다. 판 10.0.100 이상의 10.x 가운데 가장 높은 정식 SDK를 쓰고, .NET 10 SDK의 `dotnet test`를 MTP 모드로 돌립니다.
+**global.json.** 이 저장소에서 쓸 SDK 판을 정하는 파일입니다. 저장소 최상위에 둘 내용(단계 1 제안)은 아래와 같습니다. 판 10.0.100 이상의 10.x 가운데 가장 높은 정식 SDK를 씁니다. 그리고 .NET 10 SDK의 `dotnet test`를 MTP 모드(Microsoft.Testing.Platform, 새 시험 실행 방식)로 돌립니다.
 
 ```json
 {
@@ -145,17 +324,31 @@
 }
 ```
 
-- `dotnet` 명령은 현재 폴더부터, MSBuild SDK 해석기는 프로젝트 폴더부터 위로 global.json을 찾습니다(<https://learn.microsoft.com/en-us/dotnet/core/tools/global-json>). Godot은 `--path engine`이 작업 폴더를 `engine/`으로 바꾸므로(main.cpp `set_cwd`) 같은 파일을 봅니다. `allowPrerelease`는 적지 않으면 true라서 적습니다. .NET 10의 `paths` 항목도 저장소 안 SDK를 가리킬 수 있지만, 10보다 낮은 `dotnet`이 먼저 잡히면 이 항목을 무시하므로 쓰지 않습니다.
+- `dotnet` 명령은 현재 폴더부터, MSBuild SDK 해석기는 프로젝트 폴더부터 위로 올라가며 global.json을 찾습니다(<https://learn.microsoft.com/en-us/dotnet/core/tools/global-json>).
+- Godot은 `--path engine`이 작업 폴더를 `engine/`으로 바꾸므로(main.cpp `set_cwd`) 같은 파일을 봅니다.
+- `allowPrerelease`는 적지 않으면 true라서 적습니다.
+- .NET 10의 `paths` 항목도 저장소 안 SDK를 가리킬 수 있습니다. 하지만 10보다 낮은 `dotnet`이 먼저 잡히면 이 항목을 무시하므로 쓰지 않습니다.
 
 #### CI 설정
 
-- actions/setup-dotnet의 최신판은 v6.0.0(2026-07-16)이고 `@v6` 태그가 있습니다. 입력은 `dotnet-version`(`10.0.x` 꼴), `dotnet-quality`, `dotnet-channel`, `global-json-file`, `source-url`, `owner`, `config-file`, `cache`, `cache-dependency-path`, `workloads`, `architecture`입니다. global.json의 `latest*` rollForward를 지원하고, Linux는 `/usr/share/dotnet`, macOS는 `~/.dotnet`, Windows는 `C:\Program Files\dotnet`에 설치하며 PATH와 DOTNET_ROOT를 내보냅니다(<https://github.com/actions/setup-dotnet/blob/v6.0.0/action.yml>, `src/installer.ts`).
-- GitHub 호스트 러너에는 SDK가 이미 있습니다. ubuntu-24.04에는 10.0.401, macos-15-arm64에는 10.0.400, windows-2025에는 10.0.401이 있습니다(<https://github.com/actions/runner-images>). 그래도 판은 global.json으로 고정합니다.
-- chickensoft-games/setup-godot의 최신판은 v2.4.3(2026-10-01)이고 `@v2`가 v2.4.3을 가리킵니다. `use-dotnet: true`(기본값)는 `_mono` 판 zip을 받아 `GodotSharp.dll`이 있는지 보고 GodotSharp 폴더를 bin에 링크할 뿐이며, .NET SDK는 설치하지 않습니다. README 예시도 setup-dotnet을 따로 둡니다(<https://github.com/chickensoft-games/setup-godot/blob/v2.4.3/src/main.ts>). 지금 `ci.yml:89-93`은 `use-dotnet: false`입니다.
-- 지시 원문의 'CI의 use-dotnet 설정'은 단계 4에서 engine 작업의 `use-dotnet`을 `true`로 바꾸고, 그 앞에 `actions/setup-dotnet@v6`(`global-json-file: global.json`) 단계를 더하는 일입니다. engine 작업은 지금처럼 ubuntu-latest에 둡니다. macOS 러너는 SDK를 `~/.dotnet`에 두고 `/usr/local/bin/dotnet`으로 링크하므로(runner-images `install-dotnet.sh`), 그곳의 Godot은 PATH와 DOTNET_ROOT로 SDK를 찾습니다.
-- C# 빌드·시험 작업은 ubuntu-latest, windows-latest, macos-15에서 `setup-dotnet` → `dotnet restore --locked-mode` → `dotnet build` → `dotnet test` → `dotnet format --verify-no-changes` 순서로 도는 꼴을 제안합니다. 이 작업에는 Godot이 필요 없습니다.
+CI는 GitHub이 PR마다 자동으로 돌리는 검사입니다. 여기에 .NET SDK와 Godot .NET 판을 까는 단계가 필요합니다.
+
+- **actions/setup-dotnet.** CI에 .NET SDK를 까는 공식 작업입니다. 최신판은 v6.0.0(2026-07-16)이고 `@v6` 태그가 있습니다.
+  - 입력은 `dotnet-version`(`10.0.x` 꼴), `dotnet-quality`, `dotnet-channel`, `global-json-file`, `source-url`, `owner`, `config-file`, `cache`, `cache-dependency-path`, `workloads`, `architecture`입니다.
+  - global.json의 `latest*` rollForward를 지원합니다.
+  - Linux는 `/usr/share/dotnet`, macOS는 `~/.dotnet`, Windows는 `C:\Program Files\dotnet`에 설치하고, PATH와 DOTNET_ROOT를 내보냅니다(<https://github.com/actions/setup-dotnet/blob/v6.0.0/action.yml>, `src/installer.ts`).
+- **호스트 러너의 SDK.** GitHub 호스트 러너에는 SDK가 이미 있습니다. ubuntu-24.04에는 10.0.401, macos-15-arm64에는 10.0.400, windows-2025에는 10.0.401이 있습니다(<https://github.com/actions/runner-images>). 그래도 판은 global.json으로 고정합니다.
+- **chickensoft-games/setup-godot.** 최신판은 v2.4.3(2026-10-01)이고 `@v2`가 v2.4.3을 가리킵니다. `use-dotnet: true`(기본값)는 `_mono` 판 zip을 받아 `GodotSharp.dll`이 있는지 보고, GodotSharp 폴더를 bin에 링크할 뿐입니다. .NET SDK는 설치하지 않습니다. README 예시도 setup-dotnet을 따로 둡니다(<https://github.com/chickensoft-games/setup-godot/blob/v2.4.3/src/main.ts>). 그때 `ci.yml:89-93`은 `use-dotnet: false`였습니다.
+- **지시 원문의 'CI의 use-dotnet 설정'.** 단계 4에서 engine 작업의 `use-dotnet`을 `true`로 바꾸고, 그 앞에 `actions/setup-dotnet@v6`(`global-json-file: global.json`) 단계를 더하는 일입니다. engine 작업은 지금처럼 ubuntu-latest에 둡니다. macOS 러너는 SDK를 `~/.dotnet`에 두고 `/usr/local/bin/dotnet`으로 링크하므로(runner-images `install-dotnet.sh`), 그곳의 Godot은 PATH와 DOTNET_ROOT로 SDK를 찾습니다.
+- **C# 빌드·시험 작업 제안.** ubuntu-latest, windows-latest, macos-15에서 `setup-dotnet` → `dotnet restore --locked-mode` → `dotnet build` → `dotnet test` → `dotnet format --verify-no-changes` 순서로 돕니다. 이 작업에는 Godot이 필요 없습니다.
 
 #### Godot 4.7.2 .NET 판과 net10.0 (로컬 확인 전, 근거 링크)
+
+Godot 4.7.2가 주는 C# 라이브러리(GodotSharp)는 .NET 8(net8.0)용입니다. 우리 코드는 .NET 10(net10.0)으로 짭니다. 이 절은 이 조합이 도는지를 따집니다.
+
+판단: macOS·Windows·Linux 데스크톱에서는 net10.0이 될 것으로 봅니다. 로컬 확인이 실패하면 대안은 두 가지입니다. 하나는 engine csproj만 net8.0으로 두고 Bpcg를 `net8.0;net10.0` 다중 대상으로 만드는 것입니다. 다만 .NET 8은 2026-11-10에 지원이 끝납니다. 다른 하나는 Godot 4.8 정식판을 기다리는 것입니다. 단계 4에서 실제로 받아 보니 net10.0으로 돌았습니다(0장 단계 4).
+
+<details><summary>받을 파일과 SHA-512</summary>
 
 | 대상 | 파일 (4.7.2-stable 릴리스) | 크기 | 풀었을 때 실행 파일 |
 |---|---|---|---|
@@ -175,37 +368,50 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 bb5c41d72370ed743660361f6228006f808ab04ca33abdc545d740b044f3fe057f32ae8cb7873a1bc86ddcd82ae683b9f6dfdfe4179852f2c0f1acde2ff6bd5a  …_mono_export_templates.tpz
 ```
 
-net10.0이 될 것으로 보는 근거는 다음과 같습니다.
+</details>
+
+<details><summary>net10.0이 될 것으로 본 근거 여섯 가지</summary>
 
 1. Godot.NET.Sdk 4.7.2(MIT, 2026-08-18)가 NuGet에 있습니다. 같이 쓰는 GodotSharp 4.7.2와 GodotSharpEditor 4.7.2는 `lib/net8.0`뿐입니다(nupkg를 받아 열어 봄). nuspec의 커밋 `ed1daf0bf`는 로컬 Godot과 같은 커밋입니다.
 2. 4.7.2 편집기가 새 csproj에 쓰는 값은 `TargetFramework` = `net8.0`, android 조건부 `net9.0`, `EnableDynamicLoading` = `true`입니다(`GodotTools.ProjectEditor/ProjectGenerator.cs`, 태그 4.7.2-stable). `ProjectUtils.EnsureTargetFrameworkMatchesMinimumRequirement`는 net8.0보다 낮은 값만 올리므로 net10.0은 그대로 둡니다. `EnsureGodotSdkIsUpToDate`는 Sdk 속성을 `Godot.NET.Sdk/4.7.2`로 다시 씁니다.
-3. 편집기 런타임 설정 `GodotSharp/Api/Debug/GodotPlugins.runtimeconfig.json`은 `tfm net8.0`, `rollForward LatestMajor`입니다(배포 zip 안 파일을 직접 읽음). 그래서 설치된 가장 높은 정식 런타임(10.0.x)에서 돌고 net10.0 게임 어셈블리도 같은 런타임에 올립니다. 정식판이 아닌 런타임은 고르지 않아, .NET 10 RC에서는 실패했고 GA SDK 10에서 풀렸습니다(godot#111246).
-4. 빌드는 `dotnet build <csproj> -c Debug`이고, 데스크톱 내보내기는 `dotnet publish -c ExportRelease -r <rid> --self-contained true -p:GodotTargetPlatform=<os>`입니다(`BuildSystem.cs`, `BuildManager.cs`). 런타임을 함께 넣으므로 TFM에 기대지 않습니다.
+3. 편집기 런타임 설정 `GodotSharp/Api/Debug/GodotPlugins.runtimeconfig.json`은 `tfm net8.0`, `rollForward LatestMajor`입니다(배포 zip 안 파일을 직접 읽음). 그래서 설치된 가장 높은 정식 런타임(10.0.x)에서 돌고, net10.0 게임 어셈블리도 같은 런타임에 올립니다. 정식판이 아닌 런타임은 고르지 않아, .NET 10 RC에서는 실패했고 GA SDK 10에서 풀렸습니다(godot#111246).
+4. 빌드는 `dotnet build <csproj> -c Debug`이고, 데스크톱 내보내기는 `dotnet publish -c ExportRelease -r <rid> --self-contained true -p:GodotTargetPlatform=<os>`입니다(`BuildSystem.cs`, `BuildManager.cs`). 런타임을 함께 넣으므로 TFM(대상 프레임워크, 예: net8.0)에 기대지 않습니다.
 5. Godot 블로그는 "the version targeted by Godot's C# packages is only the minimum version that your project can target"라고 썼습니다(<https://godotengine.org/article/godotsharp-packages-net8/>). 포럼에도 4.7.2와 4.8.0-dev.6에서 net10.0 디버그가 된다는 보고가 있습니다(<https://forum.godotengine.org/t/use-dotnet-11-rc-sdk/144192/5>, 확인 안 함).
 6. 4.8에 관한 근거입니다. godot#123738 "Upgrade packages and minimum TFM required to `net10.0`"이 2026-09-26에 합쳐졌고 이정표는 4.8입니다. master의 `GodotMinimumRequiredTfm`은 `net10.0`이고, GodotSharp 4.8.0-dev.7(2026-09-29)은 `lib/net10.0`입니다(dev.6까지는 net8.0). godot-docs master에는 "Godot 4.8 requires .NET 10 or later."라고 적혀 있습니다. Android 내보내기는 4.7 템플릿이 net10.0을 받지 않지만(godot#118989) 우리 대상이 아닙니다.
 
-Godot이 SDK를 찾는 순서(4.7.2 소스)는 다음과 같습니다.
+</details>
 
-- 런타임(C++ `hostfxr_resolver.cpp`, `gd_mono.cpp`)은 `DOTNET_ROOT_ARM64` → `DOTNET_ROOT` → `/etc/dotnet/install_location_arm64` → `/etc/dotnet/install_location` → `/usr/local/share/dotnet` 순서로 찾습니다. 모두 실패하면 PATH의 `dotnet --list-sdks`로 찾습니다.
-- 빌드용 `dotnet`(C# `DotNetFinder.cs`)은 macOS에서 `/usr/local/share/dotnet/dotnet`이 있으면 그것을 쓰고, 없으면 PATH에서 찾습니다. DOTNET_ROOT는 보지 않습니다. 두 탐색이 어긋나는 문제는 godot#97501에 열려 있고, 고치는 PR godot#98073도 열려 있습니다. Homebrew formula를 쓰려면 `/usr/local/share/dotnet`으로 링크해야 했다는 보고가 있습니다(godot#75668). Finder에서 연 앱은 셸 설정의 PATH와 DOTNET_ROOT를 받지 못합니다.
-- .NET 판 편집기는 C#이 없는 프로젝트를 열어도 늘 .NET을 초기화하고(`GDMono::should_initialize`), hostfxr가 없으면 경고 창을 띄웁니다. 엔진을 .NET 판으로 바꾸면 GDScript만 만지는 사람에게도 SDK가 필요합니다.
+<details><summary>Godot이 SDK를 찾는 순서 (시스템 설치를 추천한 근거)</summary>
 
-engine/ csproj가 밖의 라이브러리를 ProjectReference로 참조할 때는 다음을 지킵니다.
+4.7.2 소스에서 확인한 순서입니다.
 
-- Godot.NET.Sdk는 기본 Compile glob을 끄지 않으므로 `engine/` 아래 모든 .cs가 게임 어셈블리에 들어갑니다. 그래서 계산 라이브러리는 engine/ 밖에 둡니다(지시 원문의 배치와 같음).
+- 런타임(C++ `hostfxr_resolver.cpp`, `gd_mono.cpp`)은 `DOTNET_ROOT_ARM64` → `DOTNET_ROOT` → `/etc/dotnet/install_location_arm64` → `/etc/dotnet/install_location` → `/usr/local/share/dotnet` 순서로 찾습니다. 모두 실패하면 PATH의 `dotnet --list-sdks`로 찾습니다. hostfxr는 .NET 런타임을 찾아 띄우는 라이브러리입니다.
+- 빌드용 `dotnet`(C# `DotNetFinder.cs`)은 macOS에서 `/usr/local/share/dotnet/dotnet`이 있으면 그것을 쓰고, 없으면 PATH에서 찾습니다. DOTNET_ROOT는 보지 않습니다.
+- 두 탐색이 어긋나는 문제는 godot#97501에 열려 있고, 고치는 PR godot#98073도 열려 있습니다.
+- Homebrew formula를 쓰려면 `/usr/local/share/dotnet`으로 링크해야 했다는 보고가 있습니다(godot#75668).
+- Finder에서 연 앱은 셸 설정의 PATH와 DOTNET_ROOT를 받지 못합니다.
+- .NET 판 편집기는 C#이 없는 프로젝트를 열어도 늘 .NET을 초기화하고(`GDMono::should_initialize`), hostfxr가 없으면 경고 창을 띄웁니다. 그래서 엔진을 .NET 판으로 바꾸면, GDScript만 만지는 사람에게도 SDK가 필요합니다.
+
+</details>
+
+engine/ csproj가 밖의 라이브러리를 ProjectReference(다른 C# 프로젝트를 참조하는 설정)로 참조할 때는 다음을 지킵니다.
+
+- Godot.NET.Sdk는 기본 Compile glob을 끄지 않습니다. 그래서 `engine/` 아래 모든 .cs가 게임 어셈블리에 들어갑니다. 계산 라이브러리는 engine/ 밖에 둡니다(지시 원문의 배치와 같음).
 - 라이브러리는 `Microsoft.NET.Sdk`로 만들고 GodotSharp를 참조하지 않습니다. GodotSharp는 Godot.NET.Sdk가 게임 프로젝트에만 넣습니다.
-- Godot은 `-c Debug`, `-c ExportDebug`, `-c ExportRelease`로 빌드하고, 이 값은 참조한 프로젝트까지 넘어갑니다. Microsoft.NET.Sdk는 `Release`일 때만 `Optimize=true`로 두므로, 내보낸 게임의 Bpcg가 최적화 없이 컴파일됩니다(godot#96435에서 Godot 관리자가 확인, dotnet/sdk v10.0.401 `Microsoft.NET.Sdk.props:47-53`). 그래서 `csharp/Directory.Build.props`에 ExportRelease일 때 Optimize를 켜는 규칙을 넣습니다.
+- Godot은 `-c Debug`, `-c ExportDebug`, `-c ExportRelease`로 빌드하고, 이 값은 참조한 프로젝트까지 넘어갑니다. 그런데 Microsoft.NET.Sdk는 `Release`일 때만 `Optimize=true`로 둡니다. 그래서 내보낸 게임의 Bpcg가 최적화 없이 컴파일됩니다(godot#96435에서 Godot 관리자가 확인, dotnet/sdk v10.0.401 `Microsoft.NET.Sdk.props:47-53`). 이를 막으려고 `csharp/Directory.Build.props`에 ExportRelease일 때 Optimize를 켜는 규칙을 넣습니다.
 - 내보내기는 sln이나 slnx가 있어야 'dotnet' 특징을 붙이고 C#을 넣습니다(`ExportPlugin.ProjectContainsDotNet`). 4.7.2는 `.slnx`도 찾습니다.
 - 프로젝트 폴더에 csproj가 생기면 편집기가 `project.godot`의 `config/features`에 `"C#"`을 넣습니다(`core/config/project_settings.cpp`). 그러면 표준판에서 경고가 납니다. 그래서 단계 1~3에서는 engine/ 아래에 .cs나 .csproj를 두지 않습니다.
 - `dotnet/project/assembly_name`이 없으면 어셈블리 이름은 `config/name`에서 온 `B-PCG`가 됩니다(`modules/mono/utils/path_utils.cpp`). 단계 4에서 `BpcgEngine` 같은 이름을 적어 둡니다.
 - `FrameworkReference`(ASP.NET Core 등)의 어셈블리를 Godot이 찾지 못하는 문제가 열려 있습니다(godot#120843). Bpcg는 기본 프레임워크만 씁니다.
 - Godot 노드 클래스에 C# 14 문법을 쓰면 편집기 빌드가 깨진다는 4.6 포럼 보고가 있습니다(<https://forum.godotengine.org/t/net10-and-c-14/133412>, 확인 안 함). 아래 확인 절차의 (사)에서 봅니다.
 
-판단: macOS·Windows·Linux 데스크톱에서는 net10.0이 될 것으로 봅니다. 로컬 확인이 실패하면 대안은 두 가지입니다. engine csproj만 net8.0으로 두고 Bpcg를 `net8.0;net10.0` 다중 대상으로 만들 수 있지만, .NET 8은 2026-11-10에 지원이 끝납니다. 아니면 Godot 4.8 정식판을 기다립니다.
-
 #### 설치 뒤 확인 절차
 
 SDK와 Godot .NET 판을 깐 뒤 macOS에서 한 번 돌리고, 결과를 진행 기록에 적습니다. 모든 작업은 저장소 밖 임시 폴더에서 하므로 engine/은 건드리지 않습니다.
+
+절차는 이렇습니다. 임시 폴더에 net10.0 라이브러리(`ProbeLib`)와, 그것을 부르는 작은 Godot 프로젝트(`Net10Probe`)를 만듭니다. 그다음 명령줄 빌드, Godot 편집기 빌드, 실행, 내보내기용 빌드를 차례로 돌려, 단계마다 아래 성공 기준을 맞추는지 봅니다. Godot은 임시 HOME으로 돌립니다.
+
+<details><summary>확인 스크립트 (가)~(바)</summary>
 
 ```bash
 # (가) SDK: 'Version: 10.0.4xx', Host 10.0.x arm64, Base Path /usr/local/share/dotnet/sdk/... 이어야 함
@@ -293,19 +499,23 @@ ls "$W/publish" | grep -E '^(Net10Probe|ProbeLib)\.dll$|^libhostfxr\.dylib$|^Sys
 # (바) 끝나면 지움: rm -rf "$W"
 ```
 
+</details>
+
 | 단계 | 성공 기준 |
 |---|---|
-| (가) | SDK 10.0.4xx, Host 10.0.x, RID `osx-arm64`, `Microsoft.NETCore.App 10.0.x [/usr/local/share/dotnet/shared/...]` |
+| (가) | SDK 10.0.4xx, Host 10.0.x, RID(실행 환경 이름) `osx-arm64`, `Microsoft.NETCore.App 10.0.x [/usr/local/share/dotnet/shared/...]` |
 | (나) | SHA-512 일치, `G --version` = `4.7.2.stable.mono.official.ed1daf0bf` (mono 표기는 확인 안 함) |
 | (라) | `dotnet build` 오류 0, `.godot/mono/temp/bin/Debug/`에 `Net10Probe.dll`과 `ProbeLib.dll`, 세 Godot 명령의 rc 0 |
 | (라) 실행 | `BPCG_NET10_OK runtime=10.0.x tfm=.NETCoreApp,Version=v10.0 sm0=0xE220A8397B1DCDAF h3=0xD0734750FDE362B3`, `Found hostfxr: /usr/local/share/dotnet/host/fxr/10.0.x/libhostfxr.dylib`, `Failed to load project assembly` 없음, csproj 해시 같음 |
 | (마) | `Optimize` 값이 `true`(조건을 지우면 빈 값으로 godot#96435 재현), publish 폴더에 네 파일, `Net10Probe.runtimeconfig.json`의 `includedFrameworks`가 10.0.x |
 
-- (사) 선택: `extension(int n) { public int Twice => n * 2; }`가 든 static 클래스 파일을 game/에 더하고 (라)의 빌드를 다시 돌려, C# 14 문법이 Godot 소스 생성기를 깨는지 봅니다.
-- (아) 선택: 진짜 내보내기는 mono 내보내기 템플릿(1.2 GB)을 `$W/home/Library/Application Support/Godot/export_templates/4.7.2.stable.mono/`에 풀고, macOS 프리셋을 담은 `export_presets.cfg`를 만든 뒤 `G --export-release "macOS" "$W/export/Net10Probe.zip"`로 합니다. 서명 설정 때문에 단계 4로 미룹니다.
+- (사) 선택: `extension(int n) { public int Twice => n * 2; }`가 든 static 클래스 파일을 game/에 더하고 (라)의 빌드를 다시 돌립니다. C# 14 문법이 Godot 소스 생성기를 깨는지 봅니다.
+- (아) 선택: 진짜 내보내기는 mono 내보내기 템플릿(1.2 GB)을 `$W/home/Library/Application Support/Godot/export_templates/4.7.2.stable.mono/`에 풉니다. 그다음 macOS 프리셋을 담은 `export_presets.cfg`를 만들고 `G --export-release "macOS" "$W/export/Net10Probe.zip"`로 합니다. 서명 설정 때문에 단계 4로 미룹니다.
 - Windows에서는 `HOME`, `APPDATA`, `LOCALAPPDATA`를 임시 폴더로 바꾸고 `_console.exe`와 `-r win-x64`를 씁니다. Linux에서는 `XDG_*`도 임시 폴더로 바꾸고 `-r linux-x64`를 씁니다.
 
 #### NuGet 패키지 후보와 라이선스
+
+NuGet은 C#의 패키지 저장소입니다(Python의 PyPI와 같은 것). 지시 원문은 MIT·BSD·Apache-2.0 라이선스 패키지만 쓰게 합니다. 아래는 조사 때의 후보입니다. 그 뒤 TOML은 패키지 대신 Python `tomllib`을 직접 옮겼고(10장 D9), 시험 패키지는 xunit.v3 하나만 씁니다(10장 D11).
 
 | 패키지 | 판(발표일) | 라이선스 | 쓸 곳 | 판단 |
 |---|---|---|---|---|
@@ -318,7 +528,7 @@ ls "$W/publish" | grep -E '^(Net10Probe|ProbeLib)\.dll$|^libhostfxr\.dylib$|^Sys
 | System.IO.Hashing | 10.0.12 (2026-09-08) | MIT | - | 제외. 필요한 것은 PNG CRC32 하나뿐이라 표 방식 약 20줄로 직접 구현 |
 | System.CommandLine | 2.0.12 (2026-09-08) | MIT | - | 제외. 명령 4개와 옵션 몇 개라 직접 구현 |
 
-TOML 라이브러리 비교:
+TOML 라이브러리 비교입니다. 기준은 Python 3.13의 tomllib입니다. C#이 설정 파일을 Python과 똑같이 읽어야, 같은 설정에서 같은 행성이 나오기 때문입니다.
 
 | 항목 | Python 3.13 tomllib (기준) | Tomlyn 2.10.1 | Tomlet 6.2.0 |
 |---|---|---|---|
@@ -328,11 +538,14 @@ TOML 라이브러리 비교:
 | int64 밖 정수 | 받음 (`9223372036854775808`도 int) | 2^63~2^64-1은 오류 없이 음수로 감김 (소스 읽기), 그 위는 오류 | `Convert.ToInt64` 예외 → 오류 |
 | `inf`·`nan`, `6_400.0`, `1e400` | 받음, 6400.0, inf | 받음, 밑줄 처리, `double.TryParse` | 받음, 밑줄 처리 |
 
-- manifest.json의 `config`는 키를 정렬하지 않고 설정 dict 순서대로 씁니다(`bake/bundle.py:125,234`). 그래서 순서를 문서로 보장하는 Tomlyn을 고릅니다. 감싸는 코드에서는 int64 범위 밖 정수를 오류로 막고, TOML 1.1 전용 문법(`--set a={x=1,}` 등)을 Python과 달리 받는 점을 진행 기록에 적습니다.
-- 최소 묶음은 Bpcg에 Tomlyn 하나, Bpcg.Tests에 xunit.v3 하나이고 Bpcg.Cli는 없습니다. System.IO.Compression(zip, zlib), SHA256, System.Text.Json은 .NET에 들어 있어 패키지가 아닙니다. MathNet.Numerics 같은 수치 라이브러리는 numpy·scipy와 비트 단위 일치를 보장하지 않으므로 쓰지 않습니다.
-- 원격 측정은 CI와 시험 하네스에서 `DOTNET_CLI_TELEMETRY_OPTOUT=1`(MTP는 `TESTINGPLATFORM_TELEMETRY_OPTOUT=1`도 받음)로 끕니다.
+- manifest.json의 `config`는 키를 정렬하지 않고 설정 dict 순서대로 씁니다(`bake/bundle.py:125,234`). 그래서 순서를 문서로 보장하는 Tomlyn을 고릅니다. 감싸는 코드에서는 int64 범위 밖 정수를 오류로 막습니다. TOML 1.1 전용 문법(`--set a={x=1,}` 등)을 Python과 달리 받는 점은 진행 기록에 적습니다.
+- 최소 패키지 구성은 Bpcg에 Tomlyn 하나, Bpcg.Tests에 xunit.v3 하나이고, Bpcg.Cli는 없습니다. System.IO.Compression(zip, zlib), SHA256, System.Text.Json은 .NET에 들어 있어 패키지가 아닙니다.
+- MathNet.Numerics 같은 수치 라이브러리는 쓰지 않습니다. numpy·scipy와 비트 단위로 같다는 보장이 없기 때문입니다.
+- 원격 측정(사용 정보를 Microsoft로 보내는 기능)은 CI와 시험 하네스에서 `DOTNET_CLI_TELEMETRY_OPTOUT=1`로 끕니다. MTP는 `TESTINGPLATFORM_TELEMETRY_OPTOUT=1`도 받습니다.
 
 #### 고칠 곳 (환경)
+
+조사 때 정한 고칠 곳입니다. 설치 스크립트, doctor, CI는 단계 5에서 실제로 고쳤습니다(0장 단계 5).
 
 - 단계 1에서는 저장소 최상위에 `global.json`을 둡니다. `csharp/Directory.Build.props`에는 net10.0, Nullable, ExportDebug·ExportRelease 구성 대응, `RestorePackagesWithLockFile`을 넣습니다. `.gitignore`에 `bin/`, `obj/`, `*.user`, `.vs/`, `TestResults/`, `*.binlog`를 더하고, `.editorconfig`에 `[*.cs]` 규칙을 더합니다.
 - 단계 4에서는 다음을 고칩니다.
@@ -343,6 +556,8 @@ TOML 라이브러리 비교:
   - `engine/project.godot`: `dotnet/project/assembly_name`.
 
 ## 2. 폴더와 프로젝트 구성 (계획)
+
+단계 0에 세운 C# 폴더 계획입니다. 단계 5에서 `csharp/` 안의 폴더를 저장소 맨 위로 옮겼으므로, 아래 경로는 문서 맨 위의 표로 바꿔 읽습니다. 지금 구성은 0장 단계 5 절에 있습니다.
 
 ```text
 global.json                  SDK 10.0 고정 (rollForward latestFeature). 저장소 맨 위에 두어 단계 4의 Godot 빌드도 같은 SDK 를 씀
@@ -362,34 +577,40 @@ csharp/
     └── data/                커밋하는 작은 golden (각 1 MB 이하)
 ```
 
-- **대응 규칙.** `src/bpcg/<pkg>/<mod>.py` → `csharp/Bpcg/<Pkg>/<Mod>.cs`, namespace `Bpcg.<Pkg>`, 모듈 수준 함수는 `public static class <Mod>`의 메서드(`bpcg.hydro.routing.topo_order` → `Bpcg.Hydro.Routing.TopoOrder`), dataclass는 같은 파일의 `sealed class`나 `record`입니다. 이름이 겹칠 때의 규칙은 0장 쟁점 6입니다.
-- **배열.** 셀마다 하나인 필드는 길이 N의 1차원 배열, (N, L) 필드는 행 우선 1차원 배열과 열 수입니다. 원소형은 FIELDS의 dtype을 따릅니다: float32 `float`, float64 `double`, uint8 `byte`, int32 `int`, int64 `long`, bool `bool`, int8 `sbyte`(0장 쟁점 4).
-- **의존 방향.** `Numerics`·`IO`는 아무것도 참조하지 않고, 그 위에 docs/conventions.md 1절의 `Core → Planet·Geology·Hydro → Landscape → Subsurface → Volume → Bake` 순서를 그대로 지킵니다. `Pipeline`과 `Hero`는 서로를 부르므로 한 단위로 봅니다.
-- **수치 규칙.**
-  - 계산 코드에서 Godot 자료형(`Vector3` 등)을 쓰지 않습니다.
-  - 해시는 `unchecked` 안에서 `ulong`으로 계산합니다.
-  - `Math.FusedMultiplyAdd`와 식 재배열을 쓰지 않고, Python과 같은 결합 순서로 씁니다.
-  - 정렬은 안정 정렬로 하고, 같은 값의 순서는 Python 규칙(대부분 셀 번호)을 따릅니다.
-  - prange 반복만 `Parallel.For`로 옮기고, 그 안에서는 칸·점마다 쓰기만 합니다.
-  - 숫자 ↔ 글자 변환은 모두 `CultureInfo.InvariantCulture`로 합니다.
+- **대응 규칙.** Python 파일 하나는 C# 파일 하나가 됩니다.
+  - 경로와 이름공간: `src/bpcg/<pkg>/<mod>.py` → `csharp/Bpcg/<Pkg>/<Mod>.cs`, namespace `Bpcg.<Pkg>`.
+  - 모듈 수준 함수는 `public static class <Mod>`의 메서드가 됩니다. 예: `bpcg.hydro.routing.topo_order` → `Bpcg.Hydro.Routing.TopoOrder`.
+  - dataclass는 같은 파일의 `sealed class`나 `record`입니다.
+  - 이름이 겹칠 때의 규칙은 0장 쟁점 6입니다.
+- **배열.** 칸마다 값이 하나인 필드는 길이 N(칸 수)의 1차원 배열입니다. 칸마다 값이 L개인 (N, L) 필드는 행 우선 1차원 배열과 열 수로 둡니다. 예를 들어 칸 3개(a, b, c)에 값이 2개씩이면 배열은 `[a0, a1, b0, b1, c0, c1]`, 열 수는 2입니다. 원소형은 FIELDS의 dtype을 따릅니다: float32 `float`, float64 `double`, uint8 `byte`, int32 `int`, int64 `long`, bool `bool`, int8 `sbyte`(0장 쟁점 4).
+- **의존 방향.** `Numerics`·`IO`는 아무것도 참조하지 않습니다. 그 위에 docs/conventions.md 1절의 `Core → Planet·Geology·Hydro → Landscape → Subsurface → Volume → Bake` 순서를 그대로 지킵니다. 오른쪽 폴더는 왼쪽 폴더를 쓸 수 있지만, 거꾸로는 안 됩니다. 예를 들어 Landscape의 솔버는 Core의 칸 그래프(`CellGraph`)와 Hydro의 물길 함수(`Routing.D8Receivers`)를 쓰지만, Core와 Hydro는 Landscape를 부르지 않습니다. `Pipeline`과 `Hero`는 서로를 부르므로 한 단위로 봅니다.
+- **수치 규칙.** 같은 계산이라도 순서나 방식이 조금 다르면 실수의 마지막 자리가 달라집니다. 그래서 C# 코드는 아래를 지킵니다.
+  - 계산 코드에서 Godot 자료형(`Vector3` 등)을 쓰지 않습니다. 라이브러리가 Godot에 기대지 않아야, 콘솔 프로그램과 Godot .NET 판이 같은 라이브러리를 그대로 쓸 수 있습니다(지시 원문).
+  - 해시는 넘침 검사를 끈 `unchecked` 안에서 `ulong`으로 계산합니다. splitmix64 해시는 64비트 곱셈이 넘쳐 위쪽 비트가 버려지는 것을 그대로 쓰기 때문입니다.
+  - `Math.FusedMultiplyAdd`와 식 재배열을 쓰지 않고, Python과 같은 결합 순서로 씁니다. FMA는 a·b + c를 반올림 한 번으로 계산하는 명령이라, 따로 계산할 때(반올림 두 번)와 마지막 자리가 다를 수 있습니다. 다만 Python 쪽 라이브러리가 FMA로 계산한 몇 곳은 C#도 그 자리에서만 FMA를 써야 같습니다(4장).
+  - 정렬은 안정 정렬(값이 같은 원소의 원래 순서를 지키는 정렬)로 합니다. 같은 값의 순서는 Python 규칙(대부분 칸 번호)을 따릅니다.
+  - prange 반복(numba에서 병렬로 도는 반복)만 `Parallel.For`로 옮깁니다. 그 안에서는 칸·점마다 제자리에 쓰기만 합니다.
+  - 숫자 ↔ 글자 변환은 모두 `CultureInfo.InvariantCulture`로 합니다. 언어 설정에 따라 1.5를 "1,5"로 쓰는 컴퓨터(예: 독일어 설정)가 있기 때문입니다.
 
-### 현재 스튜디오·Godot 연결 구조와 단계 4 선택지
+### 단계 0 때의 스튜디오·Godot 연결 구조와 단계 4 선택지
 
-지금 구조는 다음과 같습니다(`src/bpcg/studio/`, `engine/scripts/`를 읽어 확인).
+단계 0 때(2026-10-02) 스튜디오와 Godot는 이렇게 이어져 있었습니다(`src/bpcg/studio/`, `engine/scripts/`를 읽어 확인). 그 뒤 단계 4에서 아래 선택지 가운데 (2)를 골랐고, 단계 5부터 스튜디오는 C# 콘솔을 빌드해 부릅니다(0장).
 
 - 브라우저는 화면만 그리고, 스튜디오 서버(Python `http.server`, 127.0.0.1:8765)와 JSON으로 주고받습니다.
-- '실행'을 누르면 서버가 하위 프로세스로 `python -m bpcg.cli all --profile … --set 키=값 …`을 돌립니다. 계산은 이 Python 프로세스가 numpy·numba로 합니다.
+- '실행'을 누르면 서버가 하위 프로세스(서버가 따로 띄우는 프로그램)로 `python -m bpcg.cli all --profile … --set 키=값 …`을 돌립니다. 계산은 이 Python 프로세스가 numpy·numba로 합니다.
 - 서버는 그 프로세스의 기록 줄(`[1단계] …`, `[2단계] 솔버 끝 …`, `솔버 반복 k:`, `[굽기] …`)을 `studio/progress.py`로 읽어 진행률을 계산합니다.
 - 결과는 `out/studio/<실행>/`의 파일이고, 지도·점수표 탭은 그 파일을 읽습니다.
-- 'Godot로 보기'를 누르면 회랑·지구본 파일을 `engine/baked/`로 복사하고, `Godot --headless --import`(임시 HOME) 뒤 `Godot --path engine`을 따로 띄웁니다.
+- 'Godot로 보기'를 누르면 회랑·지구본 파일을 `engine/baked/`로 복사합니다. 그다음 `Godot --headless --import`(임시 HOME)를 돌린 뒤 `Godot --path engine`을 따로 띄웁니다.
 - GDScript는 `BakedPaths`(`res://baked` 또는 `-- --baked-dir=<폴더>`)로 파일을 읽어 그리기만 합니다. `res://` 밖 폴더의 `caves.glb`는 이미 `GLTFDocument`로 실행 중에 읽습니다(`baked_layers.gd:480-492`).
-- 스튜디오와 Godot 사이에 실시간 통로는 없습니다(파일 + 프로세스 실행).
+- 스튜디오와 Godot 사이에 실시간 통로는 없습니다. 파일을 쓰고 프로세스를 띄우는 것이 전부입니다.
 
-단계 4 선택지(0장 쟁점 1)는 다음과 같습니다.
+단계 4 선택지(0장 쟁점 1)는 셋이었습니다.
 
 1. **계산 엔진만 바꿔 끼우기.** 스튜디오가 `python -m bpcg.cli` 대신 C# 콘솔을 고를 수 있게 합니다. 인자·기록 줄·결과 파일이 같으면 스튜디오와 Godot는 거의 그대로 둡니다. 단계 3 직후에 할 수 있고 일이 적습니다.
-2. **Godot 안에서 계산.** C# 노드가 같은 `Bpcg` 라이브러리를 주 스레드 밖에서 불러 `user://`에 쓰고, `BakedPaths`가 그 폴더를 읽습니다(지시의 단계 4). 웹 없이 Godot 하나로 도는 데모·내보낸 게임용입니다.
-3. **웹 ↔ 떠 있는 Godot 실시간 연결.** WebSocket 등으로 값을 넘겨 같은 창에서 다시 계산합니다. 지시가 범위 밖으로 둔 '메모리로 넘기는 연결'과 가까워 별도 작업입니다.
+2. **Godot 안에서 계산.** C# 노드가 같은 `Bpcg` 라이브러리를 주 스레드 밖에서 불러 `user://`(Godot가 주는 사용자 자료 폴더)에 씁니다. `BakedPaths`가 그 폴더를 읽습니다(지시의 단계 4). 웹 없이 Godot 하나로 도는 데모와 내보낸 게임용입니다.
+3. **웹 ↔ 떠 있는 Godot 실시간 연결.** WebSocket(연결을 열어 둔 채 주고받는 방식) 등으로 값을 넘겨, 같은 창에서 다시 계산합니다. 지시가 범위 밖으로 둔 '메모리로 넘기는 연결'과 가까워 별도 작업입니다.
+
+선택지와 함께 적어 둔 조건입니다.
 
 - 1·2는 C# 포팅이 끝나 끝에서 끝 대조(단계 3)를 통과한 뒤에 합니다.
 - 팀 전원이 .NET SDK와 Godot .NET 판을 써야 합니다.
@@ -398,7 +619,13 @@ csharp/
 
 ## 3. 대응표
 
-Python 모듈 60개(`src/bpcg` 에서 studio/ 와 빈 earth/ 를 뺀 것)를 단계 2의 순서로 적었습니다. 함수별 대응은 6장 각 절의 '(a) 대응표'에 있습니다. 상태는 시작 전 → 포팅 중 → 대조 통과(exact) / 대조 통과(허용 오차) / 갈림 기록 으로 바꿉니다.
+Python 모듈 하나가 C#의 어느 파일, 어느 형(클래스)이 되었는지 찾는 표입니다. [docs/pipeline.md](pipeline.md) 같은 문서에는 아직 Python 이름으로 적힌 곳이 많습니다. 그런 이름의 C# 위치를 여기서 찾습니다.
+
+- Python 모듈 60개(`src/bpcg` 에서 studio/ 와 빈 earth/ 를 뺀 것)를 단계 2의 순서로 적었습니다. 함수별 대응은 6장 각 절의 '(a) 대응표'에 있습니다.
+- '줄'은 Python 파일의 줄 수입니다. 'C# 형'은 그 파일에 둘 클래스와 record입니다(긴 것은 '…'로 잘림). '위험'은 단계 0 분석이 매긴 값입니다.
+- 상태는 시작 전 → 포팅 중 → 대조 통과(exact) / 대조 통과(허용 오차) / 갈림 기록 으로 바꿉니다. exact는 비트 단위로 같다는 뜻입니다. 허용 오차는 근거를 단 오차 안에서 같다는 뜻입니다. 갈림 기록은 값이 갈린 칸의 수·위치·원인을 적었다는 뜻입니다(7장).
+- **상태와 대조 결과 열은 hydro까지 끝낸 때(2026-10-03, 단계 2 도중)에 멈춰 있습니다.** planet부터 아래 줄의 C# 파일도 지금은 모두 표의 이름 그대로 있습니다. 다만 `cli.py`는 계획(`Cli.cs`)과 달리, 단계 4에서 실행 단위를 `src/Bpcg/Runs.cs`로 옮겼고 콘솔 입구는 `src/Bpcg.Cli/Program.cs`입니다.
+- C# 파일 열의 `csharp/Bpcg/`는 지금 `src/Bpcg/`, `csharp/Bpcg.Cli/`는 지금 `src/Bpcg.Cli/`입니다.
 
 | Python 모듈 | 줄 | C# 파일 | C# 형 | 위험 | 상태 | 대조 결과 |
 |---|---|---|---|---|---|---|
@@ -465,7 +692,7 @@ Python 모듈 60개(`src/bpcg` 에서 studio/ 와 빈 earth/ 를 뺀 것)를 단
 
 합계 60개 모듈, 14,547줄입니다.
 
-Python 모듈과 1:1이 아닌 새 파일입니다.
+Python은 numpy·scipy 같은 라이브러리에 맡기던 일이 있습니다. C#에는 그 라이브러리가 없어서 새 파일로 직접 짰습니다. 아래는 Python 모듈과 1:1이 아닌 새 파일입니다. 상태 열은 위 표와 같은 때의 값입니다.
 
 | C# 파일 | 하는 일 | 상태 |
 |---|---|---|
@@ -477,7 +704,13 @@ Python 모듈과 1:1이 아닌 새 파일입니다.
 | `csharp/Bpcg.Tests/Golden.cs`, `Compare.cs` | golden 사례 읽기, exact·ulp 비교 | 완료 |
 | `csharp/golden/export_golden.py` | golden 자료 만들기 (Python) | core·IO 사례 97개 |
 
+`csharp/golden/export_golden.py`는 단계 5에서 지웠습니다(0장 단계 5).
+
 ## 4. 외부 라이브러리 대체 방식
+
+Python 생성기는 scipy, scikit-image, trimesh 같은 남의 라이브러리를 불러 썼습니다. C#에는 같은 라이브러리가 없어서, 쓰던 함수를 직접 다시 짜거나 다른 것으로 바꿨습니다. 이 장은 함수마다 무엇으로 바꿨는지와, Python과 마지막 자리까지 같게 하려면 무엇을 지켜야 하는지를 적습니다. 다루는 것은 가장 가까운 점 찾기(KD-tree), 지도를 흐리게 하는 필터와 거리 지도(ndimage), 봉우리 찾기·보간·방정식의 근 찾기, 동굴 벽 메시 만들기(marching cubes)와 glb 쓰기, 파일 형식(.npy·.npz·JSON·TOML·PNG·bin)입니다. 몇 곳은 Python 쪽 라이브러리가 곱셈과 덧셈을 한 번에 반올림하는 명령(FMA)으로 계산해서, C#도 그 자리에서만 FMA를 써야 같다는 결론이 나왔습니다. `src/Bpcg/Numerics/`나 `src/Bpcg/IO/`의 코드를 고칠 때, 또는 그 결과가 Python 판과 어긋날 때 그 절을 엽니다. 선형대수·FFT·polyfit 절은 분석이 끊겨 비어 있습니다(10장 D7).
+
+<details><summary>자세히</summary>
 
 | Python 기능 | 쓰는 곳 | C# 대체 | 재현 수준 | 근거 |
 |---|---|---|---|---|
@@ -1345,7 +1578,13 @@ Tomlyn 을 권합니다. Python 과 다른 점은 두 가지입니다. 첫째, T
 2. `Config.digest` 는 `allow_nan` 기본값을 써서 TOML 의 nan·inf 가 `NaN` 으로 들어갑니다. 반면 manifest 의 `config` 는 `jsonable` 이 null 로 바꾸므로, 다시 만든 Config 의 digest 가 달라집니다. TOML 날짜는 digest 에서 TypeError 를 냅니다. 지금 configs 에는 둘 다 없습니다.
 3. `np.save`·`np.savez` 만 임시 파일 없이 씁니다. 중간에 멈추면 반쯤 쓴 파일이 남습니다.
 
+</details>
+
 ## 5. 공통 수치 규칙 (numpy·numba)
+
+numpy와 numba가 실수를 계산하는 방식 가운데, C#도 똑같이 따라야 값이 같아지는 규칙을 모읍니다. 배열을 더하는 순서(pairwise 합), sin·tan 같은 함수(초월 함수)의 값이 운영체제마다 다를 수 있다는 점, FMA를 쓰지 않는다는 점, +0.0과 −0.0의 구분, 실수를 정수로 바꾸는 규칙이 들어 있습니다. 새 수치 코드를 짜거나, C# 결과의 마지막 자리가 Python과 다를 때 읽습니다. 처음 분석은 중단되어 결과가 없었고(10장 D7), 단계 1에서 실험으로 확인한 것을 채웠습니다.
+
+<details><summary>자세히</summary>
 
 이 장의 분석은 에이전트가 거듭 중단되어 결과가 없습니다(10장 D7). 지금까지 확인된 공통 규칙은 6장 각 절에 흩어져 있고, 단계 1에서 `Bpcg.Numerics` 도우미를 만들며 여기에 모읍니다.
 
@@ -1357,7 +1596,13 @@ Tomlyn 을 권합니다. Python 과 다른 점은 두 가지입니다. 첫째, T
 - **부호 있는 0.** 길이 3 축 합은 +0.0에서 시작하는 순차 합입니다. 성분을 골라 쓰는 최적화는 −0.0을 바꿉니다(6장 core ②).
 - **정수 변환.** `np.floor(...).astype(int64)`은 C# `(long)Math.Floor(x)`로 옮깁니다. NaN·inf는 .NET 9 이상과 arm64 numpy가 같이 포화합니다(6장 core ①·②).
 
+</details>
+
 ## 6. 모듈별 수치 함정
+
+Python 모듈 묶음마다 단계 0에서 분석한 결과입니다. 절은 묶음 이름으로 찾습니다(예: 물길 코드는 'hydro', 굽기 코드는 'bake ①·②'). 대부분의 절에 (a) Python 이름과 C# 이름의 대응표, (b) 값이 달라지기 쉬운 곳(수치 함정), (c) 외부 함수와 대체 방식, (d) numba 커널과 병렬 반복, (e) 의심 버그, (f) golden 대조 계획, (g) 옮기는 순서와 위험 메모가 차례로 있습니다. C# 코드 주석이 '6장 core ②'처럼 이 장의 절을 가리키므로, 그 코드를 고치기 전에 그 절을 엽니다. 제목 끝에 '(비평 거침)'이 없는 절은 따로 검토받지 않은 초안입니다.
+
+<details><summary>자세히</summary>
 
 각 절은 단계 0 분석의 결과입니다. 제목 끝에 '(비평 거침)'이 없는 절은 독립 비평 없이 한 번 분석한 초안입니다.
 
@@ -3851,7 +4096,13 @@ hero 4개 모듈에는 `@njit` 와 `prange` 가 없습니다. 부르는 커널�
 6. 그다음 `NdImage`(GaussianFilter, DistanceTransformEdt), `DetrendPlane`·`Periodogram`·`BandRms`·`PsdSlope`·`Polyfit`, `DetailWeight` 를 옮기고, 마지막에 `AddFractalDetail` 을 옮겨 이산 출력의 완전 일치를 확인합니다.
 7. 위험 메모입니다. (가) FFT, gemv, lstsq, gaussian 의 FMA 때문에 detail 연속값은 비트 일치가 불가능합니다. 이산 출력이 갈리면 허용 오차를 넓히지 않고 칸 수·위치·원인을 적습니다. (나) golden 은 macOS arm64 에서 만든 것이 기준입니다. 다른 OS 의 libm 이나 x86 빌드와의 차이는 열린 질문으로 남깁니다. (다) jitter 0 행성은 kNN 동점이 생길 수 있어 별도 사례로 봅니다. (라) 의심 버그 B1·B2 는 같은 예외로 재현해야 하므로, ValueError 와 다른 예외의 C# 형 대응이 필요합니다.
 
+</details>
+
 ## 7. golden 자료와 대조 시험 계획
+
+C# 결과가 Python과 같은지 보는 시험(golden 대조 시험)의 규칙입니다. golden 자료를 어떻게 만들고 어디에 두는지, 사례 파일의 모양, 무엇이 얼마나 같아야 통과인지를 정합니다. 정수·범주·흐름 방향은 완전히 같아야 하고, 사칙연산과 제곱근만 쓴 실수는 비트까지 같아야 합니다. 초월 함수를 거친 실수는 macOS에서만 비트까지 같기를 기대합니다. `tests/Bpcg.Tests/Golden.cs`와 `Compare.cs`가 이 장을 따르므로, 대조 시험을 새로 쓰거나 시험이 왜 실패하는지 찾을 때 읽습니다. 이 장에 나오는 만드는 스크립트(`export_golden.py`)는 단계 5에서 지웠고, 지금은 큰 사례가 없으면 그 시험만 건너뜁니다(0장 단계 5).
+
+<details><summary>자세히</summary>
 
 - **만드는 법.** `uv run python csharp/golden/export_golden.py` 한 번으로 모두 다시 만듭니다. 스크립트는 `src/bpcg` 함수를 부르기만 하고, ruff format·check를 지킵니다. 입력은 tiny 프로필 크기와 손으로 만든 경계 사례입니다.
 - **놓는 곳.**
@@ -3868,7 +4119,13 @@ hero 4개 모듈에는 `@njit` 와 `prange` 가 없습니다. 부르는 커널�
 - **흐름 방향이 갈릴 때.** 반복 풀이에서 거의 같은 높이 때문에 방향이 갈리면 허용 오차를 넓히지 않습니다. 대신 갈린 칸의 수·위치·원인을 이 기록의 3장 '대조 결과'와 해당 모듈 절에 적습니다.
 - **사례 목록.** 모듈마다 6장 각 절의 '(f) golden 대조 계획' 표를 따릅니다. 단계 1은 core ①·② 표와 `Bpcg.IO` 시험 벡터(실수 표기, npy 머리글, TOML 정수 경계)부터 만듭니다.
 
+</details>
+
 ## 8. 출력 파일과 끝에서 끝 대조 계획 (단계 3)
+
+C# 콘솔이 `planet`·`hero`·`bake`·`all` 명령으로 써야 하는 파일 전부와, 단계 3에서 그 파일을 Python 결과와 하나씩 맞대는 규칙입니다. 파일마다 형식과 모양, 실행마다 달라지는 값(걸린 시간 등)을 가리는 법, 글자 꼴을 맞출 곳, 대조 사례 8가지가 있습니다. 결과 파일의 형식을 바꾸거나, 스튜디오·엔진이 결과 파일을 제대로 읽지 못할 때 엽니다. 끝의 실행 시간 표는 채우지 않았습니다. C# 판의 실행 시간은 [brief.md](brief.md) 4장에 있습니다.
+
+<details><summary>자세히</summary>
 
 ### 출력 파일과 끝에서 끝 대조 계획
 
@@ -4036,7 +4293,13 @@ C#이 함께 지킬 쓰기 규약은 다음과 같습니다.
 | 지구본 | | | |
 | 전체 (`all --profile tiny`) | | | |
 
+</details>
+
 ## 9. 고칠 규칙·설치 스크립트·CI 목록
+
+C#으로 옮기면서 함께 바꿔야 할 저장소 규칙, 문서, 설치 스크립트, CI(GitHub이 PR마다 돌리는 검사)를 단계별로 적은 목록입니다(2026-10-02 조사). 지시 원문과 저장소 규칙이 부딪히는 곳, 붙여 넣을 설정 파일 내용(`.gitignore`, `.gitattributes`, `.editorconfig` 등), Godot .NET 판 받기, C# 이름과 커밋 범위 규칙도 들어 있습니다. 설치 스크립트나 CI, 저장소 설정 파일을 고칠 때 그 근거를 찾으려고 엽니다. 여러 항목은 그 뒤 단계 5에서 실제로 고쳤으므로(0장 단계 5), 지금 파일과 먼저 견줘 봅니다.
+
+<details><summary>자세히</summary>
 
 ### 고칠 규칙·설치 스크립트·CI 목록
 
@@ -4338,7 +4601,13 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 - Python `assert`(4곳)는 늘 도는 검사(`InvalidOperationException`)로, `ValueError`(353곳)는 같은 한국어 메시지의 `ArgumentException` 으로 옮깁니다. 숫자·문자열 바꿈은 `CultureInfo.InvariantCulture` 로 하고, 시험은 de-DE 문화권에서도 돌립니다.
 - 커밋 범위: 묶음 포팅은 `cs-<묶음>`(`feat(cs-hydro): routing 포팅, 대조 시험 통과`), 공통 코드는 `cs-numerics`·`cs-io`·`cs-cli`·`cs-tests`, golden 스크립트는 `golden`, 뼈대·CI·진행 기록은 `csharp`, 단계 4의 엔진 작업은 `engine`.
 
+</details>
+
 ## 10. 결정한 사항과 이유
+
+포팅 중에 내린 결정을 번호(D1~D13), 날짜, 이유와 함께 적은 표입니다. P1~P5는 제안으로 남은 것입니다(P1~P3은 단계 1의 기본값). 다른 문서와 C# 코드 주석이 '10장 D11'처럼 이 번호를 가리킵니다. '왜 이렇게 했지?' 싶은 선택을 만나면 여기서 찾습니다. 예를 들어 TOML 읽기를 패키지 대신 직접 옮긴 이유는 D9, 시험 실행기를 Microsoft.Testing.Platform으로 정한 이유는 D11에 있습니다.
+
+<details><summary>자세히</summary>
 
 | 번호 | 날짜 | 결정 | 이유 | 상태 |
 |---|---|---|---|---|
@@ -4361,7 +4630,13 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 | P4 | 2026-10-02 | 'CI의 use-dotnet 설정'은 GitHub Actions의 `actions/setup-dotnet`(build·test 작업)과 `chickensoft-games/setup-godot`의 `use-dotnet: true`(엔진 작업)로 읽습니다 | 지금 CI가 GitHub Actions이고 setup-godot에 `use-dotnet` 입력이 있음 | 제안 |
 | P5 | 2026-10-02 | C# 콘솔의 진행 로그 줄을 Python `cli`와 똑같이 냅니다 | 스튜디오가 그 줄로 진행률을 계산하므로 계산 엔진을 바꿔 끼울 수 있음(2장) | 제안 |
 
+</details>
+
 ## 11. Python 쪽 의심 버그
+
+단계 0 분석이 Python 코드에서 찾은, 버그로 의심되는 곳 66개입니다. 포팅은 Python 동작을 그대로 따라 하므로 이 버그들을 고치지 않았습니다. 그래서 대부분은 C#에도 같은 동작이 남아 있고, 몇 개는 C#이 일부러 다르게 합니다('영향' 열). C# 결과가 이상해 보이면, 고치기 전에 같은 원인이 여기 적혀 있는지 봅니다. 근거와 재현 방법은 6장의 그 묶음 절 '(e) 의심 버그'에 있습니다.
+
+<details><summary>자세히</summary>
 
 포팅은 Python 동작을 그대로 재현하고 이 버그들을 고치지 않습니다. 비평을 거친 묶음(core ①, hydro, planet ①, geology, subsurface)은 비평이 아니라고 본 것을 뺐습니다. 근거와 재현 방법은 6장의 해당 절 '(e) 의심 버그'에 있습니다.
 
@@ -4434,7 +4709,13 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 | 65 | bake-b | src/bpcg/bake/globe_text.py:206, 210 (temperature_how), 190, 194 (uplift_how) | .0f 형식은 (-0.5, 0) 의 값을 '-0' 으로 씁니다. 1% 분위 기온이 0 °C 바로 아래(예: -0.4)면 설명에 '가장 진한 파랑 ≈ -0 °C 이하' 가 나옵니다. | 보기 문장의 흠뿐입니다. C# 도 같은 '-0' 을 내야 globe.json 이 같아집니다. |
 | 66 | bake-b | src/bpcg/bake/detail.py:440 (add_fractal_detail) | 모양 검사가 wet 과 gx 만 확인하고 gy 는 확인하지 않습니다. gy 모양이 다르면 뒤의 evaluate_grid 에서 덜 분명한 오류가 납니다. | 낮음. 회랑 굽기는 meshgrid 로 같은 모양을 넘깁니다. 동작 보존을 위해 C# 도 같은 검사만 둡니다. |
 
+</details>
+
 ## 12. 남은 일
+
+단계 1~4에서 할 일을 확인 칸으로 적은 목록입니다. 표시는 단계 2 도중(hydro까지)과 단계 4 일부에서 멈춰 있어, 지금 진행 상황과 다릅니다. 실제로 어디까지 했는지는 0장의 단계 4, 단계 5, 단계 5 뒤 절을 먼저 봅니다. 이 목록은 단계마다 무엇을 하기로 했는지 볼 때 엽니다.
+
+<details><summary>자세히</summary>
 
 ### 단계 1: 뼈대와 core
 
@@ -4476,7 +4757,13 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 - [x] C# 처음 화면이 생성·굽기를 주 스레드 밖에서 부르고 `user://runs`에 씀, `BakedPaths`가 그 폴더를 읽음
 - [ ] 설치 스크립트, CI(`setup-dotnet`, `use-dotnet: true`, `dotnet test`), docs/conventions.md·engine/README.md의 '표준판' 규칙(9장 목록)
 
+</details>
+
 ## 13. 부록: 분석이 남긴 질문
+
+단계 0 분석이 항목마다 남긴 질문 가운데, 0장 '결정이 필요한 쟁점'으로 모으지 않은 나머지입니다. 항목 이름(core-a, hydro, lib-kdtree, io-formats, rules 등)은 단계 0 분석을 나눈 단위입니다. 그 묶음이나 라이브러리 코드를 고치기 전에, 같은 질문이 이미 나왔는지 봅니다. 일부는 그 뒤 결정으로 풀렸으니(예: TOML 라이브러리는 10장 D9), 답은 10장과 0장에서 먼저 찾습니다.
+
+<details><summary>자세히</summary>
 
 0장의 '결정이 필요한 쟁점'으로 모으지 않은 나머지 질문입니다. 그 묶음을 옮길 때 다시 봅니다.
 
@@ -4794,3 +5081,5 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 - manifest 에 구현 표시(예: 'implementation': 'csharp')를 더할까요? 출처 기록(6절)에는 좋지만 Python 묶음과 형식이 달라집니다.
 - 내보낸 게임에서 설정을 읽기 위해 configs/**/*.toml 을 Bpcg.dll 의 EmbeddedResource 로 넣는 방식에 동의하나요?
 - 제안 관례에 없는 솔루션 파일은 csharp/Bpcg.slnx(.NET 10 기본 형식)로 하고 engine/ 의 .sln 은 Godot 이 만든 그대로 두려 합니다. 하나의 솔루션으로 묶기를 원하나요?
+
+</details>
