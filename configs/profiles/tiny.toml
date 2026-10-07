@@ -15,4 +15,4 @@ width_m = 400.0
 length_m = 1_200.0
 
 [compute]
-numba_threads = 0
+numba_threads = 0 # 기존 이름 유지: 0 = Auto, 1 = Single Thread, 그 외 = Manual 최대 수

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Numerics;
@@ -114,7 +113,7 @@ public static class Groundwater
         (double[] delta, long[] src) = Distance.NearestSource(graph, water);
         double[] l = DivideDistanceKernel(src, delta);
         double[] zGw = new double[n];
-        Parallel.For(0, n, c =>
+        Parallelism.For(0, n, c =>
         {
             if (water[c])
             {

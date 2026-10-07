@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Bpcg.Core;
 
@@ -292,7 +291,7 @@ public static class Resample
         double[] fv = Cubesphere.FaceV;
         double[] fn = Cubesphere.FaceN;
         int m = unit.Length / 3;
-        Parallel.For(0, m, k =>
+        Parallelism.For(0, m, k =>
         {
             double px = unit[k * 3];
             double py = unit[(k * 3) + 1];

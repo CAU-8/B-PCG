@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Numerics;
@@ -848,7 +847,7 @@ public sealed class HeroVolume
         }
         int nPts = RiverPts.Length / 2;
         double[] pts = RiverPts;
-        Parallel.For(0, c, k =>
+        Parallelism.For(0, c, k =>
         {
             (_, int[] idxArr) = _tree.Query([x[k], y[k]], 1, _riverReach);
             int i = idxArr[0] >= nPts ? -1 : idxArr[0];
@@ -924,7 +923,7 @@ public sealed class HeroVolume
         double[] caveW = new double[cN * kN];
         double[] sb = new double[cN * lN];
         byte[] sr = new byte[cN * (lN + 1)];
-        Parallel.For(0, cN, c =>
+        Parallelism.For(0, cN, c =>
         {
             double fi = ((x[c] - X0) / Dx) - 0.5;
             double fj = ((Y0 - y[c]) / Dx) - 0.5;
@@ -1139,7 +1138,7 @@ public sealed class HeroVolume
         (double bx0, double by0, double bsize, int nbx, int nby) = _bucket;
         double[] capA = CapA;
         double[] capB = CapB;
-        Parallel.For(0, mN, p =>
+        Parallelism.For(0, mN, p =>
         {
             long c = col[p];
             double z = up[p];
@@ -1445,7 +1444,7 @@ public sealed class HeroVolume
                 todo.Add(c);
             }
         }
-        Parallel.ForEach(todo, c =>
+        Parallelism.ForEach(todo, c =>
         {
             double hw = cols.RiverHalfWidth[c];
             double dd = cols.RiverDepth[c];

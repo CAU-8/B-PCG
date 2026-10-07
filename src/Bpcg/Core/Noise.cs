@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 
 namespace Bpcg.Core;
 
@@ -178,7 +177,7 @@ public static class Noise
     {
         int nPoints = points.Length / 3;
         int nOct = freqs.Length;
-        Parallel.For(0, nPoints, k =>
+        Parallelism.For(0, nPoints, k =>
         {
             double px = points[k * 3];
             double py = points[(k * 3) + 1];

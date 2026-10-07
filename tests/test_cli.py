@@ -5,6 +5,8 @@ tiny 프로필로 전체를 몇 초 안에 돌립니다.
 
 import shutil
 
+import numpy as np
+
 from bundles import load_bundle, read_json, run_cli
 
 from bpcg_studio.cli import main as bpcg_main
@@ -19,6 +21,49 @@ CORRIDOR_FILES = (
     "strata.json",
     "manifest.json",
 )
+
+
+def test_all_matches_independent_commands(csharp_cli, tiny_run, tmp_path):
+    csharp_cli("planet", "--profile", "tiny", "--seed", "0", "--out", tmp_path)
+    csharp_cli("hero", "--profile", "tiny", "--seed", "0", "--from",
+               tmp_path / "planet", "--out", tmp_path)
+    csharp_cli("bake", "--hero", tmp_path / "hero")
+    for expected in tiny_run.rglob("*"):
+        if expected.suffix == ".npy":
+            actual = tmp_path / expected.relative_to(tiny_run)
+            np.testing.assert_array_equal(np.load(expected), np.load(actual))
+        elif expected.suffix in {".bin", ".u8", ".png"}:
+            actual = tmp_path / expected.relative_to(tiny_run)
+            assert expected.read_bytes() == actual.read_bytes(), expected.relative_to(tiny_run)
+
+
+def test_single_and_auto_thread_results_match(csharp_cli, tmp_path):
+    outputs = []
+    modes = (("single", "1"), ("threads2", "2"), ("threads4", "4"), ("auto", "0"), ("auto_repeat", "0"))
+    for mode, threads in modes:
+        run = tmp_path / mode
+        proc = csharp_cli(
+            "all", "--profile", "tiny", "--seed", "1738104521", "--out", run,
+            "--set", f"profile.compute.numba_threads={threads}",
+        )
+        outputs.append(run)
+        assert "[전체] 끝" in proc.stdout
+    baseline, *others = outputs
+    for expected in baseline.rglob("*"):
+        if expected.suffix in {".npy", ".bin", ".u8", ".png"}:
+            for output in others:
+                actual = output / expected.relative_to(baseline)
+                if expected.suffix == ".npy":
+                    got = np.load(actual)
+                    want = np.load(expected)
+                    np.testing.assert_array_equal(got, want)
+                    if expected.name in {
+                        "z_m.npy", "uplift_m_per_yr.npy", "temperature_c.npy", "precip_m_per_yr.npy",
+                        "discharge_m3_per_yr.npy", "water_table_m.npy",
+                    }:
+                        assert np.isfinite(got).all(), expected.relative_to(baseline)
+                else:
+                    assert expected.read_bytes() == actual.read_bytes(), expected.relative_to(baseline)
 
 
 def test_all_tiny_end_to_end(tiny_run, planet, hero):

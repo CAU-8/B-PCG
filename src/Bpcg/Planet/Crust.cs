@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Numerics;
 
@@ -38,7 +37,7 @@ public static class Crust
     internal static void SoftPlateBiasKernel(double[] unit, double[] seeds, double[] bias, double sharp, double[] output)
     {
         int m = seeds.Length / 3;
-        Parallel.For(0, unit.Length / 3, c =>
+        Parallelism.For(0, unit.Length / 3, c =>
         {
             double best = double.NegativeInfinity;
             for (int k = 0; k < m; k++)

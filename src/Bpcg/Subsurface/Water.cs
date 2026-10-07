@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Hydro;
 using Bpcg.Numerics;
@@ -144,7 +143,7 @@ public static class Water
         int[] nbr = graph.Nbr;
         const int nSlots = CellGraph.NSlots;
         int nChunks = Math.Max(1, Math.Min(Environment.ProcessorCount, m));
-        Parallel.For(0, nChunks, ch =>
+        Parallelism.For(0, nChunks, ch =>
         {
             int lo = (int)((long)ch * m / nChunks);
             int hi = (int)((long)(ch + 1) * m / nChunks);

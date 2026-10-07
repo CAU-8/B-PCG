@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.IO;
 using Bpcg.Numerics;
@@ -145,7 +144,7 @@ public static class Plates
     internal static void ArgmaxDotKernel(double[] q, double[] seeds, int[] output)
     {
         int m = seeds.Length / 3;
-        Parallel.For(0, q.Length / 3, c =>
+        Parallelism.For(0, q.Length / 3, c =>
         {
             double best = double.NegativeInfinity;
             int arg = 0;
@@ -192,7 +191,7 @@ public static class Plates
         byte[] btype, double[] gamma, double[] tau, int[] other, double[] halfGap)
     {
         const int nSlots = CellGraph.NSlots;
-        Parallel.For(0, plate.Length, c =>
+        Parallelism.For(0, plate.Length, c =>
         {
             int k = plate[c];
             double px = unit[c * 3];
@@ -435,7 +434,7 @@ public static class Plates
         int[] nbr, int[] plate, bool[] continental, double[] age, int[] cells, double[] contFrac, double[] otherAge)
     {
         const int nSlots = CellGraph.NSlots;
-        Parallel.For(0, cells.Length, t =>
+        Parallelism.For(0, cells.Length, t =>
         {
             int c = cells[t];
             int k = plate[c];

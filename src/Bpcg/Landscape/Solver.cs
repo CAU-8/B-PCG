@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Hydro;
@@ -153,61 +152,152 @@ public static class Solver
     private static int IntegrateKernel(
         long[] order, long[] rcv, int[] nbr, double[] dist, double[] zOutlet, double[] q, double[] aUp, double[] qs,
         double[] u, double[] width, double[] bottom, int nl, double[] kMult, double[] sCrit, in LawParams p, double invN,
-        double riseMin, double[] zNew)
+        double riseMin, double[] zNew, int[] position, int[] subtreeEnd, int[] level, int[] levelCounts,
+        int[] badByRoot, int[] frontier, int maxDegree, bool parallelSubtrees)
     {
         int n = order.Length;
-        int nBad = 0;
-        int nr = nl + 1;
+        LawParams pp = p;
+        if (!parallelSubtrees)
+        {
+            int sequentialBad = 0;
+            for (int k = 0; k < n; k++)
+            {
+                sequentialBad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                    bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
+            }
+            return sequentialBad;
+        }
+        int maxLevel = 0;
+        Array.Clear(levelCounts);
         for (int k = 0; k < n; k++)
         {
             int c = (int)order[k];
-            long r = rcv[c];
-            if (r == c)
-            {
-                zNew[c] = zOutlet[c];
-                continue;
-            }
-            double d = ReceiverSlotDistance(c, r, nbr, dist);
-            if (!double.IsFinite(d))
-            {
-                nBad++;
-                d = 0.0;
-            }
-            double z = zNew[r];
-            double zFloor = z + riseMin;
-            double e = u[c] + (p.GDep * p.RRef * qs[c] / q[c]);
-            if (e <= 0.0)
-            {
-                z += p.SMin * d;
-                zNew[c] = z >= zFloor ? z : zFloor;
-                continue;
-            }
-            double qt = Math.Exp(p.Theta * Math.Log(q[c]));
-            double a = aUp[c] / width[c];
-            double hill = p.Diff / (e * a);
-            double ksRef = p.KRef * Math.Pow(e / p.URef, invN);
-            double rem = d;
-            while (true)
-            {
-                int i = UpperLayer(bottom, nl, c, z);
-                double s = LawSlope(ksRef, kMult[(c * nr) + i], invN, qt, hill, sCrit[(c * nr) + i], p.SMin);
-                if (i == 0)
-                {
-                    z += rem * s;
-                    break;
-                }
-                double up = bottom[(c * nl) + i - 1];
-                double need = (up - z) / s;
-                if (need >= rem)
-                {
-                    z += rem * s;
-                    break;
-                }
-                z = up;
-                rem -= need;
-            }
-            zNew[c] = z >= zFloor ? z : zFloor;
+            position[c] = k;
+            int parent = (int)rcv[c];
+            level[c] = parent == c ? 0 : level[parent] + 1;
+            levelCounts[level[c]]++;
+            maxLevel = Math.Max(maxLevel, level[c]);
+            subtreeEnd[k] = k + 1;
         }
+        // TopoKernel emits a depth-first preorder: each receiver's descendants occupy one contiguous range.
+        for (int k = n - 1; k >= 0; k--)
+        {
+            int c = (int)order[k];
+            int parent = (int)rcv[c];
+            if (parent != c)
+            {
+                int pk = position[parent];
+                subtreeEnd[pk] = Math.Max(subtreeEnd[pk], subtreeEnd[k]);
+            }
+        }
+
+        int cutLevel = -1;
+        int target = Math.Max(4, maxDegree * 4);
+        for (int d = 0; d <= maxLevel; d++)
+        {
+            if (levelCounts[d] >= target)
+            {
+                cutLevel = d;
+                break;
+            }
+        }
+
+        int nBad = 0;
+        if (cutLevel >= 0)
+        {
+            int roots = levelCounts[cutLevel];
+            int j = 0;
+            for (int k = 0; k < n; k++)
+            {
+                int c = (int)order[k];
+                if (level[c] < cutLevel)
+                {
+                    nBad += IntegrateCell(c, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                        bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
+                }
+                else if (level[c] == cutLevel)
+                {
+                    frontier[j++] = k;
+                }
+            }
+            Parallelism.For(0, roots, i =>
+            {
+                int bad = 0;
+                for (int k = frontier[i]; k < subtreeEnd[frontier[i]]; k++)
+                {
+                    bad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                        bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
+                }
+                badByRoot[i] = bad;
+            });
+            for (int i = 0; i < roots; i++)
+            {
+                nBad += badByRoot[i];
+            }
+        }
+        else
+        {
+            for (int k = 0; k < n; k++)
+            {
+                nBad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                    bottom, nl, kMult, sCrit, p, invN, riseMin, zNew);
+            }
+        }
+        return nBad;
+    }
+
+    private static int IntegrateCell(
+        int c, long[] rcv, int[] nbr, double[] dist, double[] zOutlet, double[] q, double[] aUp, double[] qs,
+        double[] u, double[] width, double[] bottom, int nl, double[] kMult, double[] sCrit, in LawParams p, double invN,
+        double riseMin, double[] zNew)
+    {
+        int nr = nl + 1;
+        long r = rcv[c];
+        if (r == c)
+        {
+            zNew[c] = zOutlet[c];
+            return 0;
+        }
+        double d = ReceiverSlotDistance(c, r, nbr, dist);
+        int nBad = double.IsFinite(d) ? 0 : 1;
+        if (nBad != 0)
+        {
+            d = 0.0;
+        }
+        double z = zNew[r];
+        double zFloor = z + riseMin;
+        double e = u[c] + (p.GDep * p.RRef * qs[c] / q[c]);
+        if (e <= 0.0)
+        {
+            z += p.SMin * d;
+            zNew[c] = z >= zFloor ? z : zFloor;
+            return nBad;
+        }
+        double qt = Math.Exp(p.Theta * Math.Log(q[c]));
+        double a = aUp[c] / width[c];
+        double hill = p.Diff / (e * a);
+        double ksRef = p.KRef * Math.Pow(e / p.URef, invN);
+        double rem = d;
+        while (true)
+        {
+            int i = UpperLayer(bottom, nl, c, z);
+            double s = LawSlope(ksRef, kMult[(c * nr) + i], invN, qt, hill, sCrit[(c * nr) + i], p.SMin);
+            if (i == 0)
+            {
+                z += rem * s;
+                break;
+            }
+            double up = bottom[(c * nl) + i - 1];
+            double need = (up - z) / s;
+            if (need >= rem)
+            {
+                z += rem * s;
+                break;
+            }
+            z = up;
+            rem -= need;
+        }
+        zNew[c] = z >= zFloor ? z : zFloor;
         return nBad;
     }
 
@@ -217,7 +307,7 @@ public static class Solver
     {
         int nr = nl + 1;
         LawParams pp = p;
-        Parallel.For(0, rcv.Length, c =>
+        Parallelism.For(0, rcv.Length, c =>
         {
             int i = Model.LayerIndexAt(bottom, nl, c, z[c]);
             sCritOut[c] = sCrit[(c * nr) + i];
@@ -508,6 +598,14 @@ public static class Solver
         }
         double invN = 1.0 / p.N;
 
+        int maxDegree = Parallelism.MaxDegreeOfParallelism ?? Environment.ProcessorCount;
+        bool parallelSubtrees = graph.Kind == "flat" && maxDegree > 1;
+        int[] positionWork = parallelSubtrees ? new int[n] : [];
+        int[] subtreeEndWork = parallelSubtrees ? new int[n] : [];
+        int[] levelWork = parallelSubtrees ? new int[n] : [];
+        int[] levelCountsWork = parallelSubtrees ? new int[n] : [];
+        int[] badByRoot = parallelSubtrees ? new int[n] : [];
+        int[] frontierWork = parallelSubtrees ? new int[n] : [];
         long[]? rcv = null;
         int[] flips = new int[n];
         int nFrozen = 0;
@@ -542,7 +640,9 @@ public static class Solver
             {
                 qs[c] = Math.Max(qs[c], 0.0);
             }
-            int nBad = IntegrateKernel(order, rcv, nbr, dist, zo, q, aUp, qs, u, width, bottom, nl, kMult, sCrit, p, invN, eps, zNew);
+            int nBad = IntegrateKernel(order, rcv, nbr, dist, zo, q, aUp, qs, u, width, bottom, nl, kMult, sCrit,
+                p, invN, eps, zNew, positionWork, subtreeEndWork, levelWork, levelCountsWork, badByRoot,
+                frontierWork, maxDegree, parallelSubtrees);
             if (nBad != 0)
             {
                 throw new InvalidOperationException($"수신 셀이 이웃이 아닌 칸이 {nBad}개 있습니다 (내부 오류)");

@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 
 namespace Bpcg.Core;
 
@@ -179,7 +178,7 @@ public static class Distance
     {
         int nCells = pos.Length / 3;
         double[] output = new double[nCells];
-        Parallel.For(0, nCells, c =>
+        Parallelism.For(0, nCells, c =>
         {
             long s = src[c];
             if (s < 0)

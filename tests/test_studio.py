@@ -413,6 +413,29 @@ def test_server_api_smoke(runs, tmp_path):
 
 
 # ---------------------------------------------------------------- 실행 관리
+@pytest.mark.parametrize("built", [True, False])
+def test_generate_builds_only_when_release_dll_is_missing(monkeypatch, tmp_path, built):
+    import bpcg_studio.jobs as jobs_mod
+
+    dll = tmp_path / "Bpcg.Cli.dll"
+    if built:
+        dll.touch()
+    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
+    monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
+
+    def build():
+        assert not built, "기존 DLL이 있으면 빌드 명령을 만들지 않아야 합니다"
+        return ["dotnet", "build"]
+
+    monkeypatch.setattr(jobs_mod, "build_command", build)
+    spec = validate_request({"profile": "tiny", "figures": False})
+    commands = JobManager(out_dir=tmp_path).commands_for(spec, tmp_path / "run")
+    assert len(commands) == (1 if built else 2)
+    assert commands[-1][1:3] == [str(dll), "all"]
+    if not built:
+        assert commands[0] == ["dotnet", "build"]
+
+
 def test_validate_request_reports_bad_keys():
     with pytest.raises(JobError) as e:
         validate_request({"profile": "tiny", "overrides": {"landscape.thetaa": 1.0}})

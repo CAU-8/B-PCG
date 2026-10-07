@@ -31,6 +31,23 @@ public static class Runs
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
 
+    // 디스크를 거치던 단계 경계의 float32 반올림을 유지합니다.
+    // 배열을 직접 갱신하므로 상태 객체와 strata_bottom_m을 공유하는 Columns도 그대로 씁니다.
+    private static void UseSavedPrecision(FieldSet fields)
+    {
+        foreach (KeyValuePair<string, Array> field in fields)
+        {
+            if (Core.Fields.All.TryGetValue(field.Key, out FieldInfo? info)
+                && info.Dtype == "float32" && field.Value is double[] values)
+            {
+                for (int i = 0; i < values.Length; i++)
+                {
+                    values[i] = (double)(float)values[i];
+                }
+            }
+        }
+    }
+
     /// <summary>--set 키=값 목록 → 순서 있는 덮어쓰기 (틀리면 RunError).</summary>
     public static OrderedDictionary<string, object?> SetOverrides(IEnumerable<string>? items)
     {
@@ -55,7 +72,10 @@ public static class Runs
         seed is long s ? cfg.WithOverrides([new("planet.seed", s)]) : cfg;
 
     /// <summary>행성을 만들어 runDir/planet 에 묶음·면 텍스처를 씁니다 (run_planet). 반환: 묶음 폴더.</summary>
-    public static string RunPlanet(Config cfg, string runDir, Action<string> log)
+    public static string RunPlanet(Config cfg, string runDir, Action<string> log) =>
+        GenerateAndSavePlanet(cfg, runDir, log).Output;
+
+    private static (string Output, PlanetState State) GenerateAndSavePlanet(Config cfg, string runDir, Action<string> log)
     {
         long t = Stopwatch.GetTimestamp();
         log($"[행성] 시작: 프로필 {cfg.Sec("profile").Get("name")}, 시드 {cfg.I("planet.seed")}");
@@ -65,7 +85,7 @@ public static class Runs
         Textures.FaceTextures(planet, Path.Combine(output, TextureDir));
         Bundle.WriteJson(Path.Combine(output, "scorecard.json"), planet.Diag.GetValueOrDefault("scorecard") ?? new OrderedDictionary<string, object?>());
         log($"[행성] 묶음을 썼습니다: {output} ({Seconds(t):F1} s)");
-        return output;
+        return (output, planet);
     }
 
     /// <summary>히어로를 만들어 runDir/hero 에 묶음을 씁니다 (run_hero). planetDir 이 없거나 flat 이면 평면 히어로.</summary>
@@ -82,12 +102,18 @@ public static class Runs
             log($"[히어로] 행성 묶음을 읽습니다: {planetDir}");
             planet = Bundle.LoadPlanetState(planetDir);
         }
+        return GenerateAndSaveHero(cfg, runDir, planet, log, t).Output;
+    }
+
+    private static (string Output, HeroState State) GenerateAndSaveHero(
+        Config cfg, string runDir, PlanetState? planet, Action<string> log, long t)
+    {
         HeroState hero = Pipeline.GenerateHero(cfg, planet, log);
         string output = Path.Combine(runDir, HeroDir);
         Bundle.SaveHeroState(output, hero, cfg);
         Bundle.WriteJson(Path.Combine(output, "scorecard.json"), hero.Diag.GetValueOrDefault("scorecard") ?? new OrderedDictionary<string, object?>());
         log($"[히어로] 묶음을 썼습니다: {output} ({Seconds(t):F1} s)");
-        return output;
+        return (output, hero);
     }
 
     /// <summary>회랑 굽기 설정 = 히어로 묶음 설정 + (없으면) 지금 설정 파일의 굽기 절 + bake --set (bake_config).</summary>
@@ -146,6 +172,7 @@ public static class Runs
         string heroDir, string outDir, string? engineDir, Action<string> log, long? seed = null, IEnumerable<string>? sets = null)
     {
         Config cfg = BakeConfig(heroDir, log, seed, sets);
+        Pipeline.ApplyThreads(cfg);
         log($"[굽기] 히어로 묶음을 읽습니다: {heroDir}");
         HeroState hero = Bundle.LoadHeroState(heroDir);
         return Corridor.BakeCorridor(hero, cfg, outDir, engineDir, log);
@@ -155,9 +182,11 @@ public static class Runs
     public static string RunGlobe(string planetDir, string runDir, string? engineGlobeDir, Action<string> log)
     {
         OrderedDictionary<string, object?> man = Bundle.ReadManifest(planetDir);
+        Config cfg = Bundle.ConfigFromManifest(man);
+        Pipeline.ApplyThreads(cfg);
         string output = Path.Combine(runDir, GlobeDir);
         Globe.BakeGlobe(
-            Bundle.LoadPlanetState(planetDir), Bundle.ConfigFromManifest(man), output, hero: Globe.HeroFromRun(runDir), log: log,
+            Bundle.LoadPlanetState(planetDir), cfg, output, hero: Globe.HeroFromRun(runDir), log: log,
             faceBasis: man.GetValueOrDefault("face_basis") as OrderedDictionary<string, object?>,
             engineDir: engineGlobeDir);
         return output;
@@ -182,29 +211,37 @@ public static class Runs
     {
         long t = Stopwatch.GetTimestamp();
         string heroDir;
+        HeroState hero;
+        PlanetState? planet = null;
         string? planetDir = null;
         if (flat)
         {
-            heroDir = RunHero(cfg, runDir, null, flat: true, log);
+            (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, log, Stopwatch.GetTimestamp());
         }
         else
         {
-            planetDir = RunPlanet(cfg, runDir, log);
+            (planetDir, planet) = GenerateAndSavePlanet(cfg, runDir, log);
+            UseSavedPrecision(planet.Fields);
             cfg = Bundle.ConfigFromManifest(Bundle.ReadManifest(planetDir));
             try
             {
-                heroDir = RunHero(cfg, runDir, planetDir, flat: false, log);
+                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, planet, log, Stopwatch.GetTimestamp());
             }
             catch (ArgumentException e)
             {
                 log($"[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: {e.Message}");
-                heroDir = RunHero(cfg, runDir, null, flat: true, log);
+                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, log, Stopwatch.GetTimestamp());
             }
         }
-        RunBake(heroDir, Path.Combine(runDir, CorridorDir), engineDir, log);
+        UseSavedPrecision(hero.Fields);
+        Corridor.BakeCorridor(hero, BakeConfig(heroDir, log), Path.Combine(runDir, CorridorDir), engineDir, log);
         if (!flat)
         {
-            RunGlobe(planetDir!, runDir, engineDir is null ? null : Path.Combine(engineDir, GlobeDir), log);
+            var man = Bundle.ReadManifest(planetDir!);
+            Globe.BakeGlobe(planet!, Bundle.ConfigFromManifest(man), Path.Combine(runDir, GlobeDir),
+                hero: Globe.HeroFromRun(runDir), log: log,
+                faceBasis: man.GetValueOrDefault("face_basis") as OrderedDictionary<string, object?>,
+                engineDir: engineDir is null ? null : Path.Combine(engineDir, GlobeDir));
         }
         else if (engineDir is not null)
         {

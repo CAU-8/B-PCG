@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Threading.Tasks;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Hydro;
@@ -41,7 +40,7 @@ public static class Detail
         long sb = SubSeed(seed, 1);
         double twoPi = 2.0 * Math.PI;
         double[] o = new double[ny * nx];
-        Parallel.For(0, ny, j =>
+        Parallelism.For(0, ny, j =>
         {
             long r = cellOffset.Row0 + j;
             for (int i = 0; i < nx; i++)
