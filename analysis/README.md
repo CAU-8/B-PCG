@@ -1,15 +1,42 @@
 # analysis/
 
-설계 결정을 뒷받침하려고 한 번씩 돌려 본 **일회성 연구 스크립트** 모음입니다. 생성기 본체(`src/bpcg`)가 아닙니다.
+> 설계도에 적힌 숫자 가운데 "지구 반지름으로 정했다", "레이더 자료로는 θ를 잴 수 없었다" 같은 결정은 한 번씩 돌려 본 계산에서 나왔습니다. 이 폴더는 그 **일회성 연구 스크립트**를 모읍니다. 나중에 누가 "그 숫자는 어디서 나왔나"를 물으면, 아래 표의 '뒷받침하는 주장' 열로 스크립트를 찾아 다시 돌려 볼 수 있습니다. 생성기 본체가 아니라서 여기 코드는 생성기에서 쓰지 않습니다.
 
-- 결과 숫자는 설계도(`docs/design/blueprint.md`)와 조사 기록(`docs/design/research/`)에 옮겨 적었습니다.
-  아래 표의 '뒷받침하는 주장' 열이 그 연결입니다.
-- 여기서는 GPL 도구(fastscapelib, topotoolbox, pysheds, richdem)를 써도 됩니다. ruff 의 TID251 검사도 여기서는 꺼 둡니다.
-- **`src/bpcg` 는 절대 여기를 import 하지 않습니다.** 여기서 쓸 만한 코드가 나오면 MIT 로 다시 짜서 `src/bpcg` 로 옮깁니다.
-- 경로는 모두 `bpcg_studio.paths` 로 찾습니다(`EXTERNAL`, `CACHE`, `DERIVED`). 절대 경로를 쓰지 않습니다.
-- 스크립트는 저장소 루트에서 파일로 실행합니다: `uv run python analysis/<폴더>/<파일>.py ...`
-  같은 폴더의 모듈은 그냥 `from hydro import d8` 처럼 가져옵니다. `analysis/veg` 는 `afrisar_link.py` 를 거쳐
-  `analysis/afrisar` 의 `hydro`, `extract` 를 씁니다(옆 폴더 경로를 더하는 곳은 그 파일 하나뿐).
+## 직접 돌려 보기
+
+자료 없이 도는 스크립트 하나로 시작합니다.
+
+```bash
+uv run python analysis/scale/scale_ladder_calcs.py
+```
+
+- 맞게 돌았으면: 첫 줄이 `R_km g vesc_kms …` 머리글이고, 그 아래 행성 반지름별(6,371 km부터 20 km까지) 중력·칸 크기 표가 나옵니다. 첫 줄의 `d0_km(n=512)` 19.546이 행성 지도(L0) 칸 크기 약 19.5 km입니다.
+- 걸리는 시간: 1초 안.
+
+나머지 스크립트는 대부분 가봉 AfriSAR 자료(약 15 GB, NASA 계정 필요)가 있어야 돕니다. 아래 '필요한 자료'를 봅니다.
+
+## 지킬 것
+
+- **결과는 설계 문서로.** 결과 숫자는 설계도(`docs/design/blueprint.md`)와 조사 기록(`docs/design/research/`)에 옮겨 적습니다. 아래 표의 '뒷받침하는 주장' 열이 그 연결입니다.
+- **GPL 도구는 여기서만.** fastscapelib, topotoolbox, pysheds, richdem은 GPL 라이선스라, 쓰면 그 코드도 GPL로 공개해야 할 수 있습니다. 그래서 이 폴더에서만 씁니다. ruff의 GPL import 검사(TID251)도 여기서는 꺼 둡니다.
+- **생성기와 스튜디오는 여기를 쓰지 않습니다.** `src/Bpcg`(C# 생성기)와 `src/bpcg_studio` 는 이 폴더를 부르지 않습니다. 여기서 쓸 만한 계산이 나오면 C#으로 다시 짜서 `src/Bpcg` 로 옮깁니다.
+- **경로는 `bpcg_studio.paths` 로.** `EXTERNAL`, `CACHE`, `DERIVED` 를 쓰고 절대 경로를 쓰지 않습니다.
+- **저장소 맨 위에서 파일로 실행합니다**: `uv run python analysis/<폴더>/<파일>.py …`. 같은 폴더의 모듈은 `from hydro import d8` 처럼 가져옵니다. `analysis/veg` 는 `afrisar_link.py` 를 거쳐 `analysis/afrisar` 의 `hydro`, `extract` 를 씁니다(옆 폴더 경로를 더하는 곳은 그 파일 하나뿐).
+
+## 낯선 말
+
+| 말 | 뜻 |
+|---|---|
+| AfriSAR TomoSAR | 2016년 가봉 숲 위를 비행기 레이더로 여러 번 지나며 잰 자료. 숲 지붕부터 땅까지 높이별로 레이더 반사 세기가 들어 있습니다 |
+| Fourier, Capon | 높이별 반사 세기를 계산하는 두 방법. Fourier는 높이 칸이 8 m로 거칠고, Capon은 더 곱지만 파일이 큽니다 |
+| HH, HV | 레이더 전파의 보내고 받는 방향 조합. HV는 나뭇가지처럼 어지러운 곳에서 세게 돌아옵니다 |
+| 지오코딩 | 레이더가 잰 비스듬한 좌표를 지도 좌표(위경도)로 옮기는 일 |
+| HAND | 가장 가까운 물길보다 몇 m 높은지(Height Above Nearest Drainage) |
+| χ (카이) 분석 | 강을 따라 상류 면적으로 가중한 길이(χ)와 강 높이를 견주어, 둘이 곧은 선이 되는 θ(강이 완만해지는 정도)를 찾는 방법 |
+| TWI | 땅이 얼마나 젖기 쉬운지 나타내는 값(상류 면적과 경사로 계산) |
+| RH95 | 땅에서부터 레이더 반사의 95%가 모이는 높이. 숲 지붕 높이 대신 씁니다 |
+| k-means | 비슷한 것끼리 K개 무리로 나누는 방법 |
+| S3 버킷 | 아마존 클라우드의 파일 저장소. 공개 DEM 타일들이 여기 있습니다 |
 
 ## 폴더
 
