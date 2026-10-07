@@ -102,7 +102,8 @@ public partial class SmokeTest : Node
         {
             return;
         }
-        if (!await CheckPhysics(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main) || !CheckLayers(main))
+        if (!await CheckPhysics(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main) || !CheckLayers(main)
+            || !CheckUiScale(main))
         {
             return;
         }
@@ -753,6 +754,36 @@ public partial class SmokeTest : Node
     }
 
     private static InputEventKey KeyEvent(Key key) => new() { PhysicalKeycode = key, Keycode = key, Pressed = true };
+
+    /// <summary>HUD 배율: 장면이 창에 '자동 배율 × 사용자 배율' 을 걸고, [=]·[-] 키가 10 % 씩 바꾸는지 봅니다.</summary>
+    private bool CheckUiScale(Main main)
+    {
+        Window window = main.GetWindow();
+        float before = UiScale.UserFactor();
+        float screen = UiScale.AutoFactor(window);
+        if (!Mathf.IsEqualApprox(window.ContentScaleFactor, screen * before))
+        {
+            return Fail($"HUD 배율 {window.ContentScaleFactor:F2} 가 자동 {screen:F2} × 사용자 {before:F2} 와 다릅니다");
+        }
+        main._UnhandledInput(KeyEvent(Key.Equal));
+        float bigger = UiScale.UserFactor();
+        if (!Mathf.IsEqualApprox(bigger, Math.Min(before + UiScale.Step, UiScale.UserMax))
+            || !Mathf.IsEqualApprox(window.ContentScaleFactor, screen * bigger))
+        {
+            return Fail($"[=] 뒤 사용자 배율 {bigger:F2}, 창 배율 {window.ContentScaleFactor:F2} (처음 {before:F2})");
+        }
+        if (UiScale.Notice().Length == 0)
+        {
+            return Fail("배율을 바꾼 뒤 상태 줄 알림이 비어 있습니다");
+        }
+        main._UnhandledInput(KeyEvent(Key.Minus));
+        if (!Mathf.IsEqualApprox(UiScale.UserFactor(), before) || !Mathf.IsEqualApprox(window.ContentScaleFactor, screen * before))
+        {
+            return Fail($"[-] 뒤 배율이 처음 {before:F2} 로 돌아오지 않았습니다: {UiScale.UserFactor():F2}");
+        }
+        GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인");
+        return true;
+    }
 
     private void Pass()
     {

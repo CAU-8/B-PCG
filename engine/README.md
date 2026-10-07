@@ -73,8 +73,11 @@ $GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-whe
 | Tab / H | 레이어 패널 / 도움말 숨기기 |
 | M | 지구본 장면(행성 전체)으로 가기. 지구본에서 M 을 누르면 돌아옴 |
 | N | 처음 화면(새 행성 만들기·지난 결과)으로 가기. 지구본에서도 같음 |
+| - / = | 글자·패널(HUD) 크기 10 % 씩 줄이기 / 키우기 (60 ~ 250 %). 고른 크기는 `user://settings.cfg` 에 남아 다음 실행에도 씀 |
 
 지구본 장면의 조작(끌어서 돌리기, 휠, Space 자동 회전, F 히어로로, 1~9 레이어, R·K·L·G, [ ], 클릭 고정)은 [GLOBE.md](GLOBE.md) 에 있습니다.
+
+**화면 크기.** 맥 레티나처럼 화면 배율이 2 인 곳에서는 창(1152×648)과 글자가 절반 크기로 보이므로, `UiScale` 이 처음 뜰 때 창을 화면 배율만큼 키우고(쓸 수 있는 화면의 90 % 까지, 크기를 따로 주지 않았을 때만) 글자·패널을 같은 배율로 그립니다. 3D 화면은 원래 해상도로 그립니다. 창이 작아지면 패널과 도움말이 겹치지 않게 배율을 줄이고, - / = 로 더 키우거나 줄입니다. 처음 화면·회랑·지구본이 같은 배율을 씁니다. 마우스 둘러보기와 지구본 끌기는 화면 픽셀 기준이라 배율을 바꿔도 감도가 같습니다.
 
 **레이어.** 오른쪽 패널에서 버튼으로도 켜고 끕니다. 줄마다 '만 보기' 버튼이 있습니다.
 
@@ -130,7 +133,7 @@ HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --
 |---|---|
 | `project.godot`, `Bpcg.Engine.csproj`, `Bpcg.Engine.sln`, `packages.lock.json` | Godot 프로젝트와 C# 프로젝트 (sln 은 편집기 빌드용) |
 | `scenes/` | `start.tscn`, `main.tscn`, `globe.tscn` |
-| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui` |
+| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui`·`UiScale`(창·HUD 배율) |
 | `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn` 과 그 C# |
 | `shaders/` | 단면·지층·동굴·물·지구본·대기 셰이더 (`.gdshader`, `.gdshaderinc`) |
 | `samples/` | 굽기 폴더가 없을 때 쓰는 작은 표본 높이맵 (`make_sample.py` 로 만듦) |

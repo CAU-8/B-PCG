@@ -41,6 +41,7 @@ public partial class GlobeMain : Node3D
 
     public override void _Ready()
     {
+        UiScale.Apply(GetWindow());
         Globe = GetNode<GlobeView>("Globe");
         Camera = GetNode<GlobeCamera>("Camera");
         Hud = GetNode<GlobeHud>("Hud");
@@ -76,6 +77,12 @@ public partial class GlobeMain : Node3D
     {
         if (@event is not InputEventKey key || !key.Pressed || key.Echo)
         {
+            return;
+        }
+        if (UiScale.HandleKey(GetWindow(), key.PhysicalKeycode))
+        {
+            GetViewport().SetInputAsHandled();
+            UpdateStatus();
             return;
         }
         bool handled = true;
@@ -255,6 +262,11 @@ public partial class GlobeMain : Node3D
         lines.Add(dir == Vector3.Zero
             ? "마우스가 지구본 밖에 있습니다 · 끌어서 돌리고 휠로 확대합니다"
             : Hud.DescribePoint(dir));
+        string notice = UiScale.Notice();
+        if (notice.Length > 0)
+        {
+            lines.Add(notice);
+        }
         Hud.SetStatus(string.Join("\n", lines));
     }
 }

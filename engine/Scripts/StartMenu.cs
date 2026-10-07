@@ -62,6 +62,7 @@ public partial class StartMenu : Control
             Callable.From(() => GetTree().ChangeSceneToFile(CorridorScene)).CallDeferred();
             return;
         }
+        UiScale.Apply(GetWindow());
         BuildUi();
         if (!EnginePaths.Configure())
         {
