@@ -94,8 +94,8 @@ public static class SubdivisionMethod
         "다이아몬드-스퀘어",
         "procedural",
         "Galin 2019 3.1.1 (그림 5); Fournier 외 1982",
-        "거친 격자를 반씩 나누며 이웃 평균에 무작위 변위를 더하는 중점 변위",
-        [new Param("h", 0.9, "거칠기 지수 H (클수록 매끈함, 단계마다 변위 2^−H 배)", Lo: 0.0, Hi: 2.0)],
+        "거친 격자를 반씩 나누며, 새 점에 이웃 평균과 무작위로 흔든 높이를 주는 방식(중점 변위)",
+        [new Param("h", 0.9, "거칠기 지수 H (클수록 매끈함, 나눌 때마다 흔드는 높이가 2^−H 배)", Lo: 0.0, Hi: 2.0)],
         (grid, seed, p, ctx) =>
         {
             int k = (int)Math.Ceiling(Math.Log2(grid.N - 1));

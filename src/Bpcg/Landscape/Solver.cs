@@ -664,7 +664,7 @@ public static class Solver
                 ["max_dz"] = maxDz,
                 ["n_frozen"] = (long)nFrozen,
             });
-            log?.Invoke($"솔버 반복 {it}: 방향 변화 {nChanged}, 최대 고도 변화 {maxDz:G4} m, 고정 칸 {nFrozen}");
+            log?.Invoke($"솔버 반복 {it}: 방향이 바뀐 칸 {LogText.N(nChanged)}개, 가장 크게 변한 높이 {maxDz:G4} m, 방향을 묶은 칸 {LogText.N(nFrozen)}개");
             if (nChanged == 0 && maxDz < stopDz)
             {
                 converged = true;

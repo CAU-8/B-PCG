@@ -23,9 +23,9 @@
     <span id="run-chip" class="status-pill" hidden></span>
   </div>
   <div class="godot">
-    <a class="btn ghost" href="/compare" title="기존 지형 생성 방법론과 B-PCG 를 같은 시드로 비교하고 연산 과정을 봅니다">방법 비교</a>
-    <button id="godot-play" class="btn" type="button" title="고른 결과의 회랑 파일을 engine/baked 로 복사하고 Godot 로 걸어 봅니다">Godot로 보기</button>
-    <button id="godot-editor" class="btn ghost" type="button" title="고른 결과를 engine/baked 로 복사하고 Godot 편집기를 엽니다">편집기로 열기</button>
+    <a class="btn ghost" href="/compare" title="기존 지형 생성 방법과 B-PCG를 같은 시드로 돌려 견주고, 방법마다 지형을 만드는 중간 과정을 봅니다">방법 비교</a>
+    <button id="godot-play" class="btn" type="button" title="고른 결과의 회랑(걸어 다닐 띠) 파일을 engine/baked 로 복사하고 Godot 창을 띄워 걸어 봅니다">Godot로 보기</button>
+    <button id="godot-editor" class="btn ghost" type="button" title="고른 결과의 회랑 파일을 engine/baked 로 복사하고 Godot 편집기를 엽니다">편집기로 열기</button>
     <div id="godot-status" class="godot-status" role="status" aria-live="polite"></div>
   </div>
 </header>
@@ -45,14 +45,14 @@
     <p class="hint" id="profile-hint"></p>
     <div class="grid2">
       <label class="field"><span>시드 (planet.seed)</span><input id="seed" type="number" min="0" step="1" value="0"></label>
-      <div class="field"><span>실행 이름</span><span class="hint">날짜-프로필-시드로 자동</span></div>
+      <div class="field"><span>실행 이름</span><span class="hint">날짜-프로필-시드로 저절로 붙음</span></div>
     </div>
-    <label class="check"><input type="checkbox" id="flat"><span>평면 히어로만 만들기<br><span class="hint">행성 없이 가짜 경계조건으로 히어로만 풉니다. 빠르지만 행성 지도와 그림은 없습니다.</span></span></label>
-    <label class="check"><input type="checkbox" id="figures" checked><span>끝나면 결과 그림 그리기<br><span class="hint">analysis/figures/render_results.py 를 이어서 돌립니다 (노트북 기준 수십 초).</span></span></label>
+    <label class="check"><input type="checkbox" id="flat"><span>평면 히어로만 만들기<br><span class="hint">행성을 만들지 않고, 정해 둔 융기와 출구로 강 유역 하나만 바로 만듭니다. 빠르지만 행성 지도가 없습니다.</span></span></label>
+    <label class="check"><input type="checkbox" id="figures" checked><span>끝나면 결과 그림 그리기<br><span class="hint">analysis/figures/render_results.py 를 이어서 돌립니다. 이 스크립트가 아직 C# 결과를 읽지 못해, 지금은 켜도 이 단계를 건너뜁니다.</span></span></label>
 
     <div class="actions">
       <button id="run-btn" class="btn primary" type="button">실행</button>
-      <button id="cancel-btn" class="btn danger" type="button" hidden>취소</button>
+      <button id="cancel-btn" class="btn danger" type="button" hidden>실행 멈추기</button>
     </div>
     <p id="run-msg" class="msg" role="status" aria-live="polite"></p>
     <p id="validate-msg" class="msg error" role="status" aria-live="polite" hidden></p>
@@ -64,7 +64,7 @@
 
     <section class="area-box" aria-labelledby="area-title">
       <h3 id="area-title">영역·해상도 <span class="badge cat-resolution">프로필</span></h3>
-      <p class="hint">히어로 유역(가까이 보는 땅)과 걷는 회랑의 크기·간격입니다. 키우면 시간이 칸 수에 비례해 늘고, 히어로가 클수록 바다에서 먼 육지 자리가 필요합니다.</p>
+      <p class="hint">히어로 유역(행성에서 고른 강 유역 하나를 더 촘촘한 칸으로 다시 푼 땅)과 회랑(그 안에서 Godot로 걸어 다닐 띠)의 크기와 칸 간격입니다. 키우면 시간이 칸 수에 거의 비례해 늘고, 유역이 클수록 바다에서 먼 육지가 필요합니다.</p>
       <div id="area-params"></div>
       <div class="area-derived" id="area-derived" aria-live="polite"></div>
     </section>

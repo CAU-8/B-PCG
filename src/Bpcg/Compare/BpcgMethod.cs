@@ -48,7 +48,7 @@ public static class BpcgMethod
         "B-PCG (평면 히어로)",
         "ours",
         "이 저장소 docs/pipeline.md 7·8·9장",
-        "융기 단면에서 정상상태 하천·사면 법칙을 층 경계별로 풀고, 같은 암석·물에서 땅속까지",
+        "정해 둔 융기에서 솟는 만큼 깎이는 다 자란 산과 강을 지층마다 다른 경사로 풀고, 같은 암석과 물로 땅속까지 만듦",
         [
             new Param("planet", "earth", "행성 설정 이름 (configs/planets)", Kind: "str"),
             new Param("profile", "laptop", "프로필 이름 (configs/profiles, 히어로 크기는 격자로 덮어씀)", Kind: "str"),

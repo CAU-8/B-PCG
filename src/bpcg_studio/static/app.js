@@ -180,21 +180,21 @@ function parseInput(p, raw) {
   if (p.type === "bool") return { value: !!raw };
   if (p.type === "int" || p.type === "float") {
     const s = String(raw).trim().replace(/_/g, "");
-    if (s === "") return { error: "값을 넣어 주세요" };
+    if (s === "") return { error: "값이 비어 있습니다. 숫자를 넣으세요." };
     const v = Number(s);
-    if (!Number.isFinite(v)) return { error: "숫자가 아닙니다" };
-    if (p.type === "int" && !Number.isInteger(v)) return { error: "정수여야 합니다" };
+    if (!Number.isFinite(v)) return { error: `'${s}' 는 숫자가 아닙니다. 0.5 나 1e-3 처럼 넣으세요.` };
+    if (p.type === "int" && !Number.isInteger(v)) return { error: `${v} 는 정수가 아닙니다. 이 값은 3 처럼 정수만 받습니다.` };
     return { value: v };
   }
   if (p.type === "list") {
     try {
       const v = JSON.parse(raw);
-      if (!Array.isArray(v)) return { error: "[0.02, 0.08] 같은 리스트여야 합니다" };
+      if (!Array.isArray(v)) return { error: `${raw} 는 목록이 아닙니다. [0.02, 0.08] 처럼 대괄호 안에 쉼표로 넣으세요.` };
       if (Array.isArray(p.default) && p.default.length && v.length !== p.default.length)
-        return { error: `원소 ${p.default.length}개여야 합니다` };
+        return { error: `값이 ${v.length}개입니다. 이 목록은 ${p.default.length}개를 받습니다 (기본값 ${JSON.stringify(p.default)}).` };
       return { value: v };
     } catch (e) {
-      return { error: "리스트를 읽지 못했습니다 (예: [0.02, 0.08])" };
+      return { error: `${raw} 를 목록으로 읽지 못했습니다. [0.02, 0.08] 처럼 대괄호와 쉼표로 넣으세요.` };
     }
   }
   return { value: String(raw) };
@@ -228,7 +228,7 @@ function paramRow(p) {
     h("code", { class: "pkey", title: p.key }, p.name),
     h("span", { class: `badge cat-${p.category}`, title: cat ? cat.description : "" }, cat ? cat.label : p.category),
     h("span", { class: "badge changed", hidden: true }, "바뀜"),
-    !p.editable ? h("span", { class: "badge ro", title: p.read_only_reason }, "여기서 안 바꿈") : null,
+    !p.editable ? h("span", { class: "badge ro", title: p.read_only_reason }, "여기서 바꿀 수 없음") : null,
   );
   let input;
   if (p.type === "bool") {
@@ -251,11 +251,11 @@ function paramRow(p) {
     });
   }
   input.disabled = !p.editable;
-  const reset = h("button", { class: "reset", type: "button", title: "기본값으로 되돌리기", "aria-label": "기본값으로" }, "↺");
+  const reset = h("button", { class: "reset", type: "button", title: "기본값으로 되돌리기", "aria-label": "기본값으로 되돌리기" }, "↺");
   reset.addEventListener("click", () => setOverride(p.key, p.default));
   const extra = [];
   if (p.note) extra.push(p.note);
-  if (p.learned) extra.push("configs/learned 의 맞춘 값");
+  if (p.learned) extra.push("configs/learned 에서 자료로 맞춘 값");
   row.append(
     head,
     h("div", { class: "param-input" }, input, h("span", { class: "unit" }, p.unit || "—"), reset),
@@ -407,7 +407,7 @@ function updateAreaDerived() {
     updateRunButton();
   };
   if (!(Number.isFinite(size) && Number.isFinite(dx) && size > 0 && dx > 0)) {
-    box.append(h("div", { class: "note error" }, "히어로 한 변과 칸 간격은 0 보다 커야 합니다. 고치기 전에는 실행할 수 없습니다."));
+    box.append(h("div", { class: "note error" }, `히어로 한 변(size_m ${fmt(size)} m)과 칸 간격(spacing_m ${fmt(dx)} m)은 0 보다 커야 합니다. 두 값을 0 보다 큰 수로 고쳐야 실행할 수 있습니다.`));
     setBlocked(true);
     return;
   }
@@ -429,10 +429,10 @@ function updateAreaDerived() {
     h("dd", null, `${fmtInt(n)}칸 × ${fmt(dx)} m = ${(side / 1000).toLocaleString("ko-KR", { maximumFractionDigits: 3 })} km`),
     h("dt", null, "히어로 칸 수"),
     h("dd", null, `${fmtInt(n)}² = ${fmtInt(cells)} (${fmtCells(cells)}칸)`),
-    h("dt", null, "계산량"),
+    h("dt", null, "계산량 (칸 수 기준)"),
     h("dd", null, `노트북 기본(${fmtCells(lap.cells)}칸)의 약 ${ratio < 10 ? +ratio.toPrecision(2) : Math.round(ratio)}배`),
     h("dt", null, "회랑"),
-    h("dd", null, vox > 0 ? `${fmt(len)} × ${fmt(wid)} m, 간격 ${fmt(vox)} m → 높이맵 ${fmtCells(corSamples)} 표본` : "간격이 0 보다 커야 합니다"),
+    h("dd", null, vox > 0 ? `${fmt(len)} × ${fmt(wid)} m, 간격 ${fmt(vox)} m → 높이맵 ${fmtCells(corSamples)} 표본` : `회랑 간격(voxel_m ${fmt(vox)} m)이 0 보다 커야 합니다`),
   );
   const bar = h("div", { class: "cost-bar", title: "노트북 기본의 4배를 꽉 찬 막대로 봅니다" }, h("i", { style: `width:${Math.min(100, (ratio / 4) * 100)}%` }));
   const notes = h("div", { class: "notes" });
@@ -441,11 +441,11 @@ function updateAreaDerived() {
       h(
         "div",
         { class: "note error" },
-        `히어로 한 변(size_m ${fmt(size)} m)은 칸 간격(spacing_m ${fmt(dx)} m)의 3배(${fmt(3 * dx)} m) 이상이어야 합니다. 생성기가 받지 않는 설정이라 실행을 막았습니다.`,
+        `히어로 한 변(size_m ${fmt(size)} m)이 칸 간격(spacing_m ${fmt(dx)} m)의 3배(${fmt(3 * dx)} m)보다 짧습니다. size_m 을 ${fmt(3 * dx)} m 이상으로 늘리거나 spacing_m 을 ${fmt(size / 3)} m 이하로 줄이세요. 생성기가 받지 않는 설정이라 실행을 막았습니다.`,
       ),
     );
   else if (Math.abs(side - size) > 1e-6)
-    notes.append(h("div", { class: "note info" }, `한 변 ${fmt(size)} m 는 간격의 배수가 아니라 ${fmt(side)} m (${n}칸)로 맞춥니다.`));
+    notes.append(h("div", { class: "note info" }, `한 변 ${fmt(size)} m 가 칸 간격의 배수가 아니라서 ${fmt(side)} m (${n}칸)로 맞춥니다.`));
   if (tooBig)
     notes.append(
       h(
@@ -459,7 +459,7 @@ function updateAreaDerived() {
   if (len > side || wid > side)
     notes.append(h("div", { class: "note warn" }, `회랑(${fmt(len)} × ${fmt(wid)} m)이 히어로 한 변(${fmt(side)} m)보다 커서 히어로 크기에 맞춰 줄어듭니다.`));
   if (side > 40000)
-    notes.append(h("div", { class: "note info" }, "히어로가 크면 바다에서 먼 육지 자리가 필요합니다. 행성에 그런 자리가 없으면 평면 히어로(가짜 경계조건)로 바뀌고 진행·개요 탭에 경고가 뜹니다."));
+    notes.append(h("div", { class: "note info" }, "한 변이 40 km 를 넘는 큰 유역은 바다에서 먼 육지 자리가 필요합니다. 행성에 그런 자리가 없으면 평면 히어로(행성 대신 정해 둔 융기와 출구로 만드는 유역)로 바뀌고, 진행·개요 탭에 노란 경고가 뜹니다."));
   box.append(dl, bar, notes);
   setBlocked(tooSmall || tooBig);
 }
@@ -497,7 +497,7 @@ async function runValidate() {
   if (gen !== S.validateGen) return;
   const ok = !res || res.ok !== false;
   const errs = ok ? {} : res.errors || res.details || {};
-  showServerErrors(errs, ok ? "" : res.message || res.error || "바꾼 값에 문제가 있습니다");
+  showServerErrors(errs, ok ? "" : res.message || res.error || "바꾼 값 가운데 서버 검사를 통과하지 못한 것이 있습니다");
 }
 
 function showServerErrors(errs, message) {
@@ -546,7 +546,7 @@ async function startRun() {
   updateRunButton();
   const msg = $("#run-msg");
   msg.className = "msg";
-  msg.textContent = "실행을 시작합니다…";
+  msg.textContent = "실행을 요청하는 중…";
   try {
     const st = await post("/api/jobs", requestBody());
     msg.className = "msg ok";
@@ -586,7 +586,7 @@ async function cancelRun() {
   if (!S.job) return;
   try {
     await post("/api/jobs/cancel", { id: S.job.id });
-    $("#run-msg").textContent = "취소를 요청했습니다";
+    $("#run-msg").textContent = "실행을 멈추라고 요청했습니다";
   } catch (e) {
     $("#run-msg").textContent = e.message;
   }
@@ -669,7 +669,7 @@ async function loadRuns(opts) {
   if (sig !== S.runsSig) {
     S.runsSig = sig;
     sel.textContent = "";
-    if (!S.runs.length) sel.append(h("option", { value: "" }, "아직 결과가 없습니다 — 실행 설정에서 실행하세요"));
+    if (!S.runs.length) sel.append(h("option", { value: "" }, "아직 결과가 없습니다. 실행 설정에서 '실행'을 누르세요"));
     if (studio.length) sel.append(h("optgroup", { label: "스튜디오 실행 (out/studio)" }, studio.map((x) => h("option", { value: x.key }, label(x)))));
     if (ext.length) sel.append(h("optgroup", { label: "다른 실행 (out/, 읽기 전용)" }, ext.map((x) => h("option", { value: x.key }, label(x)))));
     if (S.skippedRuns.length)
@@ -823,7 +823,7 @@ function welcome(info) {
       null,
       external
         ? "이 결과는 스튜디오 밖(bpcg all 명령)에서 만든 실행이라 단계별 진행 기록이 없습니다. 개요·행성 지도·히어로 지도·그림 탭에서 결과를 보세요."
-        : "판·비·강이 만든 행성을 매개변수부터 Godot 화면까지 한곳에서 돌려 봅니다. 처음이면 tiny 프로필로 몇 초 만에 전체를 한 번 돌려 보세요.",
+        : "매개변수를 바꿔 행성을 만들고, 산과 강이 어떻게 달라졌는지 지도와 점수표로 본 뒤, Godot에서 걸어 봅니다. 처음이면 tiny 프로필로 한 번 돌려 봅니다(몇 초).",
     ),
     external
       ? null
@@ -832,8 +832,8 @@ function welcome(info) {
           null,
           h("li", null, "실행 설정(넓은 화면은 왼쪽, 좁은 화면은 아래)에서 프로필·시드를 고르고, 바꿀 매개변수를 고칩니다 (바뀐 값에는 '바뀜' 표시)."),
           h("li", null, "'실행'을 누르면 이 탭에 단계별 진행률과 기록이 나옵니다."),
-          h("li", null, "끝나면 개요·지도·그림 탭에서 결과를 보고, 칸을 눌러 모든 값을 확인합니다."),
-          h("li", null, "위의 'Godot로 보기'로 구운 회랑을 걸어 봅니다."),
+          h("li", null, "끝나면 개요·행성 지도·히어로 지도 탭에서 결과를 보고, 지도의 칸을 눌러 그 칸의 모든 값을 봅니다."),
+          h("li", null, "위 막대의 'Godot로 보기'를 누르면 회랑(걸어 다닐 수 있게 구운 띠)을 Godot에서 걸어 봅니다."),
         ),
   );
 }
@@ -894,7 +894,7 @@ function renderProgress() {
         "p",
         { class: "explain" },
         h("b", null, "전체 진행률 [%]. "),
-        `단계마다 무게(${pr.weights_from || "기본 무게"})를 주고, 끝난 단계의 무게 합에 지금 단계의 안쪽 진행(솔버는 반복 수 / 반복 상한)을 더한 값입니다. 솔버는 상한보다 일찍 수렴하는 일이 많아 그 단계 끝에서 한 번에 뛸 수 있습니다.`,
+        `단계마다 걸리는 시간에 맞춘 무게(${pr.weights_from || "기본 무게"})를 두고, 끝난 단계의 무게에 지금 단계가 간 만큼(솔버는 반복 수 ÷ 반복 상한)을 더합니다. 솔버는 상한보다 일찍 멈추는(수렴) 일이 많아, 그 단계가 끝날 때 막대가 한 번에 뛸 수 있습니다.`,
       ),
     ),
     h(
@@ -946,7 +946,7 @@ function renderProgress() {
       h("span", null, "· 색: ", h("span", { class: "ph-행성" }, "행성 "), h("span", { class: "ph-히어로" }, "히어로 "), h("span", { class: "ph-굽기" }, "굽기 "), h("span", { class: "ph-그림" }, "그림")),
     ),
     list,
-    h("p", { class: "explain" }, "각 줄은 파이프라인이 찍는 기록 줄(예: '[2단계] 솔버 끝')로 끝을 압니다. 줄 아래 회색 글은 그 단계가 남긴 결과 줄입니다."),
+    h("p", { class: "explain" }, "생성기가 단계마다 찍는 기록 줄(예: '[2단계] 솔버 끝')이 나오면 그 단계가 끝난 것으로 봅니다. 단계 이름 아래 회색 글은 그 단계가 남긴 결과 줄입니다."),
   );
   const pre = h("pre", { class: "log", "aria-label": "실행 기록" });
   pre.textContent = S.logLines.join("\n");
@@ -1011,7 +1011,7 @@ function renderOverview() {
     "div",
     { class: "card" },
     h("h3", null, `기본값에서 바꾼 설정 (${changedDiffs.length}개)`),
-    h("p", { class: "explain" }, "이 실행의 설정(묶음 manifest 의 config)을 지금 configs/ 의 기본값과 비교했습니다. 기본값 파일을 고친 뒤에는 바꾸지 않은 실행도 여기에 차이가 보일 수 있습니다."),
+    h("p", { class: "explain" }, "이 실행이 쓴 설정(결과 폴더 manifest.json 의 config)을 지금 configs/ 의 기본값과 견줍니다. 그래서 실행 뒤에 기본값 파일을 고쳤으면, 값을 바꾸지 않은 실행에도 차이가 보입니다."),
   );
   if (changedDiffs.length) {
     diffCard.append(
@@ -1079,7 +1079,7 @@ function renderOverview() {
   const solverCard = h("div", { class: "card" }, h("h3", null, "솔버 수렴"));
   const sv = s.solver || {};
   const rows = [];
-  const convPill = (c) => (c == null ? h("span", { class: "pill info" }, "기록 없음") : h("span", { class: `pill ${c ? "ok" : "bad"}` }, c ? "수렴" : "수렴 안 함"));
+  const convPill = (c) => (c == null ? h("span", { class: "pill info" }, "기록 없음") : h("span", { class: `pill ${c ? "ok" : "bad"}` }, c ? "수렴" : "수렴 못 함"));
   for (const [name, label] of [["planet", "행성 L0"], ["hero", "히어로 L2"]]) {
     const x = sv[name];
     // 지각 세기 한계의 첫 풀이: 융기를 줄일 칸을 고르려고 행성을 먼저 한 번 풉니다. 여기서
@@ -1122,23 +1122,23 @@ function renderOverview() {
       h(
         "table",
         null,
-        h("thead", null, h("tr", null, h("th", null, "격자"), h("th", { class: "num" }, "반복 / 상한"), h("th", null, "수렴"), h("th", { class: "num" }, "고정 칸"), h("th", { class: "num" }, "시간"))),
+        h("thead", null, h("tr", null, h("th", null, "격자"), h("th", { class: "num" }, "반복 / 상한"), h("th", null, "수렴"), h("th", { class: "num" }, "방향을 묶은 칸"), h("th", { class: "num" }, "시간"))),
         h("tbody", null, rows),
       ),
     ),
     h(
       "p",
       { class: "explain" },
-      h("b", null, "고정 칸"),
-      "은 물길 방향이 계속 오가서 방향을 고정한 칸 수입니다. 많으면 그 지역(대개 임계 경사 산비탈)의 물길이 불안정하다는 뜻입니다. ",
+      h("b", null, "방향을 묶은 칸"),
+      "(고정 칸)은 반복마다 물길 방향이 이쪽저쪽 뒤집혀 옛 방향에 묶어 둔 칸 수입니다. 많으면 그 지역(대개 임계 경사에 닿은 산비탈)의 물길이 자리를 잡지 못했다는 뜻입니다. ",
       h("b", null, "지각 세기 한계 첫 풀이"),
-      "는 융기를 줄일 칸을 고르려고 행성을 먼저 한 번 푼 것입니다. 여기서 수렴하지 않으면 덜 풀린 지형을 보고 융기를 줄였다는 뜻이라, 산맥 높이를 볼 때 함께 보세요.",
+      "는 평균 높이가 한계(기본 5,500 m)에 가까운 곳의 융기를 줄이려고, 줄일 칸을 고르기 전에 행성을 먼저 한 번 푼 것입니다. 여기서 수렴하지 못하면 덜 풀린 지형을 보고 융기를 줄였다는 뜻이라, 산맥 높이를 볼 때 함께 봅니다.",
     ),
   );
   const chartBox = h("div", { class: "two" });
   chartBox.append(
-    convergenceChart(sv, "max_dz", "반복마다 가장 크게 바뀐 고도 [m]", "고도 변화가 멈춤 기준(landscape.stop_dz_m)보다 작아지고 방향 변화가 0 이면 수렴입니다. 세로축은 로그 눈금입니다."),
-    convergenceChart(sv, "n_changed", "반복마다 물길 방향이 바뀐 칸 수 [칸]", "처음에는 거의 모든 칸이 바뀌다가 물길망이 자리를 잡으면 0 으로 떨어집니다. 세로축은 로그 눈금(0 은 맨 아래)입니다."),
+    convergenceChart(sv, "max_dz", "반복마다 가장 크게 바뀐 고도 [m]", "가장 크게 바뀐 높이가 멈춤 기준(landscape.stop_dz_m, 기본 0.1 m)보다 작아지고 물길 방향이 바뀐 칸이 0 이 되면 솔버가 멈춥니다(수렴). 세로축은 로그 눈금이라 눈금 하나가 10배입니다."),
+    convergenceChart(sv, "n_changed", "반복마다 물길 방향이 바뀐 칸 수 [칸]", "처음에는 거의 모든 칸의 방향이 바뀌다가, 물길이 자리를 잡으면 0 으로 떨어집니다. 세로축은 로그 눈금이고 0 은 맨 아래에 그립니다."),
   );
   solverCard.append(chartBox);
 
@@ -1175,7 +1175,7 @@ function renderOverview() {
   }
   tCard.append(
     all.length ? timing : h("p", { class: "hint" }, "시간 기록이 없습니다."),
-    h("p", { class: "explain" }, "묶음 manifest 와 회랑 manifest 에 적힌 계산 시간입니다(파일 쓰기·읽기 시간은 빠짐). 노트북에서는 지각 세기 한계의 첫 풀이, 히어로 솔버, 동굴 메시가 가장 오래 걸립니다."),
+    h("p", { class: "explain" }, "행성·히어로·회랑 결과 폴더의 manifest.json 에 적힌 계산 시간입니다(파일을 쓰고 읽는 시간은 빠짐). 노트북에서는 지각 세기 한계의 첫 풀이, 히어로 솔버, 동굴 메시가 가장 오래 걸립니다."),
   );
 
   // 점수표
@@ -1186,12 +1186,12 @@ function renderOverview() {
     h(
       "p",
       { class: "explain" },
-      h("b", null, "검사"),
-      "는 반드시 맞아야 하는 규칙이고, ",
-      h("b", null, "결과"),
-      "는 입력으로 정하지 않았는데 나온 값이라 지구 값과 견줍니다. ",
-      h("b", null, "반쯤 입력"),
-      "은 입력이 거의 정하는 값이라 지구다움의 근거로 세지 않습니다. 판정: ",
+      h("b", null, "검사(check)"),
+      "는 꼭 지켜야 하는 규칙입니다(예: 거꾸로 흐르는 강 0칸). ",
+      h("b", null, "결과(emergent)"),
+      "는 입력에 없던 성질이 결과로 나온 값이라 지구 값과 견주고, '지구답다'는 근거로는 이것만 씁니다. ",
+      h("b", null, "반쯤 입력(forced)"),
+      "은 입력이 거의 정하는 값이라 맞아도 근거가 되지 않습니다. 판정: ",
       h("span", { class: "pill ok" }, "통과"),
       " ",
       h("span", { class: "pill bad" }, "불합격"),
@@ -1246,13 +1246,13 @@ function renderOverview() {
         h(
           "dl",
           { class: "facts" },
-          h("div", null, h("dt", null, "방향 · 기준"), h("dd", null, `${cor.axis === "north" ? "남북" : "동서"} · ${cor.apex_kind === "fan" ? "선상지 꼭짓점" : cor.apex_kind === "river" ? "가장 큰 강" : cor.apex_kind || "—"}`)),
+          h("div", null, h("dt", null, "방향 · 시작점"), h("dd", null, `${cor.axis === "north" ? "남북" : "동서"} · ${cor.apex_kind === "fan" ? "선상지 꼭짓점" : cor.apex_kind === "river" ? "가장 큰 강" : cor.apex_kind || "—"}`)),
           h("div", null, h("dt", null, "동굴 입구"), h("dd", null, fmtInt(cor.caves.n_entrances))),
           h("div", null, h("dt", null, "동굴 메시 삼각형"), h("dd", null, fmtInt(cor.caves.faces_kept))),
           h("div", null, h("dt", null, "엔진 높이 기준 (y_offset)"), h("dd", null, cor.frame ? `${fmt(cor.frame.y_offset_m)} m` : "—")),
         ),
         h("p", { class: "hint" }, `파일: ${(cor.files || []).join(", ")}`),
-        h("p", { class: "explain" }, "위 막대의 'Godot로 보기'를 누르면 이 파일들을 engine/baked/ 로 복사하고 Godot 가 가져오게(import) 한 뒤 걸어 볼 수 있게 띄웁니다."),
+        h("p", { class: "explain" }, "위 막대의 'Godot로 보기'를 누르면 이 파일들을 engine/baked/ 로 복사하고, 엔진을 빌드하고, Godot가 새 파일을 가져오게(import) 한 뒤 창을 띄웁니다."),
       )
     : null;
 
@@ -1360,7 +1360,7 @@ function renderFigures() {
     h(
       "p",
       { class: "explain" },
-      "analysis/figures/render_results.py 가 그린 그림입니다. 각 그림 아래에 무엇을 그렸는지, 어떻게 읽는지, 무엇을 보면 되는지 적었습니다. 그림을 누르면(또는 Tab 으로 고르고 Enter) 크게 봅니다. 같은 값을 직접 골라 보려면 행성 지도·히어로 지도 탭을 쓰세요.",
+      "analysis/figures/render_results.py 가 그린 그림입니다. 그림마다 무엇을 그렸는지, 어떻게 읽는지, 무엇을 보면 되는지 적었습니다. 그림을 누르면(또는 Tab 으로 고르고 Enter) 크게 봅니다. 같은 값을 직접 골라 보려면 행성 지도·히어로 지도 탭을 씁니다.",
     ),
   );
   if (!s.figures.length) {
@@ -1369,8 +1369,8 @@ function renderFigures() {
         "div",
         { class: "empty" },
         s.levels && !s.levels.planet
-          ? "평면 히어로 실행이라 그림 스크립트를 돌리지 않았습니다 (행성 묶음이 필요). 히어로 지도 탭에서 결과를 보세요."
-          : "그림이 없습니다. '끝나면 결과 그림 그리기'를 켜고 실행하거나, uv run python analysis/figures/render_results.py <실행 폴더> 로 그리세요.",
+          ? "평면 히어로 실행이라 그림이 없습니다(그림에는 행성 결과가 필요합니다). 히어로 지도 탭에서 결과를 봅니다."
+          : "그림이 없습니다. 그림 스크립트(analysis/figures/render_results.py)가 아직 C# 결과를 읽지 못해, 지금은 실행할 때 그림 단계를 건너뜁니다. 같은 값은 행성 지도·히어로 지도 탭에서 봅니다.",
       ),
     );
     return;
@@ -1464,7 +1464,7 @@ function buildReference() {
     );
   if (runPlanet && runPlanet !== S.schema.planet) notices.push(`고른 결과는 행성 설정 ${runPlanet} 로 실행했습니다. '기본값' 열은 ${S.schema.planet} 의 값입니다.`);
   const hint = flat
-    ? "'고른 결과의 값'은 위에서 고른 실행이 실제로 쓴 값입니다(묶음 manifest 의 config). '기본값' 열과 다른 칸은 색으로 표시합니다."
+    ? "'고른 결과의 값'은 위에서 고른 실행이 실제로 쓴 값입니다(결과 폴더 manifest.json 의 config). '기본값' 열과 다른 칸은 색으로 표시합니다."
     : `'고른 결과의 값'은 고른 실행이 그 실행 프로필${runProfile ? `(${runProfile})` : ""}의 기본값과 다르게 쓴 값만 보입니다. 빈칸은 그 실행 프로필의 기본값을 썼다는 뜻이라, 이 표의 '기본값' 열과는 다를 수 있습니다.`;
   root.append(
     h(
@@ -1529,15 +1529,15 @@ const CMAPS = {
   ocean: ["#083c7d", "#0d57a1", "#2171b5", "#3b8bc2", "#5ba3d0", "#7fb9da", "#a6cee4", "#c7dbef", "#d9e8f5"],
 };
 const CMAP_LABELS = {
-  terrain: "지형 (해수면에서 바다·육지)",
-  viridis: "viridis (밝을수록 큼)",
-  magma: "magma (밝을수록 큼)",
-  cividis: "cividis (색각 이상 친화)",
-  blues: "파랑 (물)",
-  ylgnbu: "노랑-초록-파랑 (비)",
-  ylorbr: "노랑-갈색 (흙·퇴적)",
-  diverging: "파랑-흰색-빨강 (가운데 기준)",
-  gray: "회색",
+  terrain: "지형 (바다 파랑 · 육지 초록→흰색)",
+  viridis: "viridis (보라→노랑, 밝을수록 큼)",
+  magma: "magma (검정→노랑, 밝을수록 큼)",
+  cividis: "cividis (남색→노랑, 색각 이상이 있어도 구분하기 쉬움)",
+  blues: "파랑 (물, 진할수록 큼)",
+  ylgnbu: "노랑-초록-파랑 (비, 진할수록 큼)",
+  ylorbr: "노랑-갈색 (흙·퇴적, 진할수록 큼)",
+  diverging: "파랑-흰색-빨강 (기준값이 흰색)",
+  gray: "회색 (밝을수록 큼)",
 };
 const NAN_RGB = [205, 210, 206];
 
@@ -1795,12 +1795,12 @@ class MapView {
       const a = Number(minIn.value);
       const b = Number(maxIn.value);
       let msg = "";
-      if (minIn.value.trim() === "" || maxIn.value.trim() === "" || !Number.isFinite(a) || !Number.isFinite(b)) msg = "색 범위에는 숫자를 넣어 주세요.";
-      else if (!(b > a)) msg = "색 범위의 위 값이 아래 값보다 커야 합니다.";
+      if (minIn.value.trim() === "" || maxIn.value.trim() === "" || !Number.isFinite(a) || !Number.isFinite(b)) msg = `색 범위에 숫자가 아닌 값이 있습니다('${minIn.value}' ~ '${maxIn.value}'). 두 칸에 숫자를 넣으세요.`;
+      else if (!(b > a)) msg = `색 범위의 위 값(${fmt(b)})이 아래 값(${fmt(a)})보다 커야 합니다. 두 값을 바꿔 넣으세요.`;
       else if (this.view.log && !(a > 0)) {
         // 로그 눈금에서 0 이하는 log10 이 -∞·NaN 이라 색과 눈금을 정할 수 없습니다.
         const lo = this.logFloor();
-        msg = `로그 눈금에서는 아래 값이 0 보다 커야 합니다${lo != null ? ` (이 필드의 가장 작은 양수 ${fmt(lo)})` : ""}. 0 이하까지 보려면 '로그 눈금'을 끄세요.`;
+        msg = `로그 눈금에서는 아래 값이 0 보다 커야 합니다(받은 값 ${fmt(a)}${lo != null ? `, 이 필드의 가장 작은 양수 ${fmt(lo)}` : ""}). 0 이하까지 보려면 '로그 눈금'을 끄세요.`;
       }
       if (msg) {
         this.showRangeMsg(msg);
@@ -1890,7 +1890,7 @@ class MapView {
     const mapCard = h(
       "div",
       { class: "card" },
-      h("div", { class: "card-head" }, h("h2", null, lm.label), h("span", { class: "hint" }, this.level === "planet" ? `위경도 지도 ${lm.width}×${lm.height} · 면당 ${lm.n_per_face}칸 (약 ${fmt(lm.spacing_km)} km)` : `${lm.shape[1]}×${lm.shape[0]}칸, ${fmt(lm.spacing_m)} m 간격 → ${lm.width}×${lm.height} 픽셀 (${lm.factor}칸 묶음)`)),
+      h("div", { class: "card-head" }, h("h2", null, lm.label), h("span", { class: "hint" }, this.level === "planet" ? `위경도 지도 ${lm.width}×${lm.height} · 면당 ${lm.n_per_face}칸 (약 ${fmt(lm.spacing_km)} km)` : `${lm.shape[1]}×${lm.shape[0]}칸, ${fmt(lm.spacing_m)} m 간격 → ${lm.width}×${lm.height} 픽셀 (한 픽셀에 ${lm.factor}×${lm.factor}칸)`)),
       controls,
       this.rangeMsg,
       this.desc,
@@ -1930,7 +1930,7 @@ class MapView {
         // 격자 크기가 단계 설명과 다르면 그 사이에 실행이 다시 만들어진 것입니다.
         dropCache(run, this.level);
         this.stale = true;
-        throw new Error("지도 격자 크기가 맞지 않습니다 (그 사이 실행이 다시 만들어진 듯합니다). 실행 목록 새로 고침(↻)을 누르거나 탭을 다시 여세요.");
+        throw new Error(`지도 격자 크기(${data.length}칸)가 단계 설명(${lm.width}×${lm.height})과 맞지 않습니다. 그 사이 같은 이름의 실행이 다시 만들어진 것 같습니다. 실행 목록 새로 고침(↻)을 누르거나 탭을 다시 여세요.`);
       }
       this.meta = meta;
       this.data = data;
@@ -2620,7 +2620,7 @@ function updateGodotButtons(st) {
   for (const id of ["#godot-play", "#godot-editor"]) {
     const b = $(id);
     b.disabled = !hasCor || !!busy;
-    b.title = hasCor ? `${S.run} 의 회랑 파일을 engine/baked 로 복사하고 Godot 를 띄웁니다` : "고른 결과에 회랑(corridor/)이 없습니다";
+    b.title = hasCor ? `${S.run} 의 회랑 파일을 engine/baked 로 복사하고 Godot 를 띄웁니다` : "고른 결과에 회랑(corridor/ 폴더)이 없어 Godot로 볼 수 없습니다. 굽기까지 끝난 실행을 고르세요";
   }
 }
 
@@ -2630,7 +2630,7 @@ function renderGodotStatus(st) {
   el.className = "godot-status" + (st.state === "error" ? " error" : st.state === "launched" ? " ok" : "");
   const baked = st.baked ? `engine/baked: ${st.baked.run || "(이름 없음)"}` : "engine/baked: 비어 있음";
   let text;
-  if (st.state === "idle") text = st.godot ? `Godot 있음 · ${baked}` : st.godot_message || "Godot 를 찾지 못했습니다";
+  if (st.state === "idle") text = st.godot ? `Godot 있음 · ${baked}` : st.godot_message || "Godot를 찾지 못했습니다. ./scripts/setup.sh --godot 로 받습니다";
   else text = `${st.message}${st.state === "launched" || st.state === "error" ? " · " + baked : ""}`;
   el.textContent = text;
   el.title = [st.message, ...(st.detail || []), st.godot ? `실행 파일: ${st.godot}` : st.godot_message].filter(Boolean).join("\n");

@@ -260,7 +260,7 @@ public partial class GlobeMain : Node3D
         };
         Vector3 dir = Globe.Pick(Camera, GetViewport().GetMousePosition());
         lines.Add(dir == Vector3.Zero
-            ? "마우스가 지구본 밖에 있습니다 · 끌어서 돌리고 휠로 확대합니다"
+            ? "지구본 위에 마우스를 올리면 그 자리의 값이 나옵니다 · 끌면 돌고, 휠로 확대합니다"
             : Hud.DescribePoint(dir));
         string notice = UiScale.Notice();
         if (notice.Length > 0)

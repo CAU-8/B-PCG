@@ -266,7 +266,7 @@ def test_progress_eta_follows_iterations_when_stage_overruns_history():
     ):
         tr.feed(line, float(i + 1))
     assert tr.current()["key"] == "planet_solver"  # 5 s 에 시작
-    tr.feed("솔버 반복 10: 방향 변화 1", 20.0)  # 15 s 지남 (지난번 1 s), 반복 10 / 100
+    tr.feed("솔버 반복 10: 방향이 바뀐 칸 1개", 20.0)  # 15 s 지남 (지난번 1 s), 반복 10 / 100
     eta, basis = tr.eta_seconds(20.0)
     pending = sum(1 for s in tr.stages if s["status"] == "pending")
     assert basis == "지난 실행 기준"
@@ -299,6 +299,17 @@ def test_progress_config_error_gets_its_own_warning():
     )
     (w,) = tr.snapshot(1.0)["warnings"]
     assert "영역 설정" in w["message"] and "줄이거나" not in w["message"]
+
+
+def test_progress_warns_when_solver_does_not_converge():
+    tr = ProgressTracker()
+    tr.start(0.0)
+    tr.feed("[2단계] 솔버 끝: 반복 200번, 수렴함, 방향을 묶은 칸 5개, 4.69 s", 1.0)
+    assert tr.snapshot(1.0)["warnings"] == []
+    line = "[2단계] 솔버 끝: 반복 200번, 반복 상한까지 수렴 못 함, 방향을 묶은 칸 5개, 4.69 s"
+    tr.feed(line, 2.0)
+    (w,) = tr.snapshot(2.0)["warnings"]
+    assert "수렴하지 않았습니다" in w["message"]
 
 
 # ---------------------------------------------------------------- 지도 격자

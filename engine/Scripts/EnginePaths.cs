@@ -54,8 +54,8 @@ public static class EnginePaths
         }
         if (ConfigsDir is null)
         {
-            Error = $"설정 폴더(configs/planets)를 찾지 못했습니다: {ProjectSettings.GlobalizePath("res://")} 와 그 위 폴더에 없습니다. "
-                + "환경 변수 BPCG_CONFIGS 로 알려 주세요";
+            Error = $"설정 폴더(configs/planets)를 찾지 못했습니다. {ProjectSettings.GlobalizePath("res://")} 와 그 위 폴더를 모두 찾아봤습니다. "
+                + "저장소의 configs 폴더 경로를 환경 변수 BPCG_CONFIGS 에 넣고 다시 여세요";
             return false;
         }
         string root = Path.GetDirectoryName(ConfigsDir) ?? ConfigsDir;
