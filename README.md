@@ -58,7 +58,8 @@ uv run python tools/doctor.py     # 환경 점검
 | 폴더 | 내용 |
 |---|---|
 | `src/Bpcg/` | 생성기 본체 (C# 라이브러리, net10.0). `Core/`·`Planet/`·`Hydro/` … 단계별 묶음, `Runs.cs` 실행 단위 |
-| `src/Bpcg.Cli/` | 콘솔 `bpcg planet·hero·bake·all·compare` (C#) |
+| `src/Bpcg.Cli/` | 콘솔 `bpcg planet·hero·bake·all·compare·figures` (C#) |
+| `src/Bpcg.Figures/` | 결과 그림: 행성 지도·지구본·고도 분포·히어로 지도·단면·3D 조감 PNG (C#) |
 | `src/bpcg_studio/` | 파이썬 스튜디오와 `bpcg` 명령(studio, 나머지는 C# 콘솔로 넘김), 저장소 경로 |
 | `engine/` | Godot 4.7.2 .NET 프로젝트 (C#). 처음 화면에서 행성을 만들고 회랑·지구본을 봄. [engine/README.md](engine/README.md) |
 | `tests/` | 파이썬 시험(C# 콘솔이 쓴 결과 파일과 엔진·스튜디오 검사), `tests/Bpcg.Tests/` C# 대조 시험, `tests/golden/` golden 자료 |

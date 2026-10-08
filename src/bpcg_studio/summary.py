@@ -161,7 +161,7 @@ CORRIDOR_SECONDS_LABELS: dict[str, str] = {
     "strata": "재질 부피 (strata.u8)",
 }
 
-# 그림 파일 → 설명 (analysis/figures/render_results.py 가 그리는 그림)
+# 그림 파일 → 설명 (C# 콘솔 `figures results` 가 그리는 그림, src/Bpcg.Figures)
 FIGURE_TEXT: dict[str, dict[str, str]] = {
     "planet_elevation_plain.png": {
         "title": "행성 평균 지표 고도 (위경도 지도)",
@@ -171,7 +171,7 @@ FIGURE_TEXT: dict[str, dict[str, str]] = {
         "how": "파랑은 바다(아래로 갈수록 깊음), 초록→갈색→흰색은 육지 높이입니다. 오른쪽 "
         "색 막대가 고도 [m] 입니다. 극 근처는 위경도 지도라 옆으로 늘어나 보입니다.",
         "look": "산맥이 판 수렴 경계를 따라 좁은 띠로 서는지, 바다가 해령에서 멀어질수록 "
-        "깊어지는지 봅니다. 그림 제목의 '면당 512칸' 은 노트북 프로필 기준 문구입니다.",
+        "깊어지는지 봅니다. 그림 제목의 '면당 N칸' 은 이 실행의 L0 해상도입니다.",
     },
     "planet_elevation_faces.png": {
         "title": "같은 지도 + 정육면체 면 경계",

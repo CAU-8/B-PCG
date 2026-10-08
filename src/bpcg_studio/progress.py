@@ -123,7 +123,7 @@ STAGES: tuple[Stage, ...] = (
     Stage("globe", "지구본 굽기", "굽기", 1.5, r"^\[(지구본\] 끝|전체\] 끝)",
           "행성 전체를 엔진 지구본 장면용 면 격자로 다시 담습니다 (globe/)", **_PLANET),
     Stage("figures", "그림 그리기", "그림", 25.0, r"^그림을 썼습니다",
-          "render_results.py 로 결과 그림(PNG)을 그립니다", figures=True),
+          "C# 콘솔 figures results 로 결과 그림(PNG)을 그립니다", figures=True),
 )  # fmt: skip
 
 STAGE_INDEX = {s.key: i for i, s in enumerate(STAGES)}

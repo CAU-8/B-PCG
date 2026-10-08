@@ -1360,7 +1360,7 @@ function renderFigures() {
     h(
       "p",
       { class: "explain" },
-      "analysis/figures/render_results.py 가 그린 그림입니다. 각 그림 아래에 무엇을 그렸는지, 어떻게 읽는지, 무엇을 보면 되는지 적었습니다. 그림을 누르면(또는 Tab 으로 고르고 Enter) 크게 봅니다. 같은 값을 직접 골라 보려면 행성 지도·히어로 지도 탭을 쓰세요.",
+      "C# 콘솔(bpcg figures results)이 그린 그림입니다. 각 그림 아래에 무엇을 그렸는지, 어떻게 읽는지, 무엇을 보면 되는지 적었습니다. 그림을 누르면(또는 Tab 으로 고르고 Enter) 크게 봅니다. 같은 값을 직접 골라 보려면 행성 지도·히어로 지도 탭을 쓰세요.",
     ),
   );
   if (!s.figures.length) {
@@ -1370,7 +1370,7 @@ function renderFigures() {
         { class: "empty" },
         s.levels && !s.levels.planet
           ? "평면 히어로 실행이라 그림 스크립트를 돌리지 않았습니다 (행성 묶음이 필요). 히어로 지도 탭에서 결과를 보세요."
-          : "그림이 없습니다. '끝나면 결과 그림 그리기'를 켜고 실행하거나, uv run python analysis/figures/render_results.py <실행 폴더> 로 그리세요.",
+          : "그림이 없습니다. '끝나면 결과 그림 그리기'를 켜고 실행하거나, bpcg figures results <실행 폴더> 로 그리세요.",
       ),
     );
     return;

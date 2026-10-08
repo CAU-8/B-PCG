@@ -436,6 +436,24 @@ def test_generate_builds_only_when_release_dll_is_missing(monkeypatch, tmp_path,
         assert commands[0] == ["dotnet", "build"]
 
 
+@pytest.mark.parametrize("flat", [False, True])
+def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
+    import bpcg_studio.jobs as jobs_mod
+
+    dll = tmp_path / "Bpcg.Cli.dll"
+    dll.touch()
+    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
+    monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
+    spec = validate_request({"profile": "tiny", "figures": True, "flat": flat})
+    run_dir = tmp_path / "run"
+    commands = JobManager(out_dir=tmp_path).commands_for(spec, run_dir)
+    assert commands[0][1:3] == [str(dll), "all"]
+    if flat:  # 평면 히어로는 행성 묶음이 없어 그림을 그리지 않음
+        assert len(commands) == 1
+    else:
+        assert commands[-1] == ["dotnet", str(dll), "figures", "results", str(run_dir)]
+
+
 def test_validate_request_reports_bad_keys():
     with pytest.raises(JobError) as e:
         validate_request({"profile": "tiny", "overrides": {"landscape.thetaa": 1.0}})

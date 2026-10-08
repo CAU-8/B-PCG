@@ -19,7 +19,6 @@
 | `veg/` | 같은 자료로 본 식생 규칙 파일럿: 수관 높이·HV 전력과 HAND, 레이더 인공물 진단, 수직 구조 유형 |
 | `dem_catalog/` | 전 지구 DEM 의 타일 수·용량을 버킷 목록으로만 센 스크립트와 물길 계산 벤치마크 |
 | `scale/` | 행성 크기·칸 크기·과정 규칙의 크기 점검 계산 |
-| `demos/` | 작은 데모 그림 (`plot_cubesphere.py`) |
 | `legacy/` | 옛 설계 가이드의 그림 생성기 (`make_figures.py`, ruff 검사 제외) |
 | `*/results/` | 설계도 숫자를 뒷받침하는 작은 결과 파일 (저장소에 올림, 1 MB 미만) |
 
@@ -71,13 +70,12 @@ zip 에서 꺼낸 HDF5 는 `data/cache/afrisar/` 에 두며 지워도 됩니다.
 | `results/glo90_summary.txt` | GLO-90 버킷 전체 목록 요약 (2026-10-01) | | | | 6장 GLO-90 숫자. 세션 중 `s3_list.py` 의 변형(옮기지 않음)으로 만든 출력이며, 타일 수·DEM 용량은 위 두 스크립트로 다시 셀 수 있음 |
 | `results/glo30_aws_missing_vs_glo90_tiles.txt` | GLO-90 에는 있고 AWS GLO-30 에는 없는 타일 25개 | | | | 6장 'AWS 판 GLO-30 에는 아르메니아·아제르바이잔 쪽 타일 25개가 없음' |
 
-### scale/, demos/, legacy/
+### scale/, legacy/
 
 | 파일 | 하는 일 | 입력 | 출력 | 실행 | 뒷받침하는 주장 |
 | --- | --- | --- | --- | --- | --- |
 | `scale/scale_ladder_calcs.py` | 반지름별 g·탈출속도·칸 크기·float32 정밀도, 칸 안 기복, 메모리 | 없음 | 화면 | `scale_ladder_calcs.py` | 3장 '지구 반지름 6,371 km', 'L0 19.5 km'(n=512), `docs/figures/scale_ladder.png` 의 숫자 (그림을 그린 코드는 남아 있지 않음) |
 | `scale/process_checks.py` | Q* 사면 길이, Roering R*, Heimsath 토양 두께, ELA, 선상지 경사비, 산지 전면 종단면, 삼각주 면적 | 없음 | 화면 | `process_checks.py` | 4·5장 과정 규칙 기본값의 크기 점검 |
-| `demos/plot_cubesphere.py` | 큐브스피어 셀 중심을 면별 색으로 찍는 데모 | 없음 | 창 또는 `--save` 파일 | `plot_cubesphere.py --n 16` | 가이드 1장 격자 |
 | `legacy/make_figures.py` | 옛 설계 가이드(`docs/guide/planet_guide.md`)의 그림 22장 생성 | 없음 | `docs/guide/figures/*.png` | `uv run python analysis/legacy/make_figures.py` | 가이드 1~8장 그림 |
 
 ## 실행 순서
