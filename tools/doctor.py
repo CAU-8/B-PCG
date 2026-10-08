@@ -494,6 +494,16 @@ def godot_version(exe):
 
 
 def check_godot():
+    # 엔진을 C# 으로 옮기기 전(2026-10-03)의 설치 스크립트는 표준판을 .tools/godot/ 에 받았습니다.
+    # 표준판은 C# 스크립트를 읽지 못해 engine/ 을 열면 시작 장면부터 깨지므로 알려 줍니다.
+    old = ROOT / ".tools" / "godot"
+    if old.is_dir():
+        report(
+            WARN,
+            "Godot 표준판",
+            f"{old} 에 예전 표준판이 남아 있습니다. C# 엔진(engine/)은 열지 못하니 "
+            ".tools/godot-net/ 의 .NET 판을 쓰고, 예전 폴더는 지워도 됩니다",
+        )
     seen = set()
     for cand in godot_candidates():
         exe = console_exe(cand)
