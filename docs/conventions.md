@@ -7,7 +7,7 @@
 | 항목 | 규칙 |
 |---|---|
 | 이름 | 폴더·GitHub 저장소·배포 이름은 `b-pcg`. C# 네임스페이스는 `Bpcg`, 파이썬 import 이름은 `bpcg_studio`(스튜디오), 명령 이름은 `bpcg` |
-| C# | .NET SDK 10(`global.json`), net10.0. 생성기 `src/Bpcg`, 콘솔 `src/Bpcg.Cli`, 엔진 `engine/`. NuGet 잠금 파일(`packages.lock.json`)을 커밋합니다 |
+| C# | .NET SDK 10(`global.json`), net10.0. 생성기 `src/Bpcg`, 콘솔 `src/Bpcg.Cli`, 결과 그림 `src/Bpcg.Figures`, 엔진 `engine/`. NuGet 잠금 파일(`packages.lock.json`)을 커밋합니다 |
 | 파이썬 | 스튜디오·검사·분석·도구용. 3.13 고정(`.python-version`). uv로만 설치하고 `uv.lock`을 커밋합니다 |
 | 언어 | 변수·함수·파일 이름은 영어. 주석·docstring·문서·커밋·PR은 한국어(합니다체). README 첫 문단만 영어 요약 |
 | 스타일 | C#은 `dotnet format`(`.editorconfig`, 경고는 오류). 파이썬은 `ruff format` + `ruff check`(한 줄 100자). CI가 통과해야 합칩니다 |
@@ -24,7 +24,7 @@
 
 ```text
 b-pcg/
-├── Bpcg.slnx            C# 솔루션 (src/Bpcg, src/Bpcg.Cli, engine, tests/Bpcg.Tests)
+├── Bpcg.slnx            C# 솔루션 (src/Bpcg, src/Bpcg.Cli, src/Bpcg.Figures, engine, tests/Bpcg.Tests)
 ├── Directory.Build.props, global.json, .editorconfig   C# 공통 설정
 ├── src/
 │   ├── Bpcg/            생성기 본체 (C# 라이브러리, Godot에 의존하지 않음)
@@ -42,7 +42,8 @@ b-pcg/
 │   │   ├── Metrics/     점수표 지표
 │   │   ├── Compare/     기존 지형 생성 방법론과 같은 시드로 비교 (docs/compare.md)
 │   │   └── Pipeline.cs, Runs.cs   생성 순서, 실행 단위 (콘솔과 엔진이 같이 씀)
-│   ├── Bpcg.Cli/        콘솔 bpcg planet·hero·bake·all·compare
+│   ├── Bpcg.Cli/        콘솔 bpcg planet·hero·bake·all·compare·figures
+│   ├── Bpcg.Figures/    결과 그림(축·글자·색 막대가 붙은 PNG). ScottPlot·SkiaSharp·PureHDF 를 씀
 │   └── bpcg_studio/     웹 스튜디오 (파이썬). 계산은 C# 콘솔을 불러 시킴
 ├── engine/              Godot 4.7.2 .NET 프로젝트. 처음 화면에서 생성하고, 구운 파일을 보여 줌
 ├── tests/               pytest: C# 콘솔·엔진 결과 검사. Bpcg.Tests/: C# 단위·golden 대조 시험
@@ -64,7 +65,7 @@ Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → H
 
 `Compare`는 비교 도구라 생성 단계 어디서도 부르지 않습니다. 평면 히어로(`Hero`)와 물길(`Hydro`), 색표(`Bake`)를 씁니다.
 
-`src/Bpcg.Cli`와 `engine/`은 `src/Bpcg`를 참조하고, `src/Bpcg`는 둘을 모릅니다. 파이썬(`bpcg_studio`, `analysis/`, `tools/`, `tests/`)은 C#을 콘솔 명령으로만 부르고 C# 결과 파일을 읽습니다. `src/bpcg_studio`는 `analysis/`와 `tools/`를 import하지 않습니다.
+`src/Bpcg.Cli`와 `engine/`은 `src/Bpcg`를 참조하고, `src/Bpcg`는 둘을 모릅니다. `src/Bpcg.Figures`는 `src/Bpcg`를 참조하고 콘솔만 `src/Bpcg.Figures`를 참조합니다(엔진이 그림용 네이티브 라이브러리를 싣지 않게). 파이썬(`bpcg_studio`, `analysis/`, `tools/`, `tests/`)은 C#을 콘솔 명령으로만 부르고 C# 결과 파일을 읽습니다. `src/bpcg_studio`는 `analysis/`와 `tools/`를 import하지 않습니다.
 
 **무엇을 어디에 두나.**
 
@@ -183,7 +184,7 @@ Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → H
 ## 9. 라이선스
 
 - **코드 라이선스.** 아직 정하지 않았습니다(개발 단계 0단계의 남은 일). 정하면 `LICENSE`에 적고, 데이터 라이선스와 분리합니다.
-- **GPL 도구.** `analysis/`에서만 씁니다. 핵심 코드(`src/Bpcg`)는 직접 짠 C# 코드로 만들고, NuGet 패키지는 MIT·BSD·Apache-2.0만 씁니다(지금은 하나도 쓰지 않음).
+- **GPL 도구.** `analysis/`에서만 씁니다. 핵심 코드(`src/Bpcg`)는 직접 짠 C# 코드로 만들고, NuGet 패키지는 MIT·BSD·Apache-2.0만 씁니다(`src/Bpcg`는 하나도 쓰지 않고, 결과 그림 `src/Bpcg.Figures`만 ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF(모두 MIT)를 씀).
 - **연구 코드.** Tzathas 2024 코드는 비상업 연구용이라 가져다 쓰지 않습니다. 논문을 보고 다시 구현합니다.
 - **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다. OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다.
 

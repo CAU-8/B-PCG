@@ -11,7 +11,8 @@ public sealed class CliExit(string message, int code = 1) : RunError(message, co
 
 /// <summary>
 /// 명령줄 실행 bpcg (src/bpcg/cli.py 의 planet·hero·bake·all, docs/pipeline.md 13장). studio 는 옮기지 않습니다.
-/// 실행 단위는 라이브러리의 <see cref="Runs"/> 에 있습니다. compare 는 <see cref="CompareCommand"/> 가 받습니다.
+/// 실행 단위는 라이브러리의 <see cref="Runs"/> 에 있습니다. compare 는 <see cref="CompareCommand"/>, figures 는
+/// <see cref="FiguresCommand"/> 가 받습니다.
 /// </summary>
 public static class Program
 {
@@ -55,14 +56,14 @@ public static class Program
         ["all"] = ["--planet", "--profile", "--out", "--seed", "--set", "--flat", "--engine"],
     };
 
-    private const string Usage = "usage: bpcg {planet,hero,bake,all,compare} ...";
+    private const string Usage = "usage: bpcg {planet,hero,bake,all,compare,figures} ...";
 
     /// <summary>argparse 와 같은 뜻으로 인자를 읽습니다. 틀리면 CliExit(코드 2).</summary>
     public static Args Parse(string[] argv)
     {
         if (argv.Length == 0 || !Allowed.ContainsKey(argv[0]))
         {
-            throw new CliExit($"{Usage}\nbpcg: error: 명령은 planet, hero, bake, all, compare 가운데 하나여야 합니다", 2);
+            throw new CliExit($"{Usage}\nbpcg: error: 명령은 planet, hero, bake, all, compare, figures 가운데 하나여야 합니다", 2);
         }
         var a = new Args { Command = argv[0] };
         string[] ok = Allowed[a.Command];
@@ -275,6 +276,10 @@ public static class Program
             if (argv.Length > 0 && argv[0] == "compare")
             {
                 return CompareCommand.Dispatch(argv[1..]);
+            }
+            if (argv.Length > 0 && argv[0] == "figures")
+            {
+                return FiguresCommand.Dispatch(argv[1..]);
             }
             Args args = Parse(argv);
             return args.Command switch

@@ -6,6 +6,20 @@
 
 ## 0. 지금 상태와 다음 할 일
 
+### 결과 그림 옮기기 (2026-10-08, 브랜치 `feat/figures-csharp`)
+
+- 지운 Python 생성기를 import 해서 돌지 않던 그림 스크립트 둘을 C# 으로 옮기고 Python 판을 지웠습니다.
+  - `analysis/figures/render_results.py` → `src/Bpcg.Figures/`(`ResultFigures`·`PlanetFigures`·`HeroFigures`), 콘솔 `bpcg figures results <실행 폴더> [--out] [--etopo]`(`src/Bpcg.Cli/FiguresCommand.cs`). 그림 9장과 `summary.json` 이 같은 이름·같은 크기(인치 × dpi 110)로 나옵니다.
+  - `analysis/demos/plot_cubesphere.py` → `CubesphereFigure`, 콘솔 `bpcg figures cubesphere [--n 16] [--R 15] [--out]`. 창 띄우기는 없고 PNG 만 씁니다.
+  - `volume/slices.py` 의 `_save_png`(결정 D2 에서 옮기지 않았던 축 그림) → `SliceFigure.Save`. `Volume/Slices.cs` 의 TODO 를 지웠습니다.
+- 새 프로젝트 `src/Bpcg.Figures`(콘솔과 시험만 참조, 엔진은 참조하지 않음). NuGet: ScottPlot 5.1.59(그래프·축·색 막대·범례), 그 의존인 SkiaSharp 3.119·HarfBuzzSharp(글자), PureHDF 2.2.0(ETOPO netCDF4 읽기). 모두 MIT 입니다.
+  - matplotlib 동작을 옮긴 곳: 색표 조회표 8개(`FigureColormapData.cs`, matplotlib 3.11.2 에서 뽑음), `Normalize`·`TwoSlopeNorm`, `LightSource.shade_rgb(blend_mode="soft")`(np.gradient 포함), imshow 의 `aspect="equal"`(축 범위는 두고 자료 영역을 줄임)과 `interpolation="antialiased"`(3배 이상 키우면 가장 가까운 칸), contour 한 높이(marching squares), scatter 점 크기(pt²), 3D `plot_surface`·`scatter`(정사영, 화가 알고리즘, depthshade).
+  - PureHDF 로 여러 청크에 걸친 선택이나 성긴(stride) 선택을 읽으면 몇 분이 걸려서, 청크 크기 네모로 읽은 뒤 골라 담습니다(1.7 초, h5py `z[::10, ::10]` 와 값이 같음).
+- 대조: 예전 Python 생성기가 만든 실행 둘(`out/studio/20261002-091801-tiny-s0`, `…-091832-laptop-s0`)에 그려 보니 `summary.json` 이 Python 판과 글자 하나까지 같고, 그림은 눈으로 같습니다(글꼴·눈금 위치·여백은 다름). `shade_rgb` 는 matplotlib 과 1e-12 안에서 같습니다(`tests/Bpcg.Tests/Figures`). 노트북 프로필 실행 하나에 약 8 초가 걸립니다.
+- 바꾼 것: 단면 그림의 3D 샘플 설정은 'earth' + 프로필 대신 히어로 묶음에 적힌 설정을 씁니다(두 실행 모두 결과는 같음). 제목의 L0 칸 수(예전엔 늘 512)와 히어로 칸 크기(예전엔 늘 25 m)는 결과에서 읽습니다. 평면 히어로 실행은 예전처럼 행성 묶음이 없어 그리지 않습니다(오류 코드 1).
+- 스튜디오: 그림 단계가 `dotnet …/Bpcg.Cli.dll figures results <실행 폴더>` 를 부릅니다(`jobs.FIGURES_READY`·`FIGURE_SCRIPT` 를 지움). 안내 글(`index.html`·`app.js`·`summary.py`·`progress.py`)과 `docs/studio.md`·`docs/conventions.md`·`README.md`·`analysis/README.md` 를 고쳤습니다.
+- 시험: `tests/test_figures.py`(그림 파일·크기·summary 값, ETOPO 없이, 평면 실행 오류, 큐브스피어), `tests/test_studio.py` 의 그림 명령, C# `tests/Bpcg.Tests/Figures/FiguresTests.cs`. macOS 에서만 돌려 봤습니다. CI 의 Linux·Windows pytest 에서는 SkiaSharp 네이티브 라이브러리와 한글 글꼴이 없을 때(글자가 네모로 나옴)를 아직 보지 못했습니다.
+
 ### 단계 5 뒤: Python 판으로 만든 기능 옮기기 (2026-10-08)
 
 - C# 으로 옮기는 동안 Python 판에서 따로 만든 기능을 C# 으로 옮겼습니다. Python 판 원본은 로컬 브랜치 `wip/python-compare-hud-2026-10-08` 에 보관했습니다.
@@ -4343,7 +4357,7 @@ b458d0d9fd1b1f36081980dd07e402d71e667f042ab93c337d074ff03fbf3b2eccb3016f964155b7
 | 번호 | 날짜 | 결정 | 이유 | 상태 |
 |---|---|---|---|---|
 | D1 | 2026-10-02 | 단계 0에서 멈추고 코드는 쓰지 않았습니다 | .NET SDK가 없을 때의 지시 | 확정 |
-| D2 | 2026-10-02 | `volume/slices.py`의 `_save_png`(matplotlib으로 축·눈금을 붙인 PNG)는 옮기지 않고, `vertical_slice`의 RGB 배열 계산만 옮깁니다. C# 서명에는 `save_path`를 두지 않습니다 | planet·hero·bake·all 경로에서 부르지 않고(`tests/test_volume.py`, `analysis/figures/render_results.py`만 부름), matplotlib 글꼴·안티에일리어싱을 픽셀 단위로 재현할 수 없으며, 확인용 그림은 Python이 계속 그립니다 | 확정 |
+| D2 | 2026-10-02 | `volume/slices.py`의 `_save_png`(matplotlib으로 축·눈금을 붙인 PNG)는 옮기지 않고, `vertical_slice`의 RGB 배열 계산만 옮깁니다. C# 서명에는 `save_path`를 두지 않습니다. (2026-10-08 고침: 축 그림은 `src/Bpcg.Figures` 의 `SliceFigure.Save` 로 옮겼고, `Slices.VerticalSlice` 서명은 그대로입니다) | planet·hero·bake·all 경로에서 부르지 않고(`tests/test_volume.py`, `analysis/figures/render_results.py`만 부름), matplotlib 글꼴·안티에일리어싱을 픽셀 단위로 재현할 수 없으며, 확인용 그림은 Python이 계속 그립니다 | 확정 |
 | D3 | 2026-10-02 | 저장소 맨 위 `CLAUDE.md`가 없어 새로 만들고 지시가 요구한 한 줄만 넣었습니다 | 지시 | 확정 |
 | D4 | 2026-10-02 | 단계 0의 독립 비평을 빼고 '항목별 분석 + 결과 조립'으로 마무리했습니다(core ①, hydro, planet ①, geology, subsurface만 비평을 거침) | 사용자 결정. 50개 에이전트 규모로 2.5~3시간이 걸려 줄임 | 확정 |
 | D5 | 2026-10-02 | 단계 0 검토를 건너뛰고 SDK가 준비되면 단계 1을 바로 시작합니다. 단계 1(core)을 마친 뒤의 검토는 지시대로 받습니다 | 사용자 결정. 포팅 자체가 주 목표 | 확정 |

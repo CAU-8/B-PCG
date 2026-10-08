@@ -3,13 +3,12 @@
 실행 하나 = out/studio/<실행 id>/ 폴더 하나입니다.
 
     job.json   프로필·시드·덮어쓴 값·상태·단계별 시간·단계 결과 줄 (서버를 다시 켜도 남음)
-    job.log    파이프라인과 그림 스크립트가 찍은 줄 전체
-    planet/ hero/ corridor/ globe/   C# 콘솔 `all` 의 결과 (figures/ 는 그림 스크립트가 돌 때만)
+    job.log    파이프라인과 그림 그리기가 찍은 줄 전체
+    planet/ hero/ corridor/ globe/   C# 콘솔 `all` 의 결과 (figures/ 는 그림 단계가 돌 때만)
 
 명령: Release DLL이 없을 때만 [dotnet, build, src/Bpcg.Cli, -c, Release …]
-→ [dotnet, Bpcg.Cli.dll, all, --planet, --profile, --seed, --out, (--flat), --set 키=값 …].
-결과 그림 스크립트(analysis/figures/render_results.py)는 아직 C# 결과를 읽게 고치지 않아
-FIGURES_READY 가 False 이고, 그림 단계는 건너뜁니다.
+→ [dotnet, Bpcg.Cli.dll, all, --planet, --profile, --seed, --out, (--flat), --set 키=값 …]
+→ (그림을 켰고 평면 히어로가 아니면) [dotnet, Bpcg.Cli.dll, figures, results, <실행 폴더>].
 기록 줄은 스레드에서 한 줄씩 읽어 progress.ProgressTracker 에 넣습니다. 한 번에 한 실행만 돕니다
 (같은 서버 안에서는 잠금 하나로 검사와 등록을 함께 하고, 같은 out/ 을 보는 다른 스튜디오 서버가
 돌리는 실행은 job.json 의 server_pid 로 알아봅니다).
@@ -43,10 +42,6 @@ from bpcg_studio.progress import STAGES, ProgressTracker
 STUDIO_DIRNAME = "studio"
 JOB_FILE = "job.json"
 LOG_FILE = "job.log"
-FIGURE_SCRIPT = ROOT / "analysis" / "figures" / "render_results.py"
-# 그림 스크립트가 C# 결과 묶음을 읽게 고쳐지면 True 로 바꿉니다 (지금은 Python 생성기를 import 함).
-FIGURES_READY = False
-FIGURES_SKIP_MSG = "결과 그림 스크립트는 아직 C# 결과를 읽게 고치지 않아 건너뜁니다"
 LOG_KEEP = 5_000  # 메모리에 남길 기록 줄 수 (파일에는 모두)
 SAVE_EVERY_S = 2.0  # job.json 을 이 간격보다 자주 쓰지 않음 (단계가 바뀔 때는 바로)
 CANCEL_WAIT_S = 5.0
@@ -353,13 +348,12 @@ def _quote(a: str) -> str:
 class JobManager:
     """실행을 시작·취소하고 목록을 만듭니다. 한 번에 한 실행만 돕니다.
 
-    out_dir: 결과 폴더(기본 out/). python: 하위 프로세스 파이썬 (기본 지금 파이썬).
+    out_dir: 결과 폴더(기본 out/).
     """
 
-    def __init__(self, out_dir: Path = OUT, python: str = sys.executable):
+    def __init__(self, out_dir: Path = OUT):
         self.out_dir = Path(out_dir)
         self.studio_dir = self.out_dir / STUDIO_DIRNAME
-        self.python = python
         self.jobs: dict[str, Job] = {}
         self.lock = threading.Lock()
         self._mark_interrupted()
@@ -444,6 +438,7 @@ class JobManager:
         try:
             build = build_command() if not CLI_DLL.is_file() else None
             cmd = cli_command(["all", "--planet", spec["planet"]])
+            figures = cli_command(["figures", "results", str(run_dir)])
         except CSharpError as e:
             raise JobError(str(e), status=500) from None
         cmd += ["--profile", spec["profile"], "--seed", str(spec["seed"]), "--out", str(run_dir)]
@@ -452,8 +447,8 @@ class JobManager:
         for key, value in spec["overrides"].items():
             cmd += ["--set", f"{key}={toml_literal(value)}"]
         out = [build, cmd] if build is not None else [cmd]
-        if spec["figures"] and not spec["flat"] and FIGURES_READY:
-            out.append([self.python, "-u", str(FIGURE_SCRIPT), str(run_dir)])
+        if spec["figures"] and not spec["flat"]:
+            out.append(figures)
         return out
 
     def start(self, request: dict) -> Job:
@@ -490,9 +485,7 @@ class JobManager:
             weights=self._history_weights(spec, cost),
         )
         if spec["flat"] and spec["figures"]:
-            tracker.skip("figures", "평면 히어로는 행성 묶음이 없어 그림 스크립트를 건너뜁니다")
-        elif spec["figures"] and not FIGURES_READY:
-            tracker.skip("figures", FIGURES_SKIP_MSG)
+            tracker.skip("figures", "평면 히어로는 행성 묶음이 없어 결과 그림을 건너뜁니다")
         with self.lock:
             for other in self.jobs.values():  # active() 는 같은 잠금을 다시 잡으므로 여기서 직접 봄
                 if other.status in ACTIVE:

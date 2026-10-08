@@ -10,5 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Bpcg/Bpcg.csproj" />
+    <ProjectReference Include="../../src/Bpcg.Figures/Bpcg.Figures.csproj" />
   </ItemGroup>
 </Project>

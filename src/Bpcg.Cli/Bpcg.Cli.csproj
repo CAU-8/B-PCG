@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Bpcg/Bpcg.csproj" />
+    <ProjectReference Include="../Bpcg.Figures/Bpcg.Figures.csproj" />
   </ItemGroup>
 </Project>

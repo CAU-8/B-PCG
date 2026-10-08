@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 결과 그림 (축·글자·색 막대가 붙은 PNG). ScottPlot·SkiaSharp·PureHDF 는 MIT 입니다. 엔진은 참조하지 않습니다. -->
+  <PropertyGroup>
+    <RootNamespace>Bpcg.Figures</RootNamespace>
+    <AssemblyName>Bpcg.Figures</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ScottPlot" Version="5.1.59" />
+    <PackageReference Include="PureHDF" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Bpcg/Bpcg.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Bpcg.Tests" />
+  </ItemGroup>
+</Project>

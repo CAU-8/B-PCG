@@ -1,7 +1,7 @@
 # 저장소 점검 (CI). main 에 올리거나 PR 을 열면 돕니다.
 #
 #   lint    ruff 린트와 서식 검사 (Ubuntu)
-#   csharp  C# 빌드(Bpcg.slnx: 생성기·콘솔·엔진·대조 시험), 대조 시험, dotnet format (macOS 15)
+#   csharp  C# 빌드(Bpcg.slnx: 생성기·콘솔·결과 그림·엔진·대조 시험), 대조 시험, dotnet format (macOS 15)
 #   test    빠른 테스트(-m "not slow": C# 콘솔 결과 검사·스튜디오)와 설치 스크립트 점검 모드
 #           (Ubuntu, Windows, macOS 15)
 #   engine  Godot 4.7.2 .NET 판을 받아 엔진 연기 시험(tests/test_engine.py) (Ubuntu)

@@ -7,7 +7,9 @@ namespace Bpcg.Volume;
 /// <summary>
 /// 확인용 수직 단면 그림 (src/bpcg/volume/slices.py, docs/pipeline.md 10장).
 /// </summary>
-/// <remarks>matplotlib 로 축을 붙여 PNG 를 쓰는 _save_png 는 옮기지 않습니다(결정 D2).</remarks>
+/// <remarks>
+/// 축을 붙여 PNG 로 쓰는 _save_png 는 Bpcg.Figures 의 SliceFigure.Save 가 맡습니다(결정 D2, Bpcg 는 그림 라이브러리를 모름).
+/// </remarks>
 public static class Slices
 {
     public static readonly byte[] AirRgb = [206, 226, 240];
@@ -90,7 +92,6 @@ public static class Slices
                 Array.Copy(WaterTableRgb, 0, rgb, ((row * nW) + c) * 3, 3);
             }
         }
-        // TODO(port): save_path(matplotlib 축 그림)는 옮기지 않았습니다.
         return (rgb, nH, nW);
     }
 }
