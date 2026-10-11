@@ -567,6 +567,8 @@ public static class Pipeline
             ["elevation_limit_m"] = zLim,
             ["first_pass_iterations"] = (long)res.Iterations,
             ["first_pass_converged"] = res.Converged,
+            ["first_pass_solver"] = res.Diag(),
+            ["first_pass_history"] = res.History.Cast<object?>().ToList(),
             ["first_pass_z_mean_max_m"] = anyLand ? zMax : 0.0,
             ["reduced_cells"] = reduced,
             ["seconds"] = Seconds(t),

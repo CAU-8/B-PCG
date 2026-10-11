@@ -1,4 +1,5 @@
 using System;
+using Bpcg.Core;
 
 namespace Bpcg.Hydro;
 
@@ -15,17 +16,19 @@ public static class Routing
     /// <summary>D8 커널 (_d8_kernel). prev 와 다른 칸 수를 돌려줍니다(prev 가 없으면 N).</summary>
     internal static int D8Kernel(
         double[] zt, int[] nbr, int nSlot, double[] dist, bool[] isOutlet, long[]? prev, double eta,
-        long[] rcv, double[] slope)
+        long[] rcv, double[]? slope, bool parallel = false)
     {
         int n = zt.Length;
         bool hasPrev = prev is not null;
-        int nChanged = 0;
-        for (int c = 0; c < n; c++)
+        void ComputeCell(int c)
         {
             if (isOutlet[c])
             {
                 rcv[c] = c;
-                slope[c] = 0.0;
+                if (slope is not null)
+                {
+                    slope[c] = 0.0;
+                }
             }
             else
             {
@@ -60,7 +63,10 @@ public static class Routing
                 {
                     // 낮은 이웃이 없는 칸(채우지 않은 고도의 웅덩이 바닥)은 자기 자신을 가리킵니다.
                     rcv[c] = c;
-                    slope[c] = 0.0;
+                    if (slope is not null)
+                    {
+                        slope[c] = 0.0;
+                    }
                 }
                 else
                 {
@@ -91,17 +97,39 @@ public static class Routing
                         }
                     }
                     rcv[c] = best;
-                    slope[c] = bestS;
+                    if (slope is not null)
+                    {
+                        slope[c] = bestS;
+                    }
                 }
             }
-            if (hasPrev && rcv[c] != prev![c])
+        }
+
+        if (parallel && n >= 16_384)
+        {
+            Parallelism.For(0, n, ComputeCell);
+        }
+        else
+        {
+            for (int c = 0; c < n; c++)
             {
-                nChanged++;
+                ComputeCell(c);
             }
         }
-        if (!hasPrev)
+
+        // Count in cell order after the independent writes; this avoids a shared counter and
+        // keeps the reduction deterministic for every degree of parallelism.
+        int nChanged = n;
+        if (hasPrev)
         {
-            nChanged = n;
+            nChanged = 0;
+            for (int c = 0; c < n; c++)
+            {
+                if (rcv[c] != prev![c])
+                {
+                    nChanged++;
+                }
+            }
         }
         return nChanged;
     }
@@ -248,6 +276,24 @@ public static class Routing
         return (rcv, slope, nChanged);
     }
 
+    /// <summary>이미 검증된 그래프와 solver 소유 배열에 대한 D8 경로. 미사용 slope 배열을 할당하지 않습니다.</summary>
+    internal static (long[] Rcv, int NChanged) D8ReceiversTrusted(
+        double[] zt, int[] nbr, double[] dist, bool[] isOutlet, long[]? prev, double eta)
+    {
+        int n = zt.Length;
+        foreach (double value in zt)
+        {
+            if (!double.IsFinite(value))
+            {
+                throw new ArgumentException("zt 에 NaN 이나 무한대가 있습니다");
+            }
+        }
+        long[] rcv = new long[n];
+        int nSlot = n == 0 ? 0 : nbr.Length / n;
+        int nChanged = D8Kernel(zt, nbr, nSlot, dist, isOutlet, prev, eta, rcv, null, parallel: true);
+        return (rcv, nChanged);
+    }
+
     /// <summary>기여 셀 목록 CSR (donor_lists): (start (N+1,), donors (M,)).</summary>
     public static (long[] Start, long[] Donors) DonorLists(long[] rcv)
     {
@@ -263,7 +309,25 @@ public static class Routing
     public static long[] TopoOrder(long[] rcv)
     {
         CheckRcv(rcv);
+        return TopoOrderTrusted(rcv);
+    }
+
+    /// <summary>solver가 생성한 receiver에 대해 전체 범위 검사를 생략하는 내부 경로.</summary>
+    internal static long[] TopoOrderTrusted(long[] rcv)
+    {
         (long[] start, long[] donors) = DonorCsrKernel(rcv);
+        return TopoOrderTrusted(rcv, start, donors);
+    }
+
+    /// <summary>Topology order while retaining the CSR donor lists for dependency-aware solver passes.</summary>
+    internal static long[] TopoOrderTrusted(long[] rcv, out long[] start, out long[] donors)
+    {
+        (start, donors) = DonorCsrKernel(rcv);
+        return TopoOrderTrusted(rcv, start, donors);
+    }
+
+    private static long[] TopoOrderTrusted(long[] rcv, long[] start, long[] donors)
+    {
         long[] order = new long[rcv.Length];
         int m = TopoKernel(rcv, start, donors, order);
         if (m != rcv.Length)

@@ -36,7 +36,21 @@ public sealed class SolverResult
 
     public double Seconds { get; init; }
 
+    public double RoutingSeconds { get; init; }
+
+    public double AccumulationSeconds { get; init; }
+
+    public double IntegrationSeconds { get; init; }
+
+    public double ConvergenceSeconds { get; init; }
+
+    public double SurfaceLawSeconds { get; init; }
+
     public int NFrozen { get; init; }
+
+    public int IncrementalIterations { get; init; }
+
+    public int FullFallbackIterations { get; init; }
 
     public bool[]? Frozen { get; init; }
 
@@ -85,9 +99,18 @@ public sealed class SolverResult
             ["iterations"] = (long)Iterations,
             ["converged"] = Converged,
             ["seconds"] = Seconds,
+            ["routing_seconds"] = RoutingSeconds,
+            ["accumulation_seconds"] = AccumulationSeconds,
+            ["integration_seconds"] = IntegrationSeconds,
+            ["convergence_seconds"] = ConvergenceSeconds,
+            ["other_seconds"] = Math.Max(0.0, Seconds - RoutingSeconds - AccumulationSeconds
+                - IntegrationSeconds - ConvergenceSeconds),
+            ["surface_law_seconds"] = SurfaceLawSeconds,
             ["final_n_changed"] = nChanged,
             ["final_max_dz_m"] = maxDz,
             ["n_frozen"] = (long)NFrozen,
+            ["incremental_iterations"] = (long)IncrementalIterations,
+            ["full_fallback_iterations"] = (long)FullFallbackIterations,
         };
     }
 }
@@ -153,7 +176,7 @@ public static class Solver
         long[] order, long[] rcv, int[] nbr, double[] dist, double[] zOutlet, double[] q, double[] aUp, double[] qs,
         double[] u, double[] width, double[] bottom, int nl, double[] kMult, double[] sCrit, in LawParams p, double invN,
         double riseMin, double[] zNew, int[] position, int[] subtreeEnd, int[] level, int[] levelCounts,
-        int[] badByRoot, int[] frontier, int maxDegree, bool parallelSubtrees)
+        int[] badByRoot, int[] frontier, int maxDegree, bool parallelSubtrees, bool[]? dirty, double[] zOld)
     {
         int n = order.Length;
         LawParams pp = p;
@@ -162,7 +185,7 @@ public static class Solver
             int sequentialBad = 0;
             for (int k = 0; k < n; k++)
             {
-                sequentialBad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                sequentialBad += IntegrateIfDirty((int)order[k], dirty, zOld, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
                     bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
             }
             return sequentialBad;
@@ -212,7 +235,7 @@ public static class Solver
                 int c = (int)order[k];
                 if (level[c] < cutLevel)
                 {
-                    nBad += IntegrateCell(c, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                    nBad += IntegrateIfDirty(c, dirty, zOld, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
                         bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
                 }
                 else if (level[c] == cutLevel)
@@ -225,7 +248,7 @@ public static class Solver
                 int bad = 0;
                 for (int k = frontier[i]; k < subtreeEnd[frontier[i]]; k++)
                 {
-                    bad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                    bad += IntegrateIfDirty((int)order[k], dirty, zOld, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
                         bottom, nl, kMult, sCrit, pp, invN, riseMin, zNew);
                 }
                 badByRoot[i] = bad;
@@ -239,11 +262,153 @@ public static class Solver
         {
             for (int k = 0; k < n; k++)
             {
-                nBad += IntegrateCell((int)order[k], rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
+                nBad += IntegrateIfDirty((int)order[k], dirty, zOld, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width,
                     bottom, nl, kMult, sCrit, p, invN, riseMin, zNew);
             }
         }
         return nBad;
+    }
+
+    private static int IntegrateIfDirty(
+        int c, bool[]? dirty, double[] zOld, long[] rcv, int[] nbr, double[] dist, double[] zOutlet, double[] q,
+        double[] aUp, double[] qs, double[] u, double[] width, double[] bottom, int nl, double[] kMult,
+        double[] sCrit, in LawParams p, double invN, double riseMin, double[] zNew)
+    {
+        if (dirty is not null && !dirty[c]
+            && (rcv[c] == c || zNew[rcv[c]] == zOld[rcv[c]]))
+        {
+            zNew[c] = zOld[c];
+            return 0;
+        }
+        if (dirty is not null)
+        {
+            dirty[c] = true;
+        }
+        return IntegrateCell(c, rcv, nbr, dist, zOutlet, q, aUp, qs, u, width, bottom, nl,
+            kMult, sCrit, p, invN, riseMin, zNew);
+    }
+
+    private static int MarkPath(long start, long[] receiver, bool[] marked)
+    {
+        int added = 0;
+        long c = start;
+        while (true)
+        {
+            int ci = (int)c;
+            if (marked[ci])
+            {
+                break;
+            }
+            marked[ci] = true;
+            added++;
+            long next = receiver[ci];
+            if (next == c)
+            {
+                break;
+            }
+            c = next;
+        }
+        return added;
+    }
+
+    private static int BuildHydrologyDirty(long[] oldReceiver, long[] receiver, bool[] changed, bool[] dirty,
+        bool[] oldPath, bool[] newPath)
+    {
+        Array.Clear(oldPath);
+        Array.Clear(newPath);
+        int count = 0;
+        for (int c = 0; c < changed.Length; c++)
+        {
+            if (changed[c])
+            {
+                MarkPath(c, oldReceiver, oldPath);
+                MarkPath(c, receiver, newPath);
+            }
+        }
+        for (int c = 0; c < dirty.Length; c++)
+        {
+            dirty[c] = oldPath[c] || newPath[c];
+            if (dirty[c])
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static void AccumulateDirty(long[] donorStart, long[] donors, long[] order,
+        int[] topologicalPosition, int[] donorScratch, bool[] dirty, bool[] valueChanged,
+        double[] weight, double[] accumulator)
+    {
+        // Match the full reverse-topological accumulation order exactly. A DFS topological order
+        // does not in general order sibling donors by cell id, so sort this small donor set by rank.
+        for (int k = order.Length - 1; k >= 0; k--)
+        {
+            int c = (int)order[k];
+            if (!dirty[c])
+            {
+                continue;
+            }
+            int donorCount = (int)(donorStart[c + 1] - donorStart[c]);
+            for (int i = 0; i < donorCount; i++)
+            {
+                donorScratch[i] = (int)donors[donorStart[c] + i];
+            }
+            for (int i = 1; i < donorCount; i++)
+            {
+                int donor = donorScratch[i];
+                int j = i - 1;
+                while (j >= 0 && topologicalPosition[donorScratch[j]] < topologicalPosition[donor])
+                {
+                    donorScratch[j + 1] = donorScratch[j];
+                    j--;
+                }
+                donorScratch[j + 1] = donor;
+            }
+            double value = weight[c];
+            for (int i = 0; i < donorCount; i++)
+            {
+                value += accumulator[donorScratch[i]];
+            }
+            if (value != accumulator[c])
+            {
+                valueChanged[c] = true;
+            }
+            accumulator[c] = value;
+        }
+    }
+
+    private static int BuildIntegrationDirty(bool[] receiverChanged, bool[] hydrologyChanged, bool[] dirty)
+    {
+        int count = 0;
+        for (int c = 0; c < dirty.Length; c++)
+        {
+            dirty[c] = receiverChanged[c] || hydrologyChanged[c];
+            if (dirty[c])
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int BuildIntegrationDependencyUpperBound(long[] receiver, long[] order,
+        bool[] receiverChanged, bool[] hydrologyDirty, bool[] dirty)
+    {
+        int count = 0;
+        for (int k = 0; k < order.Length; k++)
+        {
+            int c = (int)order[k];
+            long downstream = receiver[c];
+            bool affected = receiverChanged[c] || hydrologyDirty[c]
+                || (downstream != c && dirty[downstream]);
+            dirty[c] = affected;
+            if (affected)
+            {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static int IntegrateCell(
@@ -503,7 +668,8 @@ public static class Solver
     /// </summary>
     public static SolverResult SolveSteadyState(
         CellGraph graph, bool[] isOutlet, double[] zOutlet, double[] uplift, double[] runoffEff, LayerColumns? layers,
-        Config cfg, double[]? zInit = null, double[]? extraInflow = null, int? maxIter = null, Action<string>? log = null)
+        Config cfg, double[]? zInit = null, double[]? extraInflow = null, int? maxIter = null, Action<string>? log = null,
+        bool useIncremental = true, bool verifyIncremental = false)
     {
         long t0 = Stopwatch.GetTimestamp();
         int n = graph.NCells;
@@ -612,56 +778,217 @@ public static class Solver
         var history = new List<OrderedDictionary<string, object?>>();
         bool converged = false;
         int it = 0;
+        double routingSeconds = 0.0;
+        double accumulationSeconds = 0.0;
+        double integrationSeconds = 0.0;
+        double convergenceSeconds = 0.0;
         double[] zNew = new double[n];
         long[] order = [];
-        double[] q = [];
-        double[] aUp = [];
-        double[] qs = [];
+        double[] q = new double[n];
+        double[] aUp = new double[n];
+        double[] qs = new double[n];
+        double[]? fullGridVerificationZ = verifyIncremental ? new double[n] : null;
+        bool[] changedMask = new bool[n];
+        bool[] hydrologyDirty = new bool[n];
+        bool[] integrationDirty = new bool[n];
+        bool[] hydrologyValueChanged = new bool[n];
+        bool[] oldPathDirty = new bool[n];
+        bool[] newPathDirty = new bool[n];
+        int[] topologicalPosition = new int[n];
+        int[] donorScratch = new int[CellGraph.NSlots];
+        long[] donorStart = [];
+        long[] donors = [];
+        int incrementalIterations = 0;
+        int fallbackIterations = 0;
         while (it < mIter)
         {
             it++;
+            long iterationStart = Stopwatch.GetTimestamp();
+            long stageStart = Stopwatch.GetTimestamp();
             double[] zt = rcv is not null && HasEpsDrop(z, rcv, mask, eps) ? z : Depressions.FillEpsilon(z, nbr, mask, eps);
             int nChanged;
+            long[]? oldReceiver = rcv;
             if (rcv is null)
             {
-                (rcv, _, nChanged) = Routing.D8Receivers(zt, nbr, dist, mask);
+                (rcv, nChanged) = Routing.D8ReceiversTrusted(zt, nbr, dist, mask, null, eta);
             }
             else
             {
                 long[] prev = rcv;
-                (rcv, _, _) = Routing.D8Receivers(zt, nbr, dist, mask, prev, eta);
+                (rcv, _) = Routing.D8ReceiversTrusted(zt, nbr, dist, mask, prev, eta);
                 (nChanged, nFrozen) = FreezeKernel(zt, prev, rcv, flips, maxFlips);
             }
-            order = Routing.TopoOrder(rcv);
-            q = AccumulateModule.Accumulate(rcv, order, wWater);
-            aUp = AccumulateModule.Accumulate(rcv, order, area);
-            qs = AccumulateModule.Accumulate(rcv, order, wSed);
+            bool[] receiverChanged = changedMask;
+            int changedReceiverCells = 0;
+            Array.Clear(receiverChanged);
+            if (oldReceiver is null)
+            {
+                Array.Fill(receiverChanged, true);
+                changedReceiverCells = n;
+            }
+            else
+            {
+                for (int c = 0; c < n; c++)
+                {
+                    if (oldReceiver[c] != rcv[c])
+                    {
+                        receiverChanged[c] = true;
+                        changedReceiverCells++;
+                    }
+                }
+            }
+            order = Routing.TopoOrderTrusted(rcv, out donorStart, out donors);
+            for (int k = 0; k < n; k++)
+            {
+                topologicalPosition[order[k]] = k;
+            }
+            double iterRoutingSeconds = Stopwatch.GetElapsedTime(stageStart).TotalSeconds;
+            routingSeconds += iterRoutingSeconds;
+
+            bool incremental = useIncremental && oldReceiver is not null;
+            bool integrationIncremental = incremental;
+            int dirtyHydrologyCells = n;
+            int dirtyIntegrationCells = n;
+            if (incremental)
+            {
+                Array.Clear(hydrologyDirty);
+                dirtyHydrologyCells = BuildHydrologyDirty(oldReceiver!, rcv, receiverChanged, hydrologyDirty,
+                    oldPathDirty, newPathDirty);
+                incremental = dirtyHydrologyCells <= (int)(n * 0.75);
+                integrationIncremental = incremental;
+                if (integrationIncremental)
+                {
+                    int dependencyUpperBound = BuildIntegrationDependencyUpperBound(rcv, order,
+                        receiverChanged, hydrologyDirty, integrationDirty);
+                    integrationIncremental = dependencyUpperBound <= (int)(n * 0.75);
+                }
+            }
+
+            stageStart = Stopwatch.GetTimestamp();
+            if (incremental)
+            {
+                Array.Clear(hydrologyValueChanged);
+                AccumulateDirty(donorStart, donors, order, topologicalPosition, donorScratch,
+                    hydrologyDirty, hydrologyValueChanged, wWater, q);
+                AccumulateDirty(donorStart, donors, order, topologicalPosition, donorScratch,
+                    hydrologyDirty, hydrologyValueChanged, area, aUp);
+                AccumulateDirty(donorStart, donors, order, topologicalPosition, donorScratch,
+                    hydrologyDirty, hydrologyValueChanged, wSed, qs);
+                if (verifyIncremental)
+                {
+                    VerifyAccumulation(it, "유량", rcv, order, wWater, q);
+                    VerifyAccumulation(it, "집수 면적", rcv, order, area, aUp);
+                    VerifyAccumulation(it, "퇴적물 유량", rcv, order, wSed, qs);
+                }
+            }
+            else
+            {
+                AccumulateModule.AccumulateIntoTrusted(rcv, order, wWater, q);
+                AccumulateModule.AccumulateIntoTrusted(rcv, order, area, aUp);
+                AccumulateModule.AccumulateIntoTrusted(rcv, order, wSed, qs);
+            }
             for (int c = 0; c < n; c++)
             {
                 qs[c] = Math.Max(qs[c], 0.0);
             }
+            double iterAccumulationSeconds = Stopwatch.GetElapsedTime(stageStart).TotalSeconds;
+            accumulationSeconds += iterAccumulationSeconds;
+
+            if (integrationIncremental)
+            {
+                Array.Clear(integrationDirty);
+                dirtyIntegrationCells = BuildIntegrationDirty(receiverChanged, hydrologyValueChanged,
+                    integrationDirty);
+                integrationIncremental = dirtyIntegrationCells <= (int)(n * 0.75);
+            }
+
+            stageStart = Stopwatch.GetTimestamp();
             int nBad = IntegrateKernel(order, rcv, nbr, dist, zo, q, aUp, qs, u, width, bottom, nl, kMult, sCrit,
                 p, invN, eps, zNew, positionWork, subtreeEndWork, levelWork, levelCountsWork, badByRoot,
-                frontierWork, maxDegree, parallelSubtrees);
+                frontierWork, maxDegree, parallelSubtrees, integrationIncremental ? integrationDirty : null, z);
+            if (integrationIncremental)
+            {
+                dirtyIntegrationCells = 0;
+                for (int c = 0; c < n; c++)
+                {
+                    dirtyIntegrationCells += integrationDirty[c] ? 1 : 0;
+                }
+            }
+            if (incremental && integrationIncremental)
+            {
+                incrementalIterations++;
+            }
+            else
+            {
+                fallbackIterations++;
+            }
+            if (!integrationIncremental)
+            {
+                dirtyIntegrationCells = n;
+            }
+            double iterIntegrationSeconds = Stopwatch.GetElapsedTime(stageStart).TotalSeconds;
+            integrationSeconds += iterIntegrationSeconds;
+            if (verifyIncremental)
+            {
+                int referenceBad = IntegrateKernel(order, rcv, nbr, dist, zo, q, aUp, qs, u, width, bottom, nl,
+                    kMult, sCrit, p, invN, eps, fullGridVerificationZ!, positionWork, subtreeEndWork,
+                    levelWork, levelCountsWork, badByRoot, frontierWork, maxDegree, parallelSubtrees,
+                    dirty: null, zOld: z);
+                if (referenceBad != nBad)
+                {
+                    throw new InvalidOperationException($"증분 고도 검증 경로 검사 실패: iteration={it}");
+                }
+                for (int c = 0; c < n; c++)
+                {
+                    if (zNew[c] != fullGridVerificationZ![c])
+                    {
+                        throw new InvalidOperationException($"증분 고도 검증 실패: iteration={it}, cell={c}, expected={fullGridVerificationZ![c]:G17}, actual={zNew[c]:G17}");
+                    }
+                }
+            }
             if (nBad != 0)
             {
                 throw new InvalidOperationException($"수신 셀이 이웃이 아닌 칸이 {nBad}개 있습니다 (내부 오류)");
             }
             double maxDz = 0.0;
+            double sumDz = 0.0;
+            int elevationChangedCells = 0;
+            stageStart = Stopwatch.GetTimestamp();
             for (int c = 0; c < n; c++)
             {
                 double dz = Math.Abs(zNew[c] - z[c]);
+                sumDz += dz;
+                if (dz != 0.0)
+                {
+                    elevationChangedCells++;
+                }
                 if (dz > maxDz || double.IsNaN(dz))
                 {
                     maxDz = dz;
                 }
             }
             (z, zNew) = (zNew, z);
+            double iterConvergenceSeconds = Stopwatch.GetElapsedTime(stageStart).TotalSeconds;
+            convergenceSeconds += iterConvergenceSeconds;
             history.Add(new OrderedDictionary<string, object?>
             {
                 ["iteration"] = (long)it,
                 ["n_changed"] = (long)nChanged,
+                ["receiver_changed_cells"] = (long)changedReceiverCells,
+                ["receiver_changed_fraction"] = (double)changedReceiverCells / n,
                 ["max_dz"] = maxDz,
+                ["mean_dz"] = sumDz / n,
+                ["elevation_changed_cells"] = (long)elevationChangedCells,
+                ["dirty_hydrology_cells"] = (long)dirtyHydrologyCells,
+                ["dirty_integration_cells"] = (long)dirtyIntegrationCells,
+                ["routing_seconds"] = iterRoutingSeconds,
+                ["accumulation_seconds"] = iterAccumulationSeconds,
+                ["integration_seconds"] = iterIntegrationSeconds,
+                ["convergence_seconds"] = iterConvergenceSeconds,
+                ["other_seconds"] = Math.Max(0.0, Stopwatch.GetElapsedTime(iterationStart).TotalSeconds
+                    - iterRoutingSeconds - iterAccumulationSeconds - iterIntegrationSeconds
+                    - iterConvergenceSeconds),
+                ["incremental"] = incremental && integrationIncremental,
                 ["n_frozen"] = (long)nFrozen,
             });
             log?.Invoke($"솔버 반복 {it}: 방향 변화 {nChanged}, 최대 고도 변화 {maxDz:G4} m, 고정 칸 {nFrozen}");
@@ -672,6 +999,7 @@ public static class Solver
             }
         }
 
+        long surfaceStart = Stopwatch.GetTimestamp();
         double[] slope = new double[n];
         double[] kS = new double[n];
         double[] sCritSurface = new double[n];
@@ -699,6 +1027,27 @@ public static class Solver
             NFrozen = nFrozen,
             Frozen = frozen,
             UpliftEffective = u,
+            RoutingSeconds = routingSeconds,
+            AccumulationSeconds = accumulationSeconds,
+            IntegrationSeconds = integrationSeconds,
+            ConvergenceSeconds = convergenceSeconds,
+            SurfaceLawSeconds = Stopwatch.GetElapsedTime(surfaceStart).TotalSeconds,
+            IncrementalIterations = incrementalIterations,
+            FullFallbackIterations = fallbackIterations,
         };
+    }
+
+    private static void VerifyAccumulation(int iteration, string field, long[] receiver, long[] order,
+        double[] weight, double[] actual)
+    {
+        double[] expected = (double[])weight.Clone();
+        AccumulateModule.AccumulateKernel(receiver, order, expected);
+        for (int c = 0; c < expected.Length; c++)
+        {
+            if (expected[c] != actual[c])
+            {
+                throw new InvalidOperationException($"증분 {field} 검증 실패: iteration={iteration}, cell={c}, expected={expected[c]:G17}, actual={actual[c]:G17}");
+            }
+        }
     }
 }

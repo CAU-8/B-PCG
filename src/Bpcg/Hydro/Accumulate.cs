@@ -25,6 +25,16 @@ public static class AccumulateModule
         }
     }
 
+    /// <summary>
+    /// Solver 전용 누적: Solve 시작 때 입력 모양을 확인했고 receiver/order 는 내부 커널이 만들었으므로
+    /// 검증 배열을 반복 생성하지 않고 기존 버퍼에 가중치를 복사해 누적합니다.
+    /// </summary>
+    internal static void AccumulateIntoTrusted(long[] rcv, long[] order, double[] weight, double[] acc)
+    {
+        Array.Copy(weight, acc, weight.Length);
+        AccumulateKernel(rcv, order, acc);
+    }
+
     private static void CheckOrder(long[] order, int n)
     {
         if (order.Length != n)

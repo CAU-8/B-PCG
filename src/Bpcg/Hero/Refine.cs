@@ -15,6 +15,7 @@ namespace Bpcg.Hero;
 public static class Refine
 {
     public const int OutletCells = 5;
+    public const int InflowPortCells = 3;
 
     public static readonly string[] LinearFields =
         ["uplift_m_per_yr", "runoff_m_per_yr", "runoff_eff_m_per_yr", "precip_m_per_yr", "pet_m_per_yr", "exhumation_m", "fold_phase"];
@@ -69,7 +70,8 @@ public static class Refine
     }
 
     /// <summary>히어로 경계조건 (hero_boundary).</summary>
-    public static OrderedDictionary<string, object?> HeroBoundary(PlanetState planet, HeroSite site, CellGraph graph, double[] rEff, Config cfg)
+    public static OrderedDictionary<string, object?> HeroBoundary(
+        PlanetState planet, HeroSite site, CellGraph graph, double[] rEff, Config cfg, bool legacySinglePort = false)
     {
         CellGraph g0 = planet.Graph;
         FieldSet f0 = planet.Fields;
@@ -110,6 +112,7 @@ public static class Refine
         long inflowCell = -1;
         string? inflowEdge = null;
         long donor = -1;
+        long[] inflowCells = [];
         if (qIn > 0.0)
         {
             var donors = new List<long>();
@@ -141,7 +144,49 @@ public static class Refine
             EdgeHit hin = Domain.EdgeHitOf(Domain.DirectionToLocal(site, direction), nSide, dx);
             inflowCell = Domain.EdgeCells(nSide, hin.Edge, hin.Index, 1)[0];
             inflowEdge = hin.Edge;
-            extra[inflowCell] = qIn;
+            if (legacySinglePort)
+            {
+                extra[inflowCell] = qIn;
+                inflowCells = [inflowCell];
+            }
+            else
+            {
+                // Spread the parent-basin residual over boundary ports aligned with all direct
+                // parent tributaries to the selected cell. The normalized weights conserve qIn.
+                // A single fallback port is retained for parent graphs with no donor cells.
+                var portWeights = new List<(long Cell, double Weight)>();
+                if (donors.Count == 0)
+                {
+                    AddPortWeights(portWeights, graph.NCells, hin.Edge, hin.Index, 1.0);
+                }
+                else
+                {
+                    double donorTotal = 0.0;
+                    foreach (long dd in donors)
+                    {
+                        donorTotal += Math.Max(q0All[dd], 0.0);
+                    }
+                    if (donorTotal > 0.0 && double.IsFinite(donorTotal))
+                    {
+                        foreach (long dd in donors)
+                        {
+                            double weight = Math.Max(q0All[dd], 0.0) / donorTotal;
+                            if (weight <= 0.0)
+                            {
+                                continue;
+                            }
+                            EdgeHit donorHit = Domain.EdgeHitOf(
+                                Domain.DirectionToLocal(site, Dir(dd, c0)), nSide, dx);
+                            AddPortWeights(portWeights, graph.NCells, donorHit.Edge, donorHit.Index, weight);
+                        }
+                    }
+                    else
+                    {
+                        AddPortWeights(portWeights, graph.NCells, hin.Edge, hin.Index, 1.0);
+                    }
+                }
+                (extra, inflowCells) = DistributeInflow(graph.NCells, portWeights, qIn);
+            }
         }
         return new OrderedDictionary<string, object?>
         {
@@ -151,7 +196,9 @@ public static class Refine
             ["z_outlet_m"] = zOut,
             ["extra_inflow"] = extra,
             ["inflow_cell"] = inflowCell,
+            ["inflow_cells"] = inflowCells,
             ["inflow_edge"] = inflowEdge,
+            ["inflow_mode"] = legacySinglePort ? "legacy" : "v2_distributed",
             ["inflow_m3_per_yr"] = NpReduce.Sum(extra),
             ["l0_discharge_m3_per_yr"] = q0,
             ["l0_receiver"] = r0,
@@ -160,8 +207,70 @@ public static class Refine
         };
     }
 
+    private static void AddPortWeights(List<(long Cell, double Weight)> ports, int nCells, string edge, int index, double weight)
+    {
+        int nSide = (int)Math.Sqrt(nCells);
+        long[] cells = Domain.EdgeCells(nSide, edge, index, Math.Min(InflowPortCells, nSide));
+        double each = weight / cells.Length;
+        foreach (long cell in cells)
+        {
+            int existing = ports.FindIndex(p => p.Cell == cell);
+            if (existing >= 0)
+            {
+                ports[existing] = (cell, ports[existing].Weight + each);
+            }
+            else
+            {
+                ports.Add((cell, each));
+            }
+        }
+    }
+
+    internal static (double[] Inflow, long[] Cells) DistributeInflow(
+        int nCells, IReadOnlyList<(long Cell, double Weight)> ports, double totalInflow)
+    {
+        if (nCells < 1 || !double.IsFinite(totalInflow) || totalInflow < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalInflow));
+        }
+        double weightTotal = 0.0;
+        foreach ((long cell, double weight) in ports)
+        {
+            if (cell < 0 || cell >= nCells || !double.IsFinite(weight) || weight < 0.0)
+            {
+                throw new ArgumentException("유입 포트 셀과 가중치가 유효하지 않습니다", nameof(ports));
+            }
+            weightTotal += weight;
+        }
+        if (totalInflow > 0.0 && !(weightTotal > 0.0 && double.IsFinite(weightTotal)))
+        {
+            throw new ArgumentException("양의 유입량에는 양의 포트 가중치가 필요합니다", nameof(ports));
+        }
+        double[] inflow = new double[nCells];
+        long[] cells = new long[ports.Count];
+        if (totalInflow == 0.0)
+        {
+            for (int i = 0; i < ports.Count; i++)
+            {
+                cells[i] = ports[i].Cell;
+            }
+            return (inflow, cells);
+        }
+        double assigned = 0.0;
+        for (int i = 0; i < ports.Count; i++)
+        {
+            (long cell, double weight) = ports[i];
+            cells[i] = cell;
+            double amount = i == ports.Count - 1 ? totalInflow - assigned : totalInflow * weight / weightTotal;
+            inflow[cell] += amount;
+            assigned += amount;
+        }
+        return (inflow, cells);
+    }
+
     /// <summary>L0 경계조건으로 히어로 2~4단계를 풉니다 (refine_hero).</summary>
-    public static HeroState RefineHero(PlanetState planet, HeroSite site, Config cfg, Action<string>? log = null)
+    public static HeroState RefineHero(
+        PlanetState planet, HeroSite site, Config cfg, Action<string>? log = null, bool legacyBoundaryInflow = false)
     {
         long tAll = Stopwatch.GetTimestamp();
         var sec = new OrderedDictionary<string, object?>();
@@ -182,7 +291,8 @@ public static class Refine
         sec["geology"] = Seconds(t);
 
         t = Stopwatch.GetTimestamp();
-        OrderedDictionary<string, object?> bc = HeroBoundary(planet, site, graph, sampled.Get<double>("runoff_eff_m_per_yr"), cfg);
+        OrderedDictionary<string, object?> bc = HeroBoundary(
+            planet, site, graph, sampled.Get<double>("runoff_eff_m_per_yr"), cfg, legacyBoundaryInflow);
         sec["boundary"] = Seconds(t);
         Pipeline.Say(log, $"[히어로] 출구 {bc["outlet_edge"]} 가장자리 {OutletCells}칸, z = {(double)bc["z_outlet_m"]!:F1} m, "
             + $"들어오는 물 {IO.PyFormat.General((double)bc["inflow_m3_per_yr"]!, 3)} m³/yr ({bc["inflow_edge"] ?? "None"})");
