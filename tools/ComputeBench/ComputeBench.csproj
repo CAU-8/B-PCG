@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Bpcg.ComputeBench</RootNamespace>
+    <AssemblyName>Bpcg.ComputeBench</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Bpcg/Bpcg.csproj" />
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+  </ItemGroup>
+</Project>

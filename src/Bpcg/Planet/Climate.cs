@@ -34,11 +34,11 @@ public static class Climate
             double a2 = axis[2] / norm;
             double[] unit = graph.Unit();
             double[] phi = new double[graph.NCells];
-            for (int c = 0; c < phi.Length; c++)
+            Parallelism.For(0, phi.Length, c =>
             {
                 double d = (unit[c * 3] * a0) + (unit[(c * 3) + 1] * a1) + (unit[(c * 3) + 2] * a2);
                 phi[c] = Math.Asin(NpMath.Clip(d, -1.0, 1.0));
-            }
+            });
             return phi;
         }
         if (latDeg is not double lat)
@@ -61,7 +61,7 @@ public static class Climate
         double dT = tEq - cfg.F("climate.t_pole_c");
         double lapse = cfg.F("climate.lapse_rate_c_per_m");
         double[] t = new double[latitude.Length];
-        for (int c = 0; c < t.Length; c++)
+        Parallelism.For(0, t.Length, c =>
         {
             double s = Math.Sin(latitude[c]);
             t[c] = tEq - (dT * (s * s));
@@ -69,7 +69,7 @@ public static class Climate
             {
                 t[c] -= lapse * Math.Max(z[c], 0.0);
             }
-        }
+        });
         return t;
     }
 
@@ -77,13 +77,13 @@ public static class Climate
     public static double[] BudykoRunoff(double[] precip, double[] pet)
     {
         double[] r = new double[precip.Length];
-        for (int c = 0; c < r.Length; c++)
+        Parallelism.For(0, r.Length, c =>
         {
             double p = precip[c];
             double phi = pet[c] / p;
             double et = p * Math.Sqrt(phi * NpUfunc.Tanh(1.0 / phi) * (1.0 - Math.Exp(-phi)));
             r[c] = NpMath.Clip(p - et, 0.0, p);
-        }
+        });
         return r;
     }
 
@@ -107,12 +107,12 @@ public static class Climate
         double pEq = cfg.F("climate.p_equator");
         double pMid = cfg.F("climate.p_midlat");
         double[] band = new double[n];
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
             double a = phi[c] / s1;
             double b = (Math.Abs(phi[c]) - phiM) / s2;
             band[c] = pBase + (pEq * Math.Exp(-(a * a))) + (pMid * Math.Exp(-(b * b)));
-        }
+        });
         double eta = cfg.F("climate.p_noise");
         double[] precip;
         if (eta != 0.0)
@@ -121,10 +121,10 @@ public static class Climate
                 Uplift.NoisePoints(graph, cfg.F("planet.radius_m")), Plates.SubSeed(s, StreamPrecipNoise),
                 PrecipNoiseOctaves, frequency: PrecipNoiseFrequency);
             precip = new double[n];
-            for (int c = 0; c < n; c++)
+            Parallelism.For(0, n, c =>
             {
                 precip[c] = band[c] * Math.Exp((eta * xi[c]) - (0.5 * eta * eta));
-            }
+            });
         }
         else
         {
@@ -141,22 +141,19 @@ public static class Climate
         double petPer = cfg.F("climate.pet_per_degc_m_per_yr");
         double petBase = cfg.F("climate.pet_base_m_per_yr");
         double[] pet = new double[n];
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
             pet[c] = (petPer * Math.Max(temp[c], 0.0)) + petBase;
             if (!(pet[c] > 0))
             {
                 throw new ArgumentException("잠재 증발산이 0 이하입니다 (pet_base_m_per_yr > 0 이어야 함)");
             }
-        }
+        });
         double[] runoff = BudykoRunoff(precip, pet);
         double frac = cfg.F("climate.runoff_floor_fraction");
         double floor = cfg.F("climate.runoff_floor_m_per_yr");
         double[] runoffEff = new double[n];
-        for (int c = 0; c < n; c++)
-        {
-            runoffEff[c] = Math.Max(Math.Max(runoff[c], frac * precip[c]), floor);
-        }
+        FieldKernels.MaxProductFloorParallel(runoff, precip, frac, floor, runoffEff);
         return new FieldSet
         {
             ["precip_m_per_yr"] = precip,

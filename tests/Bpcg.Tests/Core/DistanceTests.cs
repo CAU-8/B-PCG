@@ -68,4 +68,29 @@ public sealed class DistanceTests
         (_, _, double[] v6) = Distance.NearestSourceValues(gr, src, g.In("values.f8x2").AsDouble(), 2, maxDist);
         Compare.Bits(g.Out("f8x2.values").AsDouble(), v6, "f8x2 values");
     }
+
+    [Fact]
+    public void BoundedNearestSourcePreservesThresholdClassification()
+    {
+        Config cfg = Config.LoadConfig("earth", "tiny");
+        CellGraph graph = Graph.SphereGraph(32, cfg.F("planet.radius_m"));
+        bool[] source = new bool[graph.NCells];
+        for (int c = 0; c < source.Length; c += 11)
+        {
+            source[c] = true;
+        }
+        double threshold = graph.Spacing * 4.5;
+
+        (double[] full, _) = Distance.NearestSource(graph, source);
+        (double[] bounded, _) = Distance.NearestSource(graph, source, threshold);
+
+        for (int c = 0; c < full.Length; c++)
+        {
+            Assert.Equal(full[c] > threshold, bounded[c] > threshold);
+            if (full[c] <= threshold)
+            {
+                Assert.Equal(full[c], bounded[c]);
+            }
+        }
+    }
 }
