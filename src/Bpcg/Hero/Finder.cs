@@ -67,9 +67,9 @@ public static class Finder
         const int ns = CellGraph.NSlots;
         int n = graph.NCells;
         double[] o = new double[n];
-        double[] row = new double[ns];
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
+            Span<double> row = stackalloc double[ns];
             int cnt = 0;
             for (int s = 0; s < ns; s++)
             {
@@ -83,7 +83,7 @@ public static class Finder
                 row[s] = g * g;
             }
             o[c] = Math.Sqrt(2.0 * NpReduce.Sum(row) / Math.Max(cnt, 1));
-        }
+        });
         return o;
     }
 
@@ -93,17 +93,17 @@ public static class Finder
         int n = z.Length;
         int m = CarbonateSamples;
         double[] zz = new double[n * m];
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
             double r = Math.Max(NpMath.NanToNum(relief[c]), 0.0);
             for (int k = 0; k < m; k++)
             {
                 zz[(c * m) + k] = z[c] + (r * ((k + 0.5) / m));
             }
-        }
+        });
         byte[] rock = Model.RockAt(strataBottom, strataRock, nLayers, zz);
         double[] o = new double[n];
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
             int cnt = 0;
             for (int k = 0; k < m; k++)
@@ -111,7 +111,7 @@ public static class Finder
                 cnt += Rocks.Soluble[rock[(c * m) + k]] ? 1 : 0;
             }
             o[c] = (double)cnt / m;
-        }
+        });
         return o;
     }
 
@@ -166,7 +166,9 @@ public static class Finder
         {
             return new double[x.Length];
         }
-        return Array.ConvertAll(x, v => NpMath.Clip(v / r, 0.0, 1.0));
+        double[] normalized = new double[x.Length];
+        Parallelism.For(0, x.Length, i => normalized[i] = NpMath.Clip(x[i] / r, 0.0, 1.0));
+        return normalized;
     }
 
     /// <summary>히어로 중심이 될 수 있는 L0 칸 (candidate_mask).</summary>
@@ -182,7 +184,10 @@ public static class Finder
         double[] dOcean;
         if (Array.IndexOf(ocean, true) >= 0)
         {
-            (dOcean, _) = Distance.NearestSource(g, ocean);
+            // CandidateMask only distinguishes cells within the ocean margin from those beyond
+            // it. Stop the exact nearest-source search at that threshold to avoid solving global
+            // distances whose values cannot affect the selected candidate set.
+            (dOcean, _) = Distance.NearestSource(g, ocean, margin);
         }
         else
         {
@@ -190,10 +195,10 @@ public static class Finder
         }
         double latMax = NpMath.Radians(MaxLatDeg);
         bool[] o = new bool[g.NCells];
-        for (int c = 0; c < o.Length; c++)
+        Parallelism.For(0, o.Length, c =>
         {
             o[c] = !ocean[c] && Math.Abs(lat[c]) <= latMax && dOcean[c] > margin;
-        }
+        });
         return o;
     }
 
@@ -237,10 +242,10 @@ public static class Finder
             double[] p = f.GetFloat64("precip_m_per_yr");
             double[] pet = f.GetFloat64("pet_m_per_yr");
             bool[] isDry = new bool[n];
-            for (int c = 0; c < n; c++)
+            Parallelism.For(0, n, c =>
             {
                 isDry[c] = !ocean[c] && p[c] < DryAridityIndex * pet[c];
-            }
+            });
             double[] dry = DryFraction(g, isDry, idx, DryRadiusM);
             for (int k = 0; k < idx.Length; k++)
             {
@@ -252,18 +257,18 @@ public static class Finder
         foreach (KeyValuePair<string, double> kv in ScoreWeights)
         {
             double[] part = parts[kv.Key];
-            for (int c = 0; c < n; c++)
+            Parallelism.For(0, n, c =>
             {
                 total[c] += kv.Value * part[c];
-            }
+            });
         }
-        for (int c = 0; c < n; c++)
+        Parallelism.For(0, n, c =>
         {
             if (!cand[c])
             {
                 total[c] = 0.0;
             }
-        }
+        });
         return (total, parts, cand);
     }
 
