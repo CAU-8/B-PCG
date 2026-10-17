@@ -223,7 +223,10 @@ class CompareService:
     def start(self, body: dict) -> dict:
         config = str(body.get("config") or "default")
         if not NAME_RE.match(config) or not (CONFIG_DIR / f"{config}.toml").is_file():
-            raise JobError(f"비교 설정이 없습니다: configs/compare/{config}.toml")
+            have = ", ".join(sorted(p.stem for p in CONFIG_DIR.glob("*.toml")))
+            raise JobError(
+                f"비교 설정이 없습니다: configs/compare/{config}.toml (있는 설정: {have})"
+            )
         name = str(body.get("name") or config)
         if not NAME_RE.match(name):
             raise JobError(f"묶음 이름이 올바르지 않습니다: {name!r}")
@@ -239,7 +242,7 @@ class CompareService:
             if not isinstance(only, list) or not all(
                 isinstance(x, str) and ID_RE.match(x) for x in only
             ):
-                raise JobError("only 는 인스턴스 이름 목록이어야 합니다")
+                raise JobError('only 는 방법 id 목록이어야 합니다 (예: ["fbm", "bpcg"])')
             args += ["--only", ",".join(only)]
         for key in ("n", "dx"):
             v = body.get(key)
@@ -258,9 +261,13 @@ class CompareService:
             raise JobError(str(e), status=500) from None
         with self._lock:
             if self._proc is not None and self._proc.poll() is None:
-                raise JobError("비교 실행이 이미 돌고 있습니다", status=409)
+                raise JobError(
+                    "비교 실행이 이미 돌고 있습니다. 끝나거나 멈춘 뒤 다시 누르세요", status=409
+                )
             if self._state.get("status") == "running":
-                raise JobError("비교 실행이 이미 돌고 있습니다", status=409)
+                raise JobError(
+                    "비교 실행이 이미 돌고 있습니다. 끝나거나 멈춘 뒤 다시 누르세요", status=409
+                )
             self._lines.clear()
             self._first = 0
             self._state = {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Bpcg.Core;
@@ -469,7 +470,8 @@ public static class Corridor
         Choice cor = ChooseCorridor(heroState, cfg);
         (double XMin, double XMax, double YMin, double YMax) rect = cor.Rect;
         sec["choose"] = Seconds(t);
-        log?.Invoke($"[굽기] 회랑 {cor.Axis} 방향 {cor.LengthM:F0}×{cor.WidthM:F0} m, 시작 칸 {cor.StartCell} ({cor.ApexKind} 기준), 입구 칸 {cor.NEntranceCells}");
+        string apex = cor.ApexKind switch { "fan" => "선상지 꼭짓점", "river" => "출구 쪽 큰 강", _ => cor.ApexKind };
+        log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} ({apex}에서 출발), 동굴 입구 칸 {LogText.N(cor.NEntranceCells)}개");
 
         // --- 높이맵 (회랑 지표)
         t = Stopwatch.GetTimestamp();
@@ -485,7 +487,7 @@ public static class Corridor
         var files = new OrderedDictionary<string, object?>();
         files["heightmap"] = Heightmap.WriteHeightmap(Path.Combine(outDir, "heightmap"), surf, nrow, ncol, voxel, origin);
         sec["heightmap"] = Seconds(t);
-        log?.Invoke($"[굽기] 높이맵 {ncol}×{nrow} (간격 {PyFormat.General(voxel)} m), {(double)sec["heightmap"]!:F2} s");
+        log?.Invoke($"[굽기] 높이맵 {ncol} × {nrow} 표본 (간격 {PyFormat.General(voxel)} m), {(double)sec["heightmap"]!:F2} s");
 
         // --- 수면·지하수면
         t = Stopwatch.GetTimestamp();
@@ -551,9 +553,9 @@ public static class Corridor
             files["cave_mouth_detail"] = md;
             sec["detail"] = Seconds(t);
             var bw = (List<object?>)dmeta["beta_wavelength_m"]!;
-            log?.Invoke($"[굽기] 프랙탈 디테일: RMS {(double)dmeta["rms_m"]!:F2} m (최대 {(double)dmeta["max_abs_m"]!:F1} m), "
-                + $"β {(double)dmeta["beta_before"]!:F2} → {(double)dmeta["beta_after"]!:F2} "
-                + $"({PyFormat.General((double)bw[0]!)}–{PyFormat.General((double)bw[1]!)} m), 웅덩이 채움 {dmeta["n_filled"]} 칸, {(double)sec["detail"]!:F2} s");
+            log?.Invoke($"[굽기] 프랙탈 디테일: 더한 거칠기 평균 크기(RMS) {(double)dmeta["rms_m"]!:F2} m (가장 큰 곳 {(double)dmeta["max_abs_m"]!:F1} m), "
+                + $"스펙트럼 기울기 β {(double)dmeta["beta_before"]!:F2} → {(double)dmeta["beta_after"]!:F2} "
+                + $"(파장 {PyFormat.General((double)bw[0]!)}–{PyFormat.General((double)bw[1]!)} m), 새로 생긴 웅덩이를 메운 칸 {LogText.N(Convert.ToInt64(dmeta["n_filled"], CultureInfo.InvariantCulture))}개, {(double)sec["detail"]!:F2} s");
         }
         else
         {
@@ -597,7 +599,7 @@ public static class Corridor
             }
         }
         sec["caves"] = Seconds(t);
-        log?.Invoke($"[굽기] 동굴 메시: 삼각형 {cdiag.GetValueOrDefault("faces_kept") ?? 0L} (조각 {cdiag["tiles_with_caves"]}/{cdiag["tiles"]}), {(double)sec["caves"]!:F2} s");
+        log?.Invoke($"[굽기] 동굴 메시: 삼각형 {LogText.N(Convert.ToInt64(cdiag.GetValueOrDefault("faces_kept") ?? 0L, CultureInfo.InvariantCulture))}개 (동굴이 든 조각 {cdiag["tiles_with_caves"]}/{cdiag["tiles"]}), {(double)sec["caves"]!:F2} s");
 
         // --- 재질 부피
         t = Stopwatch.GetTimestamp();
@@ -608,7 +610,7 @@ public static class Corridor
         }
         sec["strata"] = Seconds(t);
         var shp = (List<object?>)((OrderedDictionary<string, object?>)st["strata"]!)["shape"]!;
-        log?.Invoke($"[굽기] 재질 부피 {shp[2]}×{shp[0]}×{shp[1]} (열×행×층), {(double)sec["strata"]!:F2} s");
+        log?.Invoke($"[굽기] 재질 부피 {shp[2]} × {shp[0]} × {shp[1]} 상자 (열 × 행 × 층), {(double)sec["strata"]!:F2} s");
 
         // --- 입구 위치 (엔진 좌표)
         var entIn = new List<object?>();

@@ -74,7 +74,7 @@ function pumpImages() {
   };
   const probe = new Image();
   probe.onload = () => { job.img.src = job.url; done(true); };
-  probe.onerror = () => { job.loading.textContent = "그림을 만들지 못했습니다"; done(false); };
+  probe.onerror = () => { job.loading.textContent = "그림을 만들지 못했습니다. 목록 새로 고침(↻)을 누른 뒤 다시 골라 보세요"; done(false); };
   job.loading.textContent = "그리는 중…";
   probe.src = job.url;
 }
@@ -172,9 +172,9 @@ async function select(seed, id) {
   $("v-title").innerHTML = `<span class="fam-chip ${esc(e.family)}">${esc(FAMILY[e.family] || e.family)}</span>${esc(e.label)} <span class="hint">· ${esc(e.id)} · 시드 ${seed}</span>`;
   $("v-sub").textContent = e.ref;
   const facts = [
-    ["생성 시간", `${fmt(e.seconds)} s` + (e.wall_seconds && e.wall_seconds - e.seconds > 0.01 ? ` (기록 포함 ${fmt(e.wall_seconds)} s)` : "")],
+    ["생성 시간", `${fmt(e.seconds)} s` + (e.wall_seconds && e.wall_seconds - e.seconds > 0.01 ? ` (과정 기록 포함 ${fmt(e.wall_seconds)} s)` : "")],
     ["고도", `${fmt(e.z_min)} ~ ${fmt(e.z_max)} m`],
-    ["기복", `${fmt(e.metrics.relief_m)} m`],
+    ["기복 (최고 − 최저)", `${fmt(e.metrics.relief_m)} m`],
     ["과정 단계", `${e.stages || 0}장`],
     ["만든 때", e.created || "–"],
   ];
@@ -196,7 +196,7 @@ function showElevation() {
     lo = Math.min(...group(st.seed).map((x) => x.z_min));
     hi = Math.max(...group(st.seed).map((x) => x.z_max));
   }
-  $("elev-legend").innerHTML = gradientLegend(st.data.elevation_colors, lo, hi, "고도 m");
+  $("elev-legend").innerHTML = gradientLegend(st.data.elevation_colors, lo, hi, "고도 [m]");
 }
 
 function gradientLegend(colors, lo, hi, unit) {
@@ -209,7 +209,7 @@ function renderTable() {
   const defs = st.data.metrics;
   const rows = group(st.seed);
   $("t-title").textContent = `지표 · 시드 ${st.seed}`;
-  let html = "<thead><tr><th title='인스턴스 id'>방법</th><th title='과정 기록을 뺀 생성 시간 (첫 컴파일은 미리 돌려 뺌)'>시간<br><span class='unit'>s</span></th>";
+  let html = "<thead><tr><th title='방법 id'>방법</th><th title='연산 과정 기록에 든 시간을 뺀 생성 시간입니다. 방법마다 처음 쓸 때 작은 땅으로 한 번 미리 돌려 준비 시간을 뺐습니다'>시간<br><span class='unit'>s</span></th>";
   for (const m of defs) {
     html += `<th title="${esc(m.help)}">${esc(m.label)}${m.unit ? `<br><span class="unit">${esc(m.unit)}</span>` : ""}</th>`;
   }
@@ -281,7 +281,7 @@ function stageLegend(s) {
   if (lg.swatches) {
     const names = { 1: "1", 2: "2", 3: "3" };
     return Object.entries(lg.swatches).map(([k, c]) => `<span class="sw"><i style="background:${esc(c)}"></i>${esc(names[k] || k)}</span>`).join("")
-      + '<span class="hint">회색 음영 = 최종 고도</span>';
+      + '<span class="hint">회색 음영은 최종 고도</span>';
   }
   if (lg.categorical) return '<span>번호마다 다른 색 (회색 = 없음)</span>';
   return "";
@@ -368,7 +368,7 @@ function showRun(run) {
   } else {
     prog.hidden = !running;
   }
-  const label = { idle: "", running: "실행 중", done: "끝났습니다", failed: "실패했습니다", cancelled: "멈췄습니다" };
+  const label = { idle: "", running: "비교를 돌리는 중", done: "끝났습니다", failed: "실패했습니다. 아래 기록의 마지막 줄에 까닭이 있습니다", cancelled: "멈췄습니다" };
   $("run-msg").textContent = label[run.status] ? `${label[run.status]}${run.name ? ` (${run.name})` : ""}` : "";
   $("run-msg").className = "msg" + (run.status === "failed" ? " error" : run.status === "done" ? " ok" : "");
   if (running && !st.runTimer) pollRun();

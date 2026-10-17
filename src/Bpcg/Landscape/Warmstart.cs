@@ -188,8 +188,8 @@ public static class Warmstart
         if (log is not null)
         {
             IEnumerable<string> parts = levels.Cast<OrderedDictionary<string, object?>>()
-                .Select(lv => $"{((List<object?>)lv["shape"]!)[0]}² 반복 {lv["iterations"]}");
-            log($"[2단계] 거친 격자 먼저: {string.Join(", ", parts)}, {seconds:F1} s");
+                .Select(lv => $"{((List<object?>)lv["shape"]!)[0]}² 칸 반복 {lv["iterations"]}번");
+            log($"[2단계] 거친 격자 먼저 풀기: {string.Join(", ", parts)}, {seconds:F1} s");
         }
         return (zInit, diag);
     }

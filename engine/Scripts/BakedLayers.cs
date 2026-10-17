@@ -37,16 +37,28 @@ public partial class BakedLayers : Node3D
 
     public static readonly LayerInfo[] Layers =
     [
-        new("terrain", "회랑 지형 (2 m)", true),
-        new("surround", "주변 지형 (25 m)", true),
-        new("water", "호수·강 수면", true),
-        new("water_table", "지하수면", true),
-        new("caves", "동굴", true),
-        new("section", "지층 단면", true),
-        new("entrance_holes", "동굴 입구 구멍", false),
+        new("terrain", "회랑 지형 (걷는 땅)", true,
+            "걸어 다니는 땅입니다. 자연색은 땅속 상자(4 × 4 × 2 m) 가운데 맨 위 상자의 색입니다\n"
+            + "(흙은 풀색, 강이 쌓은 모래·자갈은 모래색, 드러난 암석은 그 암석 색).\n"
+            + "높이 간격은 프로필의 corridor.voxel_m 입니다 (laptop 2 m, tiny 8 m)."),
+        new("surround", "주변 지형 (유역 전체)", true,
+            "히어로 유역 전체의 땅입니다. 회랑 자리는 비워 두어 더 고운 회랑 지형이 보입니다.\n"
+            + "높이 간격은 프로필의 hero.spacing_m 입니다 (laptop 25 m, tiny 100 m)."),
+        new("water", "호수·강 수면", true, "호수와 강의 물 높이를 반투명한 면으로 그립니다."),
+        new("water_table", "지하수면", true,
+            "땅속에서 물이 차 있는 높이(지하수면)를 반투명 하늘색 면으로 그립니다. 처음 켤 때 만듭니다."),
+        new("caves", "동굴", true,
+            "동굴 벽입니다. 벽의 앞면이 동굴 안쪽을 봐서, 땅속이나 단면에서 보면 동굴 속이 들여다보입니다.\n"
+            + "벽 색은 벽 뒤 암석의 색입니다."),
+        new("section", "지층 단면", true,
+            "단면 칼(X)이 자른 면에 땅속 암석을 칠합니다.\n"
+            + "지하수면 아래는 파랗고, 지하수면은 하늘색 선입니다. 깊이 10 m마다 가는 선, 50 m마다 굵은 선을 긋습니다."),
+        new("entrance_holes", "동굴 입구 구멍", false,
+            "땅 표면이 동굴의 빈 곳과 겹치는 자리에 구멍을 뚫어 동굴 입구를 보여 줍니다."),
         new("fractal_detail", "프랙탈 디테일", false,
-            "히어로 격자보다 짧은 파장(100 m 아래)의 거칠기를 굽기에서 이어 붙인 지표입니다.\n"
-            + "보기용이며 솔버 결과가 아닙니다. 끄면 기본 회랑 지표로 돌아갑니다."),
+            "히어로 유역 지도는 칸이 커서 50 m보다 짧은 잔 굴곡을 그리지 못합니다.\n"
+            + "그 잔 굴곡을 굽기에서 이어 붙인 지표입니다. 보기용 꾸밈이고 솔버(산과 강 모양을 푸는 계산)의 결과가 아닙니다.\n"
+            + "끄면 원래 회랑 지표로 돌아갑니다."),
     ];
 
     private static readonly Dictionary<string, LayerInfo> LayerById = Layers.ToDictionary(l => l.Id);

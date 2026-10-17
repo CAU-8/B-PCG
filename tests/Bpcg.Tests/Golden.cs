@@ -47,7 +47,7 @@ public sealed class GoldenCase
 /// <summary>
 /// golden 자료 읽기 (docs/csharp_port.md 7장). 찾는 순서는 BPCG_GOLDEN → &lt;OUT&gt;/golden → tests/golden/data 입니다.
 /// golden 은 포팅 때 Python 생성기가 만든 기준값이고, Python 생성기를 지운 뒤로는 다시 만들 수 없습니다.
-/// 큰 사례(out/golden)가 없으면 그 사례를 쓰는 시험은 실패합니다.
+/// 큰 사례(out/golden)가 없으면 그 사례를 쓰는 시험은 건너뜁니다(Assert.Skip). 커밋한 작은 사례가 없으면 실패합니다.
 /// </summary>
 public static class Golden
 {

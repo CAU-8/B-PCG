@@ -171,6 +171,7 @@ public static class UiScale
         {
             return "";
         }
-        return $"글자 크기 {Mathf.RoundToInt(UserFactor() * 100.0f)} % ([-] 작게, [=] 크게)";
+        return $"글자·패널 크기 {Mathf.RoundToInt(UserFactor() * 100.0f)} % ([-] 작게, [=] 크게, "
+            + $"{Mathf.RoundToInt(UserMin * 100.0f)}~{Mathf.RoundToInt(UserMax * 100.0f)} %, 다음 실행에도 씀)";
     }
 }
