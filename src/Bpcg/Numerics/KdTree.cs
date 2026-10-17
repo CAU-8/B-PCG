@@ -71,16 +71,77 @@ public sealed class KdTree
             }
         }
         int mid = (start + end) / 2;
-        Array.Sort(_idx, start, end - start, Comparer<int>.Create((x, y) =>
-        {
-            int c = _pts[(x * _dim) + axis].CompareTo(_pts[(y * _dim) + axis]);
-            return c != 0 ? c : x.CompareTo(y);
-        }));
+        // (축 값, 번호) 순서로 mid 번째만 제자리에 놓고 그 앞은 작은 쪽, 뒤는 큰 쪽으로 나눕니다. 구간 전체를 정렬하던 것과
+        // 가운데 원소·양쪽 집합이 같아 나무 모양이 같고, 검색 결과는 번호·거리 순으로 정하므로 잎 안의 순서와 상관없습니다.
+        SelectNth(start, end, mid, axis);
         double split = _pts[(_idx[mid] * _dim) + axis];
         int left = Build(start, mid);
         int right = Build(mid, end);
         _nodes[id] = new Node(start, end, axis, split, left, right);
         return id;
+    }
+
+    // (축 값, 번호) 순서: 값은 double.CompareTo 로 비교하고(정렬하던 때와 같은 규칙), 같으면 번호가 작은 쪽이 앞.
+    private bool Before(int x, int y, int axis)
+    {
+        int c = _pts[(x * _dim) + axis].CompareTo(_pts[(y * _dim) + axis]);
+        return c < 0 || (c == 0 && x < y);
+    }
+
+    // _idx[start..end) 에서 (축 값, 번호) 순서로 k 번째를 제자리에 놓습니다 (quickselect, 세 값의 가운데를 기준으로).
+    // 끝나면 [start, k) 는 k 번째보다 앞, (k, end) 는 뒤입니다.
+    private void SelectNth(int start, int end, int k, int axis)
+    {
+        int lo = start;
+        int hi = end - 1;
+        while (hi > lo)
+        {
+            int m = lo + ((hi - lo) >> 1);
+            if (Before(_idx[m], _idx[lo], axis))
+            {
+                (_idx[m], _idx[lo]) = (_idx[lo], _idx[m]);
+            }
+            if (Before(_idx[hi], _idx[lo], axis))
+            {
+                (_idx[hi], _idx[lo]) = (_idx[lo], _idx[hi]);
+            }
+            if (Before(_idx[hi], _idx[m], axis))
+            {
+                (_idx[hi], _idx[m]) = (_idx[m], _idx[hi]);
+            }
+            int pivot = _idx[m];
+            int i = lo;
+            int j = hi;
+            while (i <= j)
+            {
+                while (Before(_idx[i], pivot, axis))
+                {
+                    i++;
+                }
+                while (Before(pivot, _idx[j], axis))
+                {
+                    j--;
+                }
+                if (i <= j)
+                {
+                    (_idx[i], _idx[j]) = (_idx[j], _idx[i]);
+                    i++;
+                    j--;
+                }
+            }
+            if (k <= j)
+            {
+                hi = j;
+            }
+            else if (k >= i)
+            {
+                lo = i;
+            }
+            else
+            {
+                return;
+            }
+        }
     }
 
     private double Dist2(int i, ReadOnlySpan<double> q)

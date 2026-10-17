@@ -231,10 +231,12 @@ public static class Corridor
             double[] lin = NpGrid.Linspace(0, cand.Length - 1, MaxCandidates);
             cand = lin.Select(v => cand[(int)Math.Round(v)]).ToArray();
         }
-        (long, double, long)? bestKey = null;
-        Choice? best = null;
-        foreach (int a in cand)
+        // 후보마다 회랑 사각형과 (입구 수, 시작점과의 거리, 줄기 칸 수) 를 따로 구한 뒤, 후보 순서대로 가장 큰 것을 고릅니다.
+        // 후보끼리 서로 독립이라 병렬로 구해도 고르는 결과가 같습니다(같으면 앞 후보).
+        var evals = new (string Axis, double Sign, (double, double, double, double) Rect, double L, double Wd, long NEnt, long NStem)[cand.Length];
+        Parallelism.ForTasks(cand.Length, ci =>
         {
+            int a = cand[ci];
             int b = Math.Min(SciPy.SearchSorted(s, s[a] + length, false), np - 1);
             double vx = px[b] - px[a];
             double vy = py[b] - py[a];
@@ -275,14 +277,21 @@ public static class Corridor
             double sx = NpMath.PyMax(loX - xa, 0.0) - NpMath.PyMax(xb - hiX, 0.0);
             double sy = NpMath.PyMax(loY - ya, 0.0) - NpMath.PyMax(yb - hiY, 0.0);
             (double, double, double, double) rect = (xa + sx, xb + sx, ya + sy, yb + sy);
+            bool Inside(long c) => xc[c] >= rect.Item1 && xc[c] <= rect.Item2 && yc[c] >= rect.Item3 && yc[c] <= rect.Item4;
             long nEnt = 0;
-            bool[] inside = new bool[xc.Length];
             for (int c = 0; c < xc.Length; c++)
             {
-                inside[c] = xc[c] >= rect.Item1 && xc[c] <= rect.Item2 && yc[c] >= rect.Item3 && yc[c] <= rect.Item4;
-                nEnt += inside[c] && ent[c] ? 1 : 0;
+                nEnt += ent[c] && Inside(c) ? 1 : 0;
             }
-            long nStem = path.Count(c => inside[c]);
+            long nStem = path.Count(c => Inside(c));
+            evals[ci] = (axis, sign, rect, l, wd, nEnt, nStem);
+        });
+        (long, double, long)? bestKey = null;
+        Choice? best = null;
+        for (int ci = 0; ci < cand.Length; ci++)
+        {
+            int a = cand[ci];
+            (string axis, double sign, (double, double, double, double) rect, double l, double wd, long nEnt, long nStem) = evals[ci];
             (long, double, long) key = (nEnt, -Math.Abs(s[a] - s[p0]), nStem);
             if (bestKey is null || key.CompareTo(bestKey.Value) > 0)
             {

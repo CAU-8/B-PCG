@@ -143,7 +143,9 @@ public static class Water
         int[] nbr = graph.Nbr;
         const int nSlots = CellGraph.NSlots;
         int nChunks = Math.Max(1, Math.Min(Environment.ProcessorCount, m));
-        Parallelism.For(0, nChunks, ch =>
+        // 덩어리가 실행 수만큼뿐이라 Parallelism.For 로는 문턱(1,024) 아래라 한 줄로 돌았습니다. 덩어리마다 output 의
+        // 제 구간만 쓰므로 ForTasks 로 나눠 돌려도 결과가 같습니다.
+        Parallelism.ForTasks(nChunks, ch =>
         {
             int lo = (int)((long)ch * m / nChunks);
             int hi = (int)((long)(ch + 1) * m / nChunks);

@@ -681,56 +681,85 @@ public static class Mesh
         return new CaveMesh { Vertices = verts, Faces = fFinal, Normals = normals, Colors = rgba };
     }
 
-    // trimesh weighted_vertex_normals: 면 법선을 꼭짓점 각도로 가중해 더한 뒤 정규화
+    // trimesh weighted_vertex_normals: 면 법선을 꼭짓점 각도로 가중해 더한 뒤 정규화.
+    // 삼각형마다 (꼭짓점 셋의 각도 × 면 법선) 을 덩어리로 나눠 병렬로 구하고, 꼭짓점에 더하는 일은 삼각형 순서대로 한 줄로 합니다.
+    // 더하는 순서가 예전과 같아 값이 비트까지 같습니다.
+    private const int NormalChunkFaces = 1 << 18;
+
     private static double[] VertexNormals(double[] v, long[] f)
     {
         double[] acc = new double[v.Length];
-        Span<long> idx = stackalloc long[3];
-        Span<double> p = stackalloc double[9];
-        for (int t = 0; t < f.Length / 3; t++)
+        int nf = f.Length / 3;
+        int chunk = Math.Min(nf, NormalChunkFaces);
+        double[] contrib = new double[chunk * 9];
+        bool[] skip = new bool[chunk];
+        for (int t0 = 0; t0 < nf; t0 += NormalChunkFaces)
         {
-            idx[0] = f[t * 3];
-            idx[1] = f[(t * 3) + 1];
-            idx[2] = f[(t * 3) + 2];
-            for (int q = 0; q < 3; q++)
+            int len = Math.Min(NormalChunkFaces, nf - t0);
+            Parallelism.ForChunks(0, len, 4096, (lo, hi) =>
             {
-                v.AsSpan((int)(idx[q] * 3), 3).CopyTo(p[(q * 3)..]);
-            }
-            double ux = p[3] - p[0];
-            double uy = p[4] - p[1];
-            double uz = p[5] - p[2];
-            double wx = p[6] - p[0];
-            double wy = p[7] - p[1];
-            double wz = p[8] - p[2];
-            double nx = (uy * wz) - (uz * wy);
-            double ny = (uz * wx) - (ux * wz);
-            double nz = (ux * wy) - (uy * wx);
-            double nn = Math.Sqrt((nx * nx) + (ny * ny) + (nz * nz));
-            if (nn == 0)
+                Span<double> p = stackalloc double[9];
+                for (int k = lo; k < hi; k++)
+                {
+                    int t = t0 + k;
+                    for (int q = 0; q < 3; q++)
+                    {
+                        v.AsSpan((int)(f[(t * 3) + q] * 3), 3).CopyTo(p[(q * 3)..]);
+                    }
+                    double ux = p[3] - p[0];
+                    double uy = p[4] - p[1];
+                    double uz = p[5] - p[2];
+                    double wx = p[6] - p[0];
+                    double wy = p[7] - p[1];
+                    double wz = p[8] - p[2];
+                    double nx = (uy * wz) - (uz * wy);
+                    double ny = (uz * wx) - (ux * wz);
+                    double nz = (ux * wy) - (uy * wx);
+                    double nn = Math.Sqrt((nx * nx) + (ny * ny) + (nz * nz));
+                    if (nn == 0)
+                    {
+                        skip[k] = true;
+                        continue;
+                    }
+                    skip[k] = false;
+                    nx /= nn;
+                    ny /= nn;
+                    nz /= nn;
+                    for (int q = 0; q < 3; q++)
+                    {
+                        int a = q * 3;
+                        int b = ((q + 1) % 3) * 3;
+                        int c = ((q + 2) % 3) * 3;
+                        double e1x = p[b] - p[a];
+                        double e1y = p[b + 1] - p[a + 1];
+                        double e1z = p[b + 2] - p[a + 2];
+                        double e2x = p[c] - p[a];
+                        double e2y = p[c + 1] - p[a + 1];
+                        double e2z = p[c + 2] - p[a + 2];
+                        double l1 = Math.Sqrt((e1x * e1x) + (e1y * e1y) + (e1z * e1z));
+                        double l2 = Math.Sqrt((e2x * e2x) + (e2y * e2y) + (e2z * e2z));
+                        double cos = l1 > 0 && l2 > 0 ? Numerics.NpMath.Clip(((e1x * e2x) + (e1y * e2y) + (e1z * e2z)) / (l1 * l2), -1.0, 1.0) : 1.0;
+                        double ang = Math.Acos(cos);
+                        contrib[(k * 9) + a] = nx * ang;
+                        contrib[(k * 9) + a + 1] = ny * ang;
+                        contrib[(k * 9) + a + 2] = nz * ang;
+                    }
+                }
+            });
+            for (int k = 0; k < len; k++)
             {
-                continue;
-            }
-            nx /= nn;
-            ny /= nn;
-            nz /= nn;
-            for (int q = 0; q < 3; q++)
-            {
-                int a = q * 3;
-                int b = ((q + 1) % 3) * 3;
-                int c = ((q + 2) % 3) * 3;
-                double e1x = p[b] - p[a];
-                double e1y = p[b + 1] - p[a + 1];
-                double e1z = p[b + 2] - p[a + 2];
-                double e2x = p[c] - p[a];
-                double e2y = p[c + 1] - p[a + 1];
-                double e2z = p[c + 2] - p[a + 2];
-                double l1 = Math.Sqrt((e1x * e1x) + (e1y * e1y) + (e1z * e1z));
-                double l2 = Math.Sqrt((e2x * e2x) + (e2y * e2y) + (e2z * e2z));
-                double cos = l1 > 0 && l2 > 0 ? Numerics.NpMath.Clip(((e1x * e2x) + (e1y * e2y) + (e1z * e2z)) / (l1 * l2), -1.0, 1.0) : 1.0;
-                double ang = Math.Acos(cos);
-                acc[idx[q] * 3] += nx * ang;
-                acc[(idx[q] * 3) + 1] += ny * ang;
-                acc[(idx[q] * 3) + 2] += nz * ang;
+                if (skip[k])
+                {
+                    continue;
+                }
+                int t = t0 + k;
+                for (int q = 0; q < 3; q++)
+                {
+                    long vi = f[(t * 3) + q] * 3;
+                    acc[vi] += contrib[(k * 9) + (q * 3)];
+                    acc[vi + 1] += contrib[(k * 9) + (q * 3) + 1];
+                    acc[vi + 2] += contrib[(k * 9) + (q * 3) + 2];
+                }
             }
         }
         for (int i = 0; i < acc.Length / 3; i++)

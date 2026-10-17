@@ -56,6 +56,11 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
         {
             return a;
         }
+        Array? fast = CastFast(a, t);
+        if (fast is not null)
+        {
+            return fast;
+        }
         int n = a.Length;
         Array o = Array.CreateInstance(t, n);
         for (int i = 0; i < n; i++)
@@ -64,6 +69,88 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
             o.SetValue(ConvertScalar(v, t), i);
         }
         return o;
+    }
+
+    // 기본 수 형끼리는 원소마다 상자(GetValue·SetValue)를 만들지 않고 바꿉니다. 값은 ConvertScalar 와 같습니다:
+    // 실수 → 정수는 0 쪽으로 자르고(유한하지 않으면 long.MinValue) 감싸고, 불리언은 0/1, 정수는 long 을 거쳐 감쌉니다.
+    private static Array? CastFast(Array a, Type t) => a switch
+    {
+        double[] d => FromReal(d.Length, i => d[i], t, i => d[i] != 0.0),
+        float[] f => FromReal(f.Length, i => f[i], t, i => f[i] != 0.0f),
+        bool[] b => FromInteger(b.Length, i => b[i] ? 1L : 0L, t),
+        byte[] x => FromInteger(x.Length, i => x[i], t),
+        sbyte[] x => FromInteger(x.Length, i => x[i], t),
+        short[] x => FromInteger(x.Length, i => x[i], t),
+        ushort[] x => FromInteger(x.Length, i => x[i], t),
+        int[] x => FromInteger(x.Length, i => x[i], t),
+        uint[] x => FromInteger(x.Length, i => x[i], t),
+        long[] x => FromInteger(x.Length, i => x[i], t),
+        ulong[] x => FromInteger(x.Length, i => unchecked((long)x[i]), t),
+        _ => null,
+    };
+
+    private static Array? FromReal(int n, Func<int, double> get, Type t, Func<int, bool> nonZero)
+    {
+        if (t == typeof(bool))
+        {
+            bool[] o = new bool[n];
+            for (int i = 0; i < n; i++)
+            {
+                o[i] = nonZero(i);
+            }
+            return o;
+        }
+        if (t == typeof(double))
+        {
+            double[] o = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                o[i] = get(i);
+            }
+            return o;
+        }
+        if (t == typeof(float))
+        {
+            float[] o = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                o[i] = (float)get(i);
+            }
+            return o;
+        }
+        return FromInteger(n, i =>
+        {
+            double d = get(i);
+            return double.IsFinite(d) ? (long)Math.Truncate(d) : long.MinValue;
+        }, t);
+    }
+
+    private static Array? FromInteger(int n, Func<int, long> get, Type t)
+    {
+        static T[] Fill<T>(int n, Func<int, T> f)
+        {
+            T[] o = new T[n];
+            for (int i = 0; i < n; i++)
+            {
+                o[i] = f(i);
+            }
+            return o;
+        }
+        return unchecked(t switch
+        {
+            Type u when u == typeof(bool) => Fill(n, i => get(i) != 0),
+            Type u when u == typeof(double) => Fill(n, i => (double)get(i)),
+            Type u when u == typeof(float) => Fill(n, i => (float)get(i)),
+            Type u when u == typeof(long) => Fill(n, get),
+            Type u when u == typeof(int) => Fill(n, i => (int)get(i)),
+            Type u when u == typeof(short) => Fill(n, i => (short)get(i)),
+            Type u when u == typeof(sbyte) => Fill(n, i => (sbyte)get(i)),
+            Type u when u == typeof(byte) => Fill(n, i => (byte)get(i)),
+            Type u when u == typeof(ushort) => Fill(n, i => (ushort)get(i)),
+            Type u when u == typeof(uint) => Fill(n, i => (uint)get(i)),
+            Type u when u == typeof(ulong) => Fill(n, i => (ulong)get(i)),
+            _ => (Array?)null,
+        });
     }
 
     private static object ConvertScalar(object v, Type t)
