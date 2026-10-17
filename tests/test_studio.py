@@ -976,7 +976,13 @@ def _raw_post(port: int, path: str, body: bytes, headers: dict) -> tuple[int, di
             conn.putheader(k, v)
         conn.endheaders()
         conn.send(body)
-        conn.sock.shutdown(1)  # 쓰기 끝 (Content-Length 가 음수여도 서버가 끝없이 기다리지 않게)
+        # 쓰기 끝 (Content-Length 가 음수여도 서버가 끝없이 기다리지 않게)
+        try:
+            conn.sock.shutdown(1)
+        except OSError:
+            # 서버가 본문을 읽지 않고 400 으로 답한 뒤 닫으면 RST 가 먼저 올 수 있습니다. macOS 는
+            # 그때 ENOTCONN 을 내지만, 받아 둔 응답은 그대로 읽힙니다 (socketserver 도 같이 넘김).
+            pass
         r = conn.getresponse()
         return r.status, json.loads(r.read().decode("utf-8"))
     finally:
