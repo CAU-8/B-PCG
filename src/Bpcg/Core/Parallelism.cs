@@ -116,6 +116,43 @@ public static class Parallelism
         Parallel.For(0, chunks, options, RunChunk);
     }
 
+    /// <summary>
+    /// 무거운 독립 작업 count 개를 병렬로 돌립니다 (작업 번호 0..count−1). <see cref="For"/> 와 달리 작업 수 문턱이 없어
+    /// 수백 개의 큰 작업(굽기 조각 등)도 나눠 돌고, 작업 안에서 부르는 병렬 커널은 중첩으로 보아 직렬로 돕니다.
+    /// 작업마다 결과를 따로 두고 번호 순서대로 합치면 결과가 실행 수와 상관없이 같습니다.
+    /// </summary>
+    public static void ForTasks(int count, Action<int> body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        int? degree = Degree.Value;
+        if (degree == 1 || Nesting.Value > 0 || count <= 1)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                body(i);
+            }
+            return;
+        }
+        var options = new ParallelOptions();
+        if (degree is int max)
+        {
+            options.MaxDegreeOfParallelism = max;
+        }
+        Parallel.For(0, count, options, i =>
+        {
+            int previous = Nesting.Value;
+            Nesting.Value = previous + 1;
+            try
+            {
+                body(i);
+            }
+            finally
+            {
+                Nesting.Value = previous;
+            }
+        });
+    }
+
     /// <summary>독립 항목을 결정적인 쓰기 구역으로 나눠 처리합니다.</summary>
     public static void ForEach<T>(System.Collections.Generic.IEnumerable<T> source, Action<T> body)
     {
