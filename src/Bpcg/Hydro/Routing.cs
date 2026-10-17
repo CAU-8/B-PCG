@@ -13,112 +13,92 @@ namespace Bpcg.Hydro;
 /// </remarks>
 public static class Routing
 {
+    /// <summary>
+    /// 한 칸의 D8 수신 셀 (_d8_kernel 의 칸 몸체). hasPrev 면 p 는 지난 반복의 수신 셀이고, 히스테리시스를 적용합니다.
+    /// slope 는 고른 수신 셀까지의 경사 [m/m] (출구·낮은 이웃이 없는 칸은 0).
+    /// </summary>
+    private static long CellReceiver(
+        int c, double[] zt, int[] nbr, int nSlot, double[] dist, bool[] isOutlet, bool hasPrev, long p, double eta,
+        out double slope)
+    {
+        slope = 0.0;
+        if (isOutlet[c])
+        {
+            return c;
+        }
+        double zc = zt[c];
+        long best = -1;
+        double bestS = 0.0;
+        for (int s = 0; s < nSlot; s++)
+        {
+            int k = nbr[(c * nSlot) + s];
+            if (k < 0)
+            {
+                continue;
+            }
+            double zk = zt[k];
+            if (zk < zc)
+            {
+                double d = dist[(c * nSlot) + s];
+                if (d == 0.0)
+                {
+                    throw new DivideByZeroException("float division by zero");
+                }
+                double sl = (zc - zk) / d;
+                // 같은 경사면 셀 번호가 작은 이웃 (결정성)
+                if (best < 0 || sl > bestS || (sl == bestS && k < best))
+                {
+                    best = k;
+                    bestS = sl;
+                }
+            }
+        }
+        if (best < 0)
+        {
+            // 낮은 이웃이 없는 칸(채우지 않은 고도의 웅덩이 바닥)은 자기 자신을 가리킵니다.
+            return c;
+        }
+        if (hasPrev && p != best && p != c)
+        {
+            // 가이드 4장 히스테리시스: 옛 수신 셀이 아직 확실히 낮은 이웃이면,
+            // 새 경사가 (1+η)배보다 클 때만 바꿉니다.
+            for (int s = 0; s < nSlot; s++)
+            {
+                if (nbr[(c * nSlot) + s] == p)
+                {
+                    double zp = zt[p];
+                    if (zp < zc)
+                    {
+                        double sp = (zc - zp) / dist[(c * nSlot) + s];
+                        if (!(bestS > (1.0 + eta) * sp))
+                        {
+                            best = p;
+                            bestS = sp;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        slope = bestS;
+        return best;
+    }
+
     /// <summary>D8 커널 (_d8_kernel). prev 와 다른 칸 수를 돌려줍니다(prev 가 없으면 N).</summary>
     internal static int D8Kernel(
         double[] zt, int[] nbr, int nSlot, double[] dist, bool[] isOutlet, long[]? prev, double eta,
-        long[] rcv, double[]? slope, bool parallel = false)
+        long[] rcv, double[]? slope)
     {
         int n = zt.Length;
         bool hasPrev = prev is not null;
-        void ComputeCell(int c)
+        for (int c = 0; c < n; c++)
         {
-            if (isOutlet[c])
+            rcv[c] = CellReceiver(c, zt, nbr, nSlot, dist, isOutlet, hasPrev, hasPrev ? prev![c] : -1, eta, out double s);
+            if (slope is not null)
             {
-                rcv[c] = c;
-                if (slope is not null)
-                {
-                    slope[c] = 0.0;
-                }
-            }
-            else
-            {
-                double zc = zt[c];
-                long best = -1;
-                double bestS = 0.0;
-                for (int s = 0; s < nSlot; s++)
-                {
-                    int k = nbr[(c * nSlot) + s];
-                    if (k < 0)
-                    {
-                        continue;
-                    }
-                    double zk = zt[k];
-                    if (zk < zc)
-                    {
-                        double d = dist[(c * nSlot) + s];
-                        if (d == 0.0)
-                        {
-                            throw new DivideByZeroException("float division by zero");
-                        }
-                        double sl = (zc - zk) / d;
-                        // 같은 경사면 셀 번호가 작은 이웃 (결정성)
-                        if (best < 0 || sl > bestS || (sl == bestS && k < best))
-                        {
-                            best = k;
-                            bestS = sl;
-                        }
-                    }
-                }
-                if (best < 0)
-                {
-                    // 낮은 이웃이 없는 칸(채우지 않은 고도의 웅덩이 바닥)은 자기 자신을 가리킵니다.
-                    rcv[c] = c;
-                    if (slope is not null)
-                    {
-                        slope[c] = 0.0;
-                    }
-                }
-                else
-                {
-                    if (hasPrev)
-                    {
-                        long p = prev![c];
-                        if (p != best && p != c)
-                        {
-                            // 가이드 4장 히스테리시스: 옛 수신 셀이 아직 확실히 낮은 이웃이면,
-                            // 새 경사가 (1+η)배보다 클 때만 바꿉니다.
-                            for (int s = 0; s < nSlot; s++)
-                            {
-                                if (nbr[(c * nSlot) + s] == p)
-                                {
-                                    double zp = zt[p];
-                                    if (zp < zc)
-                                    {
-                                        double sp = (zc - zp) / dist[(c * nSlot) + s];
-                                        if (!(bestS > (1.0 + eta) * sp))
-                                        {
-                                            best = p;
-                                            bestS = sp;
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    rcv[c] = best;
-                    if (slope is not null)
-                    {
-                        slope[c] = bestS;
-                    }
-                }
+                slope[c] = s;
             }
         }
-
-        if (parallel && n >= 16_384)
-        {
-            Parallelism.For(0, n, ComputeCell);
-        }
-        else
-        {
-            for (int c = 0; c < n; c++)
-            {
-                ComputeCell(c);
-            }
-        }
-
-        // Count in cell order after the independent writes; this avoids a shared counter and
-        // keeps the reduction deterministic for every degree of parallelism.
         int nChanged = n;
         if (hasPrev)
         {
@@ -134,14 +114,45 @@ public static class Routing
         return nChanged;
     }
 
-    /// <summary>기여 셀 CSR (_donor_csr_kernel): donors[start[c]..start[c+1]) 가 c 로 물을 보내는 칸(번호 오름차순).</summary>
-    internal static (long[] Start, long[] Donors) DonorCsrKernel(long[] rcv)
+    /// <summary>
+    /// solver 전용 D8: 검증된 그래프에서 칸 덩어리마다 병렬로 rcv 버퍼에 씁니다(int 색인). 칸마다 결과가 독립이라
+    /// 덩어리 나눔과 상관없이 <see cref="D8Kernel"/> 과 같은 수신 셀이 나옵니다. 바뀐 칸 수는 세지 않습니다.
+    /// </summary>
+    internal static void D8IntoTrusted(double[] zt, int[] nbr, double[] dist, bool[] isOutlet, int[]? prev, double eta, int[] rcv)
+    {
+        int n = zt.Length;
+        foreach (double value in zt)
+        {
+            if (!double.IsFinite(value))
+            {
+                throw new ArgumentException("zt 에 NaN 이나 무한대가 있습니다");
+            }
+        }
+        int nSlot = n == 0 ? 0 : nbr.Length / n;
+        bool hasPrev = prev is not null;
+        Parallelism.ForChunks(0, n, D8ChunkCells, (start, end) =>
+        {
+            for (int c = start; c < end; c++)
+            {
+                rcv[c] = (int)CellReceiver(c, zt, nbr, nSlot, dist, isOutlet, hasPrev, hasPrev ? prev![c] : -1, eta, out _);
+            }
+        });
+    }
+
+    // 덩어리 하나의 칸 수: laptop 행성·히어로(약 160만 칸)에서 16K–64K 칸이 가장 빨랐습니다.
+    private const int D8ChunkCells = 16_384;
+
+    /// <summary>
+    /// 기여 셀 CSR (_donor_csr_kernel) 을 주어진 버퍼에 만듭니다: donors[start[c]..start[c+1]) 가 c 로 물을 보내는 칸(번호 오름차순).
+    /// start (N+1,), donors·fill (N,) (donors 는 앞쪽 start[N] 칸만 씀, fill 은 작업용).
+    /// </summary>
+    internal static void DonorCsrInto(int[] rcv, int[] start, int[] donors, int[] fill)
     {
         int n = rcv.Length;
-        long[] start = new long[n + 1];
+        Array.Clear(start);
         for (int c = 0; c < n; c++)
         {
-            long r = rcv[c];
+            int r = rcv[c];
             if (r != c)
             {
                 start[r + 1] += 1;
@@ -151,26 +162,23 @@ public static class Routing
         {
             start[c + 1] += start[c];
         }
-        long[] donors = new long[start[n]];
-        long[] fill = new long[n];
         Array.Copy(start, fill, n);
         for (int c = 0; c < n; c++)
         {
-            long r = rcv[c];
+            int r = rcv[c];
             if (r != c)
             {
                 donors[fill[r]] = c;
                 fill[r] += 1;
             }
         }
-        return (start, donors);
     }
 
     /// <summary>
     /// 출구(자기 자신을 가리키는 칸)를 먼저 모두 적고, 출구마다 기여 셀을 깊이 우선으로 적습니다 (_topo_kernel).
-    /// 채운 칸 수를 돌려줍니다.
+    /// stack·order 는 (N,) 버퍼. 채운 칸 수를 돌려주고, nRoot 에 출구 수를 줍니다.
     /// </summary>
-    internal static int TopoKernel(long[] rcv, long[] start, long[] donors, long[] order)
+    internal static int TopoInto(int[] rcv, int[] start, int[] donors, int[] stack, int[] order, out int nRoot)
     {
         int n = rcv.Length;
         int m = 0;
@@ -182,13 +190,12 @@ public static class Routing
                 m++;
             }
         }
-        int nRoot = m;
-        long[] stack = new long[n];
+        nRoot = m;
         for (int q = 0; q < nRoot; q++)
         {
-            long root = order[q];
+            int root = order[q];
             int sp = 0;
-            for (long t = start[root + 1] - 1; t > start[root] - 1; t--)
+            for (int t = start[root + 1] - 1; t > start[root] - 1; t--)
             {
                 stack[sp] = donors[t];
                 sp++;
@@ -196,11 +203,11 @@ public static class Routing
             while (sp > 0)
             {
                 sp--;
-                long c = stack[sp];
+                int c = stack[sp];
                 order[m] = c;
                 m++;
                 // 번호가 작은 기여 셀을 먼저 꺼내도록 거꾸로 넣습니다.
-                for (long t = start[c + 1] - 1; t > start[c] - 1; t--)
+                for (int t = start[c + 1] - 1; t > start[c] - 1; t--)
                 {
                     stack[sp] = donors[t];
                     sp++;
@@ -208,6 +215,37 @@ public static class Routing
             }
         }
         return m;
+    }
+
+    /// <summary>기여 셀 CSR (_donor_csr_kernel, long 입출력). 셀 번호는 <see cref="CheckRcv"/> 를 통과해야 합니다.</summary>
+    internal static (long[] Start, long[] Donors) DonorCsrKernel(long[] rcv)
+    {
+        int n = rcv.Length;
+        int[] r = ToInt(rcv);
+        int[] start = new int[n + 1];
+        int[] donors = new int[n];
+        DonorCsrInto(r, start, donors, new int[n]);
+        return (ToLong(start, n + 1), ToLong(donors, start[n]));
+    }
+
+    private static int[] ToInt(long[] a)
+    {
+        int[] o = new int[a.Length];
+        for (int i = 0; i < a.Length; i++)
+        {
+            o[i] = (int)a[i];
+        }
+        return o;
+    }
+
+    private static long[] ToLong(int[] a, int length)
+    {
+        long[] o = new long[length];
+        for (int i = 0; i < length; i++)
+        {
+            o[i] = a[i];
+        }
+        return o;
     }
 
     /// <summary>수신 셀 검사 (_check_rcv).</summary>
@@ -276,24 +314,6 @@ public static class Routing
         return (rcv, slope, nChanged);
     }
 
-    /// <summary>이미 검증된 그래프와 solver 소유 배열에 대한 D8 경로. 미사용 slope 배열을 할당하지 않습니다.</summary>
-    internal static (long[] Rcv, int NChanged) D8ReceiversTrusted(
-        double[] zt, int[] nbr, double[] dist, bool[] isOutlet, long[]? prev, double eta)
-    {
-        int n = zt.Length;
-        foreach (double value in zt)
-        {
-            if (!double.IsFinite(value))
-            {
-                throw new ArgumentException("zt 에 NaN 이나 무한대가 있습니다");
-            }
-        }
-        long[] rcv = new long[n];
-        int nSlot = n == 0 ? 0 : nbr.Length / n;
-        int nChanged = D8Kernel(zt, nbr, nSlot, dist, isOutlet, prev, eta, rcv, null, parallel: true);
-        return (rcv, nChanged);
-    }
-
     /// <summary>기여 셀 목록 CSR (donor_lists): (start (N+1,), donors (M,)).</summary>
     public static (long[] Start, long[] Donors) DonorLists(long[] rcv)
     {
@@ -312,28 +332,20 @@ public static class Routing
         return TopoOrderTrusted(rcv);
     }
 
-    /// <summary>solver가 생성한 receiver에 대해 전체 범위 검사를 생략하는 내부 경로.</summary>
+    /// <summary>범위 검사를 통과한 receiver 의 위상 순서 (int 커널을 쓰고 long 으로 돌려줌).</summary>
     internal static long[] TopoOrderTrusted(long[] rcv)
     {
-        (long[] start, long[] donors) = DonorCsrKernel(rcv);
-        return TopoOrderTrusted(rcv, start, donors);
-    }
-
-    /// <summary>Topology order while retaining the CSR donor lists for dependency-aware solver passes.</summary>
-    internal static long[] TopoOrderTrusted(long[] rcv, out long[] start, out long[] donors)
-    {
-        (start, donors) = DonorCsrKernel(rcv);
-        return TopoOrderTrusted(rcv, start, donors);
-    }
-
-    private static long[] TopoOrderTrusted(long[] rcv, long[] start, long[] donors)
-    {
-        long[] order = new long[rcv.Length];
-        int m = TopoKernel(rcv, start, donors, order);
-        if (m != rcv.Length)
+        int n = rcv.Length;
+        int[] r = ToInt(rcv);
+        int[] start = new int[n + 1];
+        int[] donors = new int[n];
+        int[] order = new int[n];
+        DonorCsrInto(r, start, donors, new int[n]);
+        int m = TopoInto(r, start, donors, new int[n], order, out _);
+        if (m != n)
         {
-            throw new ArgumentException($"수신 셀에 순환이 있어 출구에 닿지 않는 칸이 {rcv.Length - m}개 있습니다");
+            throw new ArgumentException($"수신 셀에 순환이 있어 출구에 닿지 않는 칸이 {n - m}개 있습니다");
         }
-        return order;
+        return ToLong(order, n);
     }
 }

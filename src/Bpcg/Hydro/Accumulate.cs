@@ -25,14 +25,42 @@ public static class AccumulateModule
         }
     }
 
-    /// <summary>
-    /// Solver 전용 누적: Solve 시작 때 입력 모양을 확인했고 receiver/order 는 내부 커널이 만들었으므로
-    /// 검증 배열을 반복 생성하지 않고 기존 버퍼에 가중치를 복사해 누적합니다.
-    /// </summary>
-    internal static void AccumulateIntoTrusted(long[] rcv, long[] order, double[] weight, double[] acc)
+    /// <summary><see cref="AccumulateKernel(long[], long[], double[])"/> 의 int 색인 판 (solver 내부 배열용).</summary>
+    internal static void AccumulateKernel(int[] rcv, int[] order, double[] acc)
     {
-        Array.Copy(weight, acc, weight.Length);
-        AccumulateKernel(rcv, order, acc);
+        for (int q = order.Length - 1; q >= 0; q--)
+        {
+            int c = order[q];
+            int r = rcv[c];
+            if (r != c)
+            {
+                acc[r] += acc[c];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Solver 전용 누적: 가중치 세 개를 기존 버퍼에 복사해 한 번의 역순 순회로 함께 누적합니다.
+    /// 필드마다 더하는 순서는 <see cref="AccumulateKernel(int[], int[], double[])"/> 를 세 번 부른 것과 같아 결과가
+    /// 비트까지 같고, 순서·수신 셀은 한 번만 읽으며 서로 독립인 덧셈 사슬 셋이 함께 돕니다.
+    /// </summary>
+    internal static void Accumulate3IntoTrusted(int[] rcv, int[] order,
+        double[] w1, double[] a1, double[] w2, double[] a2, double[] w3, double[] a3)
+    {
+        Array.Copy(w1, a1, w1.Length);
+        Array.Copy(w2, a2, w2.Length);
+        Array.Copy(w3, a3, w3.Length);
+        for (int q = order.Length - 1; q >= 0; q--)
+        {
+            int c = order[q];
+            int r = rcv[c];
+            if (r != c)
+            {
+                a1[r] += a1[c];
+                a2[r] += a2[c];
+                a3[r] += a3[c];
+            }
+        }
     }
 
     private static void CheckOrder(long[] order, int n)
