@@ -23,13 +23,14 @@ public static class Relief
         }
         double inv = 1.0 / theta;
         double[] o = new double[kS.Length];
-        for (int c = 0; c < o.Length; c++)
+        // 칸마다 자기 값만 쓰므로 나눠 돌려도 결과가 같습니다.
+        Parallelism.For(0, o.Length, c =>
         {
             if (kS[c] > 0.0 && sCrit[c] > 0.0 && runoffEff[c] > 0.0)
             {
                 o[c] = NpMath.Power(kS[c] / sCrit[c], inv) / runoffEff[c];
             }
-        }
+        });
         return o;
     }
 
@@ -45,13 +46,14 @@ public static class Relief
         }
         double invH = 1.0 / h;
         double[] o = new double[kS.Length];
-        for (int c = 0; c < o.Length; c++)
+        // 칸마다 사다리꼴 적분(지수·거듭제곱 약 64번)을 따로 하므로 나눠 돌려도 결과가 같습니다.
+        Parallelism.For(0, o.Length, c =>
         {
             bool ok = aStar[c] > 1.0 && aStar[c] < cellArea[c] && kS[c] > 0.0 && runoffEff[c] > 0.0
                 && double.IsFinite(aStar[c]) && double.IsFinite(kS[c]);
             if (!ok)
             {
-                continue;
+                return;
             }
             double ks = kS[c];
             double r = runoffEff[c];
@@ -72,7 +74,7 @@ public static class Relief
                 gPrev = gK;
             }
             o[c] = total;
-        }
+        });
         return o;
     }
 

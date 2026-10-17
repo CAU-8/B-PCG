@@ -933,8 +933,11 @@ public sealed class HeroVolume
         return (oL, oHw, oD, oZq, oLev);
     }
 
-    /// <summary>수평 위치 (x, y) 마다 높이와 상관없는 값들 (columns).</summary>
-    public ColumnValues Columns(double[] x, double[] y)
+    /// <summary>
+    /// 수평 위치 (x, y) 마다 높이와 상관없는 값들 (columns). withCaveDistance 가 거짓이면 동굴 거리(NuDist, 수준마다 잡음)를
+    /// 계산하지 않고 빈 배열로 둡니다. 동굴 거리는 d_cave 와 그것을 쓰는 d·material·water 에만 들어갑니다.
+    /// </summary>
+    public ColumnValues Columns(double[] x, double[] y, bool withCaveDistance = true)
     {
         if (x.Length != y.Length)
         {
@@ -989,8 +992,8 @@ public sealed class HeroVolume
             alluv[c] = Bl(Alluvium);
             zgw[c] = Bl(ZGwMap);
             lakeDist[c] = Bl(LakeDist);
-            int[] corner = [c00, c10, c01, c11];
-            double[] wq = [w00, w10, w01, w11];
+            Span<int> corner = [c00, c10, c01, c11];
+            Span<double> wq = [w00, w10, w01, w11];
             double ws = 0.0;
             double acc = 0.0;
             for (int q = 0; q < 4; q++)
@@ -1064,16 +1067,35 @@ public sealed class HeroVolume
             waterDist[c] = Math.Min(lakeDist[c], riverGap);
             m[c] = Smoothstep01((waterDist[c] - WaterCalmM) / WaterCalmM);
         }
-        double[] nu = Enumerable.Repeat(FarM, cN * kN).ToArray();
-        for (int k = 0; k < kN; k++)
+        double[] nu = withCaveDistance ? new double[cN * kN] : [];
+        if (withCaveDistance)
         {
-            int[] sel = Enumerable.Range(0, cN).Where(c => caveW[(c * kN) + k] > 0).ToArray();
-            if (sel.Length > 0)
+            Array.Fill(nu, FarM);
+            var sel = new List<int>();
+            for (int k = 0; k < kN; k++)
             {
-                double[] dist = CaveDistance(sel.Select(c => x[c]).ToArray(), sel.Select(c => y[c]).ToArray(), k);
-                for (int q = 0; q < sel.Length; q++)
+                sel.Clear();
+                for (int c = 0; c < cN; c++)
                 {
-                    nu[(sel[q] * kN) + k] = dist[q];
+                    if (caveW[(c * kN) + k] > 0)
+                    {
+                        sel.Add(c);
+                    }
+                }
+                if (sel.Count > 0)
+                {
+                    double[] sx = new double[sel.Count];
+                    double[] sy = new double[sel.Count];
+                    for (int q = 0; q < sel.Count; q++)
+                    {
+                        sx[q] = x[sel[q]];
+                        sy[q] = y[sel[q]];
+                    }
+                    double[] dist = CaveDistance(sx, sy, k);
+                    for (int q = 0; q < sel.Count; q++)
+                    {
+                        nu[(sel[q] * kN) + k] = dist[q];
+                    }
                 }
             }
         }
@@ -1392,7 +1414,7 @@ public sealed class HeroVolume
         int mN = pts.Length / 3;
         if (mN == 0)
         {
-            return EvaluateCore(Columns([], []), [], [], [], [], 0.0, need);
+            return EvaluateCore(Columns([], [], NeedsCaveDistance(need)), [], [], [], [], 0.0, need);
         }
         VolumeEval? whole = null;
         for (int s = 0; s < mN; s += ChunkPoints)
@@ -1408,7 +1430,7 @@ public sealed class HeroVolume
                 py[i] = pts[((s + i) * 3) + 1];
                 pz[i] = pts[((s + i) * 3) + 2];
             }
-            ColumnValues cols = Columns(px, py);
+            ColumnValues cols = Columns(px, py, NeedsCaveDistance(need));
             long[] col = new long[len];
             for (int i = 0; i < len; i++)
             {
@@ -1501,7 +1523,7 @@ public sealed class HeroVolume
         {
             int e = Math.Min(s + step, cN);
             int len = e - s;
-            ColumnValues cols = Columns(x[s..e], y[s..e]);
+            ColumnValues cols = Columns(x[s..e], y[s..e], NeedsCaveDistance(need));
             long[] col = new long[len * zCount];
             double[] px = new double[len * zCount];
             double[] py = new double[len * zCount];
@@ -1556,7 +1578,7 @@ public sealed class HeroVolume
 
     private double[] SurfaceHeightCore(double[] x, double[] y)
     {
-        ColumnValues cols = Columns(x, y);
+        ColumnValues cols = Columns(x, y, withCaveDistance: false);
         double[] h = (double[])cols.ZSurface.Clone();
         int[] noisy = Enumerable.Range(0, x.Length).Where(c => cols.M[c] > 0).ToArray();
         if (_amp > 0 && noisy.Length > 0)
@@ -1629,7 +1651,7 @@ public sealed class HeroVolume
     /// <summary>물 규칙에 쓰는 지상 수면 h_w (water_surface). 없으면 NaN.</summary>
     public double[] WaterSurface(double[] x, double[] y) => ByChunks((xx, yy) =>
     {
-        ColumnValues cols = Columns(xx, yy);
+        ColumnValues cols = Columns(xx, yy, withCaveDistance: false);
         double[] o = new double[xx.Length];
         for (int c = 0; c < o.Length; c++)
         {
@@ -1640,5 +1662,47 @@ public sealed class HeroVolume
     }, x, y);
 
     /// <summary>지하수면 z_gw (water_table, 쌍선형 보간).</summary>
-    public double[] WaterTable(double[] x, double[] y) => ByChunks((xx, yy) => Columns(xx, yy).ZGw, x, y);
+    public double[] WaterTable(double[] x, double[] y)
+    {
+        if (x.Length != y.Length)
+        {
+            throw new ArgumentException($"x, y 는 같은 (C,) 모양이어야 합니다: ({x.Length},) ({y.Length},)");
+        }
+        for (int i = 0; i < x.Length; i++)
+        {
+            if (!double.IsFinite(x[i]) || !double.IsFinite(y[i]))
+            {
+                throw new ArgumentException("x, y 에 NaN 이나 inf 가 있습니다");
+            }
+        }
+        // Columns 의 zgw 와 같은 쌍선형 식입니다. 강·동굴·층 값은 필요 없어 계산하지 않습니다.
+        int nx = Nx;
+        int ny = Ny;
+        double[] o = new double[x.Length];
+        Parallelism.For(0, x.Length, c =>
+        {
+            double fi = ((x[c] - X0) / Dx) - 0.5;
+            double fj = ((Y0 - y[c]) / Dx) - 0.5;
+            fi = NpMath.PyMin(NpMath.PyMax(fi, 0.0), nx - 1.0);
+            fj = NpMath.PyMin(NpMath.PyMax(fj, 0.0), ny - 1.0);
+            int i0 = Math.Min((int)Math.Floor(fi), nx - 2);
+            int j0 = Math.Min((int)Math.Floor(fj), ny - 2);
+            double tx = fi - i0;
+            double ty = fj - j0;
+            double w00 = (1.0 - tx) * (1.0 - ty);
+            double w10 = tx * (1.0 - ty);
+            double w01 = (1.0 - tx) * ty;
+            double w11 = tx * ty;
+            int c00 = (j0 * nx) + i0;
+            int c10 = (j0 * nx) + i0 + 1;
+            int c01 = ((j0 + 1) * nx) + i0;
+            int c11 = ((j0 + 1) * nx) + i0 + 1;
+            o[c] = (w00 * ZGwMap[c00]) + (w10 * ZGwMap[c10]) + (w01 * ZGwMap[c01]) + (w11 * ZGwMap[c11]);
+        });
+        return o;
+    }
+
+    // 동굴 거리(NuDist)를 쓰는 값: d_cave 와 그것으로 정하는 d·material·water.
+    private static bool NeedsCaveDistance(VolumeField need)
+        => (need & (VolumeField.DCave | VolumeField.D | VolumeField.Material | VolumeField.Water)) != 0;
 }
