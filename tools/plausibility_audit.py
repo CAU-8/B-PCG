@@ -397,9 +397,7 @@ def planet_hero_continuity(planet_world: Path, hero_world: Path) -> dict[str, An
     child_q = np.asarray(hero_fields["discharge"], dtype=np.float64).reshape(-1)
     parent_index = int(boundary.get("l0_receiver", -1))
     parent_q_at_selection = (
-        float(parent_q[parent_index])
-        if 0 <= parent_index < parent_q.size
-        else None
+        float(parent_q[parent_index]) if 0 <= parent_index < parent_q.size else None
     )
     inflow = float(boundary.get("inflow_m3_per_yr", 0.0))
     child_graph = hero_world / hero_manifest.get("graph", {}).get("file", "graph.npz")

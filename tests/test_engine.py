@@ -17,7 +17,7 @@ Godot 는 사용자 폴더에 설정과 user:// 를 쓰므로 HOME (리눅스 XD
   그 실행으로 회랑·지구본 검사를 돌려 레이어·동굴 삼각형·입구 수·지구본 필드 수가 굽기 결과와
   같은지 봄.
 - test_engine_matches_cli: 엔진 안 생성 결과가 C# 콘솔(Bpcg.Cli all)과 파일까지 같은지 봄
-  (manifest 의 걸린 시간 'seconds' 만 뺌).
+  (manifest 의 걸린 시간 'seconds'·'*_seconds' 만 뺌).
 - test_engine_loads_console_bake: 콘솔로 구운 동굴 회랑과 지구본 약속 대체 자료도 읽는지 봄.
 - test_engine_globe_malformed: .bin 크기가 틀린 지구본에 '읽지 못했습니다' 알림이 뜨는지 봄.
 - test_fixture_globe_follows_contract: 대체 자료 자체가 약속을 지키는지 (Godot 없이).
@@ -218,9 +218,13 @@ def _baked(path: Path) -> str:
 
 
 def _drop_seconds(value):
-    """JSON 값에서 걸린 시간 키('seconds')를 모두 뺍니다."""
+    """JSON 값에서 걸린 시간 키('seconds' 와 솔버 단계별 '*_seconds')를 모두 뺍니다."""
     if isinstance(value, dict):
-        return {k: _drop_seconds(v) for k, v in value.items() if k != "seconds"}
+        return {
+            k: _drop_seconds(v)
+            for k, v in value.items()
+            if k != "seconds" and not k.endswith("_seconds")
+        }
     if isinstance(value, list):
         return [_drop_seconds(v) for v in value]
     return value

@@ -45,12 +45,26 @@ def test_drainage_area_is_accumulated_area(bundle):
 
 
 def test_discharge_is_accumulated_runoff_plus_inflow(bundle):
-    rcv, _ = _non_root(bundle)
+    """유량 = 상류 Σ (A·유효 유출) + 경계 유입.
+
+    히어로의 경계 유입은 가장자리 포트 칸(boundary.inflow_cells)에 나뉘어 들어갑니다. 포트마다
+    몫은 manifest 에 없으므로 포트 칸의 국소 수지 잔차를 몫으로 보고, 몫이 0 이상이고 합이
+    inflow_m3_per_yr 인지 봅니다. 포트 밖의 칸은 그 몫을 더해 누적한 값과 같아야 합니다.
+    """
+    rcv, nr = _non_root(bundle)
+    q = bundle["discharge_m3_per_yr"]
     src = bundle.graph.area * bundle["runoff_eff_m_per_yr"].astype(np.float64)
     boundary = bundle.diag.get("boundary")
     if boundary and boundary.get("inflow_m3_per_yr", 0) > 0:
-        src[boundary["inflow_cell"]] += boundary["inflow_m3_per_yr"]
-    assert np.allclose(bundle["discharge_m3_per_yr"], accumulate(rcv, src), rtol=1e-6)
+        ports = np.unique(np.asarray(boundary["inflow_cells"], dtype=np.int64))
+        assert ports.size > 0 and bundle.graph.boundary_mask()[ports].all()
+        upstream = np.zeros_like(q)
+        np.add.at(upstream, rcv[nr], q[nr])
+        share = q[ports] - src[ports] - upstream[ports]
+        assert (share >= -1e-6 * q[ports]).all()
+        assert share.sum() == pytest.approx(boundary["inflow_m3_per_yr"], rel=1e-6)
+        src[ports] += share
+    assert np.allclose(q, accumulate(rcv, src), rtol=1e-6)
 
 
 def test_sediment_flux_is_accumulated_uplift(bundle):
