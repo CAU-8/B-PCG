@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.IO;
 using Bpcg.Volume;
@@ -293,6 +294,16 @@ public static class Mesh
         return (verts, faces);
     }
 
+    // 동굴 조각 하나의 결과: 동굴 띠가 있었는지, 물어본 점 수, 띠마다 뽑은 (꼭짓점, 삼각형, 띠 바닥 높이).
+    private sealed class CaveTile(bool hasBands)
+    {
+        public bool HasBands { get; } = hasBands;
+
+        public long Voxels { get; set; }
+
+        public List<(List<double> Vt, List<long> Fc, double Oz)> Parts { get; } = [];
+    }
+
     /// <summary>
     /// 회랑 rect 안 동굴 벽 삼각형 (cave_surface, 국소 좌표). 반환: (verts (V, 3), faces (F, 3), diag).
     /// </summary>
@@ -317,69 +328,90 @@ public static class Mesh
         long tiles = 0;
         long tilesWithCaves = 0;
         long voxels = 0;
-        for (int ia = 0; ia < Math.Max(nxv - 1, 1); ia += TileVoxels)
+
+        // 조각 하나의 등위면. 3D 샘플 함수는 읽기만 하므로 한 열의 조각들을 여러 코어로 뽑고, 이어 붙이는 것은
+        // 조각 순서대로 해서 꼭짓점·삼각형 순서가 한 줄로 돌 때와 같게 합니다.
+        CaveTile Tile(int ia, int ib, int ja)
         {
-            int ib = Math.Min(ia + TileVoxels, nxv - 1);
-            for (int ja = 0; ja < Math.Max(nyv - 1, 1); ja += TileVoxels)
+            int jb = Math.Min(ja + TileVoxels, nyv - 1);
+            List<(double Lo, double Hi)> bands = CaveBands(volume, (xs[ia], xs[ib], ys[ja], ys[jb]), pad);
+            var tile = new CaveTile(bands.Count > 0);
+            if (bands.Count == 0)
             {
-                int jb = Math.Min(ja + TileVoxels, nyv - 1);
-                tiles++;
-                List<(double Lo, double Hi)> bands = CaveBands(volume, (xs[ia], xs[ib], ys[ja], ys[jb]), pad);
-                if (bands.Count == 0)
+                return tile;
+            }
+            int ntx = ib - ia + 1;
+            int nty = jb - ja + 1;
+            double[] cx = new double[ntx * nty];
+            double[] cy = new double[ntx * nty];
+            for (int i = 0; i < ntx; i++)
+            {
+                for (int j = 0; j < nty; j++)
+                {
+                    cx[(i * nty) + j] = xs[ia + i];
+                    cy[(i * nty) + j] = ys[ja + j];
+                }
+            }
+            foreach ((double lo, double hi) in bands)
+            {
+                int k0 = (int)Math.Floor(lo / v);
+                int k1 = (int)Math.Ceiling(hi / v);
+                if (k1 - k0 < 2)
+                {
+                    k1 = k0 + 2;
+                }
+                int nz = k1 - k0 + 1;
+                double[] up = new double[cx.Length * nz];
+                for (int c = 0; c < cx.Length; c++)
+                {
+                    for (int k = 0; k < nz; k++)
+                    {
+                        up[(c * nz) + k] = (k0 + k) * v;
+                    }
+                }
+                double[] dc = (double[])volume.EvaluateGrid(cx, cy, up, nz, double.PositiveInfinity, "d_cave")["d_cave"];
+                double fmin = double.PositiveInfinity;
+                double fmax = double.NegativeInfinity;
+                for (int q = 0; q < dc.Length; q++)
+                {
+                    dc[q] = Numerics.NpMath.Clip(dc[q], -clip, clip);
+                    fmin = Math.Min(fmin, dc[q]);
+                    fmax = Math.Max(fmax, dc[q]);
+                }
+                tile.Voxels += dc.Length;
+                if (fmin >= 0.0 || fmax <= 0.0)
                 {
                     continue;
                 }
-                int ntx = ib - ia + 1;
-                int nty = jb - ja + 1;
-                double[] cx = new double[ntx * nty];
-                double[] cy = new double[ntx * nty];
-                for (int i = 0; i < ntx; i++)
+                (List<double> vt, List<long> fc) = IsoSurface(dc, ntx, nty, nz, v);
+                if (fc.Count > 0)
                 {
-                    for (int j = 0; j < nty; j++)
-                    {
-                        cx[(i * nty) + j] = xs[ia + i];
-                        cy[(i * nty) + j] = ys[ja + j];
-                    }
+                    tile.Parts.Add((vt, fc, k0 * v));
                 }
-                foreach ((double lo, double hi) in bands)
+            }
+            return tile;
+        }
+
+        for (int ia = 0; ia < Math.Max(nxv - 1, 1); ia += TileVoxels)
+        {
+            int ib = Math.Min(ia + TileVoxels, nxv - 1);
+            int nTiles = (Math.Max(nyv - 1, 1) + TileVoxels - 1) / TileVoxels;
+            var column = new CaveTile[nTiles];
+            int iaCol = ia;
+            Parallelism.For(0, nTiles, t => column[t] = Tile(iaCol, ib, t * TileVoxels));
+            for (int t = 0; t < nTiles; t++)
+            {
+                CaveTile tile = column[t];
+                tiles++;
+                if (!tile.HasBands)
                 {
-                    int k0 = (int)Math.Floor(lo / v);
-                    int k1 = (int)Math.Ceiling(hi / v);
-                    if (k1 - k0 < 2)
-                    {
-                        k1 = k0 + 2;
-                    }
-                    int nz = k1 - k0 + 1;
-                    double[] up = new double[cx.Length * nz];
-                    for (int c = 0; c < cx.Length; c++)
-                    {
-                        for (int k = 0; k < nz; k++)
-                        {
-                            up[(c * nz) + k] = (k0 + k) * v;
-                        }
-                    }
-                    double[] dc = (double[])volume.EvaluateGrid(cx, cy, up, nz, double.PositiveInfinity, "d_cave")["d_cave"];
-                    double fmin = double.PositiveInfinity;
-                    double fmax = double.NegativeInfinity;
-                    for (int q = 0; q < dc.Length; q++)
-                    {
-                        dc[q] = Numerics.NpMath.Clip(dc[q], -clip, clip);
-                        fmin = Math.Min(fmin, dc[q]);
-                        fmax = Math.Max(fmax, dc[q]);
-                    }
-                    voxels += dc.Length;
-                    if (fmin >= 0.0 || fmax <= 0.0)
-                    {
-                        continue;
-                    }
-                    (List<double> vt, List<long> fc) = IsoSurface(dc, ntx, nty, nz, v);
-                    if (fc.Count == 0)
-                    {
-                        continue;
-                    }
-                    double ox = xs[ia];
-                    double oy = ys[ja];
-                    double oz = k0 * v;
+                    continue;
+                }
+                voxels += tile.Voxels;
+                double ox = xs[ia];
+                double oy = ys[t * TileVoxels];
+                foreach ((List<double> vt, List<long> fc, double oz) in tile.Parts)
+                {
                     for (int q = 0; q < vt.Count; q += 3)
                     {
                         vertsL.Add(vt[q] + ox);

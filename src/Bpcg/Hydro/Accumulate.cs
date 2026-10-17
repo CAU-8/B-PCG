@@ -25,6 +25,25 @@ public static class AccumulateModule
         }
     }
 
+    /// <summary>
+    /// 세 가중치를 한 번 훑어 함께 모읍니다. 배열마다 더하는 순서가 위 커널과 같아 값도 마지막 자리까지 같습니다.
+    /// 솔버가 반복마다 물·면적·흙을 모을 때 씁니다(따로 세 번 훑는 것보다 메모리를 덜 읽음).
+    /// </summary>
+    internal static void AccumulateKernel(long[] rcv, long[] order, double[] a, double[] b, double[] c)
+    {
+        for (int q = order.Length - 1; q >= 0; q--)
+        {
+            long k = order[q];
+            long r = rcv[k];
+            if (r != k)
+            {
+                a[r] += a[k];
+                b[r] += b[k];
+                c[r] += c[k];
+            }
+        }
+    }
+
     private static void CheckOrder(long[] order, int n)
     {
         if (order.Length != n)

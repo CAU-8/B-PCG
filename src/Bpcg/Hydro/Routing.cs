@@ -1,4 +1,5 @@
 using System;
+using Bpcg.Core;
 
 namespace Bpcg.Hydro;
 
@@ -12,98 +13,126 @@ namespace Bpcg.Hydro;
 /// </remarks>
 public static class Routing
 {
-    /// <summary>D8 커널 (_d8_kernel). prev 와 다른 칸 수를 돌려줍니다(prev 가 없으면 N).</summary>
+    /// <summary>
+    /// D8 커널 (_d8_kernel). prev 와 다른 칸 수를 돌려줍니다(prev 가 없으면 N). 칸마다 자기 이웃만 보므로
+    /// 조각으로 나눠 여러 코어에서 돌리고, 조각마다 센 수를 조각 순서로 더합니다.
+    /// </summary>
     internal static int D8Kernel(
         double[] zt, int[] nbr, int nSlot, double[] dist, bool[] isOutlet, long[]? prev, double eta,
         long[] rcv, double[] slope)
     {
         int n = zt.Length;
-        bool hasPrev = prev is not null;
-        int nChanged = 0;
-        for (int c = 0; c < n; c++)
+        int[] changed = new int[Parallelism.RangeCount(n)];
+        bool[] zeroDist = new bool[changed.Length];
+        Parallelism.ForRanges(n, (j, lo, hi) =>
         {
-            if (isOutlet[c])
+            int count = 0;
+            for (int c = lo; c < hi; c++)
             {
+                int r = D8Cell(c, zt, nbr, nSlot, dist, isOutlet, prev, eta, rcv, slope);
+                if (r < 0)
+                {
+                    zeroDist[j] = true;
+                    return;
+                }
+                count += r;
+            }
+            changed[j] = count;
+        });
+        if (Array.IndexOf(zeroDist, true) >= 0)
+        {
+            throw new DivideByZeroException("float division by zero");
+        }
+        if (prev is null)
+        {
+            return n;
+        }
+        int nChanged = 0;
+        foreach (int v in changed)
+        {
+            nChanged += v;
+        }
+        return nChanged;
+    }
+
+    // 칸 하나의 D8. 반환: prev 와 다르면 1, 같으면 0, 낮은 이웃까지 거리가 0 이면 -1.
+    private static int D8Cell(
+        int c, double[] zt, int[] nbr, int nSlot, double[] dist, bool[] isOutlet, long[]? prev, double eta,
+        long[] rcv, double[] slope)
+    {
+        if (isOutlet[c])
+        {
+            rcv[c] = c;
+            slope[c] = 0.0;
+        }
+        else
+        {
+            double zc = zt[c];
+            long best = -1;
+            double bestS = 0.0;
+            for (int s = 0; s < nSlot; s++)
+            {
+                int k = nbr[(c * nSlot) + s];
+                if (k < 0)
+                {
+                    continue;
+                }
+                double zk = zt[k];
+                if (zk < zc)
+                {
+                    double d = dist[(c * nSlot) + s];
+                    if (d == 0.0)
+                    {
+                        return -1;
+                    }
+                    double sl = (zc - zk) / d;
+                    // 같은 경사면 셀 번호가 작은 이웃 (결정성)
+                    if (best < 0 || sl > bestS || (sl == bestS && k < best))
+                    {
+                        best = k;
+                        bestS = sl;
+                    }
+                }
+            }
+            if (best < 0)
+            {
+                // 낮은 이웃이 없는 칸(채우지 않은 고도의 웅덩이 바닥)은 자기 자신을 가리킵니다.
                 rcv[c] = c;
                 slope[c] = 0.0;
             }
             else
             {
-                double zc = zt[c];
-                long best = -1;
-                double bestS = 0.0;
-                for (int s = 0; s < nSlot; s++)
+                if (prev is not null)
                 {
-                    int k = nbr[(c * nSlot) + s];
-                    if (k < 0)
+                    long p = prev[c];
+                    if (p != best && p != c)
                     {
-                        continue;
-                    }
-                    double zk = zt[k];
-                    if (zk < zc)
-                    {
-                        double d = dist[(c * nSlot) + s];
-                        if (d == 0.0)
+                        // 가이드 4장 히스테리시스: 옛 수신 셀이 아직 확실히 낮은 이웃이면,
+                        // 새 경사가 (1+η)배보다 클 때만 바꿉니다.
+                        for (int s = 0; s < nSlot; s++)
                         {
-                            throw new DivideByZeroException("float division by zero");
-                        }
-                        double sl = (zc - zk) / d;
-                        // 같은 경사면 셀 번호가 작은 이웃 (결정성)
-                        if (best < 0 || sl > bestS || (sl == bestS && k < best))
-                        {
-                            best = k;
-                            bestS = sl;
-                        }
-                    }
-                }
-                if (best < 0)
-                {
-                    // 낮은 이웃이 없는 칸(채우지 않은 고도의 웅덩이 바닥)은 자기 자신을 가리킵니다.
-                    rcv[c] = c;
-                    slope[c] = 0.0;
-                }
-                else
-                {
-                    if (hasPrev)
-                    {
-                        long p = prev![c];
-                        if (p != best && p != c)
-                        {
-                            // 가이드 4장 히스테리시스: 옛 수신 셀이 아직 확실히 낮은 이웃이면,
-                            // 새 경사가 (1+η)배보다 클 때만 바꿉니다.
-                            for (int s = 0; s < nSlot; s++)
+                            if (nbr[(c * nSlot) + s] == p)
                             {
-                                if (nbr[(c * nSlot) + s] == p)
+                                double zp = zt[p];
+                                if (zp < zc)
                                 {
-                                    double zp = zt[p];
-                                    if (zp < zc)
+                                    double sp = (zc - zp) / dist[(c * nSlot) + s];
+                                    if (!(bestS > (1.0 + eta) * sp))
                                     {
-                                        double sp = (zc - zp) / dist[(c * nSlot) + s];
-                                        if (!(bestS > (1.0 + eta) * sp))
-                                        {
-                                            best = p;
-                                            bestS = sp;
-                                        }
+                                        best = p;
+                                        bestS = sp;
                                     }
-                                    break;
                                 }
+                                break;
                             }
                         }
                     }
-                    rcv[c] = best;
-                    slope[c] = bestS;
                 }
-            }
-            if (hasPrev && rcv[c] != prev![c])
-            {
-                nChanged++;
+                rcv[c] = best;
+                slope[c] = bestS;
             }
         }
-        if (!hasPrev)
-        {
-            nChanged = n;
-        }
-        return nChanged;
+        return prev is not null && rcv[c] != prev[c] ? 1 : 0;
     }
 
     /// <summary>기여 셀 CSR (_donor_csr_kernel): donors[start[c]..start[c+1]) 가 c 로 물을 보내는 칸(번호 오름차순).</summary>
