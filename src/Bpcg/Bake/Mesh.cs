@@ -462,17 +462,31 @@ public static class Mesh
                 results[t] = new TileMesh { Error = ExceptionDispatchInfo.Capture(e) };
             }
         });
-        var vertsL = new List<double>();
-        var facesL = new List<long>();
-        long nVert = 0;
+        // 조각 순서대로 이어 붙입니다. 전체 크기를 먼저 세어 꼭 맞는 배열에 바로 쓰고(목록을 두 배씩 늘리고 다시 복사하지 않음),
+        // 옮긴 조각 결과는 곧바로 놓습니다. 한 조각씩 돌 때처럼 앞 조각의 오류가 먼저 나갑니다.
         long tiles = 0;
         long tilesWithCaves = 0;
         long voxels = 0;
+        long totalVerts = 0;
+        long totalFaces = 0;
+        foreach (TileMesh r in results)
+        {
+            r.Error?.Throw();
+            foreach ((double _, double _, double _, List<double> vt, List<long> fc) in r.Bands)
+            {
+                totalVerts += vt.Count / 3;
+                totalFaces += fc.Count / 3;
+            }
+        }
+        double[] verts = new double[totalVerts * 3];
+        long[] faces = new long[totalFaces * 3];
+        long nVert = 0;
+        long vAt = 0;
+        long fAt = 0;
         for (int t = 0; t < results.Length; t++)
         {
             TileMesh r = results[t];
-            // 한 조각씩 돌 때처럼 앞 조각의 오류가 먼저 나갑니다.
-            r.Error?.Throw();
+            results[t] = null!;
             tiles++;
             voxels += r.Voxels;
             if (r.HasBands)
@@ -481,16 +495,16 @@ public static class Mesh
                 {
                     for (int q = 0; q < vt.Count; q += 3)
                     {
-                        vertsL.Add(vt[q] + ox);
-                        vertsL.Add(vt[q + 1] + oy);
-                        vertsL.Add(vt[q + 2] + oz);
+                        verts[vAt++] = vt[q] + ox;
+                        verts[vAt++] = vt[q + 1] + oy;
+                        verts[vAt++] = vt[q + 2] + oz;
                     }
                     // 값이 커지는 쪽(동굴 밖)을 앞면으로 둔 삼각형을 뒤집어 빈 곳 쪽으로.
                     for (int q = 0; q < fc.Count; q += 3)
                     {
-                        facesL.Add(fc[q] + nVert);
-                        facesL.Add(fc[q + 2] + nVert);
-                        facesL.Add(fc[q + 1] + nVert);
+                        faces[fAt++] = fc[q] + nVert;
+                        faces[fAt++] = fc[q + 2] + nVert;
+                        faces[fAt++] = fc[q + 1] + nVert;
                     }
                     nVert += vt.Count / 3;
                 }
@@ -508,54 +522,87 @@ public static class Mesh
             ["tiles_with_caves"] = tilesWithCaves,
             ["voxels"] = voxels,
         };
-        if (vertsL.Count == 0)
+        if (verts.Length == 0)
         {
             diag["faces_raw"] = 0L;
             diag["faces_kept"] = 0L;
             diag["seconds"] = Stopwatch.GetElapsedTime(tAll).TotalSeconds;
             return ([], [], diag);
         }
-        double[] verts = vertsL.ToArray();
-        long[] faces = facesL.ToArray();
         diag["faces_raw"] = (long)(faces.Length / 3);
         int nf = faces.Length / 3;
-        double[] cen = new double[nf * 3];
-        for (int t = 0; t < nf; t++)
+        // 무게중심의 d1 < 0 인 삼각형만 남깁니다. 무게중심은 덩어리마다 만들고 d1 만 평가합니다
+        // (점마다 값은 모두 한꺼번에 평가할 때와 같음).
+        bool[] keepFace = new bool[nf];
+        int nKept = 0;
+        double[] cen = new double[Math.Min(nf, HeroVolume.ChunkPoints) * 3];
+        for (int t0 = 0; t0 < nf; t0 += HeroVolume.ChunkPoints)
         {
-            for (int ax = 0; ax < 3; ax++)
+            int len = Math.Min(HeroVolume.ChunkPoints, nf - t0);
+            double[] chunk = len * 3 == cen.Length ? cen : new double[len * 3];
+            for (int i = 0; i < len; i++)
             {
-                // verts[faces].mean(axis=1): 꼭짓점 세 개의 np.mean
-                double a = verts[(faces[t * 3] * 3) + ax];
-                double b = verts[(faces[(t * 3) + 1] * 3) + ax];
-                double c = verts[(faces[(t * 3) + 2] * 3) + ax];
-                cen[(t * 3) + ax] = (0.0 + a + b + c) / 3.0;
+                int t = t0 + i;
+                for (int ax = 0; ax < 3; ax++)
+                {
+                    // verts[faces].mean(axis=1): 꼭짓점 세 개의 np.mean
+                    double a = verts[(faces[t * 3] * 3) + ax];
+                    double b = verts[(faces[(t * 3) + 1] * 3) + ax];
+                    double c = verts[(faces[(t * 3) + 2] * 3) + ax];
+                    chunk[(i * 3) + ax] = (0.0 + a + b + c) / 3.0;
+                }
+            }
+            double[] d1 = volume.EvaluateFields(chunk, VolumeField.D1).D1;
+            for (int i = 0; i < len; i++)
+            {
+                if (d1[i] < 0.0)
+                {
+                    keepFace[t0 + i] = true;
+                    nKept++;
+                }
             }
         }
-        double[] d1 = volume.Evaluate(cen).D1;
-        var keep = new List<long>();
-        for (int t = 0; t < nf; t++)
-        {
-            if (d1[t] < 0.0)
-            {
-                keep.Add(faces[t * 3]);
-                keep.Add(faces[(t * 3) + 1]);
-                keep.Add(faces[(t * 3) + 2]);
-            }
-        }
-        diag["faces_kept"] = (long)(keep.Count / 3);
-        long[] used = SortedUnique(keep, verts.Length / 3);
-        long[] remap = new long[verts.Length / 3];
+        diag["faces_kept"] = (long)nKept;
+        // 남긴 삼각형이 쓰는 꼭짓점을 번호 순서대로 새 번호로 (SortedUnique 와 같은 결과)
+        long nv = verts.Length / 3;
+        long[] remap = new long[nv];
         Array.Fill(remap, -1L);
-        for (long q = 0; q < used.Length; q++)
+        for (int t = 0; t < nf; t++)
         {
-            remap[used[q]] = q;
+            if (keepFace[t])
+            {
+                remap[faces[t * 3]] = 0;
+                remap[faces[(t * 3) + 1]] = 0;
+                remap[faces[(t * 3) + 2]] = 0;
+            }
         }
-        double[] vOut = new double[used.Length * 3];
-        for (long q = 0; q < used.Length; q++)
+        long nUsed = 0;
+        for (long q = 0; q < nv; q++)
         {
-            Array.Copy(verts, used[q] * 3, vOut, q * 3, 3);
+            if (remap[q] == 0)
+            {
+                remap[q] = nUsed++;
+            }
         }
-        long[] fOut = keep.Select(x => remap[x]).ToArray();
+        double[] vOut = new double[nUsed * 3];
+        for (long q = 0; q < nv; q++)
+        {
+            if (remap[q] >= 0)
+            {
+                Array.Copy(verts, q * 3, vOut, remap[q] * 3, 3);
+            }
+        }
+        long[] fOut = new long[nKept * 3];
+        long o = 0;
+        for (int t = 0; t < nf; t++)
+        {
+            if (keepFace[t])
+            {
+                fOut[o++] = remap[faces[t * 3]];
+                fOut[o++] = remap[faces[(t * 3) + 1]];
+                fOut[o++] = remap[faces[(t * 3) + 2]];
+            }
+        }
         diag["seconds"] = Stopwatch.GetElapsedTime(tAll).TotalSeconds;
         return (vOut, fOut, diag);
     }
@@ -566,30 +613,39 @@ public static class Mesh
     /// </summary>
     public static CaveMesh BuildMesh(double[] vertsLocal, long[] faces, HeroVolume volume, EngineFrame frame, double voxelM)
     {
-        double[] ve = frame.ToEngine(vertsLocal);
-        // merge_vertices: 소수 8자리로 반올림한 자리가 같으면 한 꼭짓점
+        double[]? ve = frame.ToEngine(vertsLocal);
+        // merge_vertices: 소수 8자리로 반올림한 자리가 같으면 한 꼭짓점 (처음 나온 순서로 번호)
         int nv = ve.Length / 3;
-        var key = new Dictionary<(long, long, long), long>();
-        long[] map = new long[nv];
-        var merged = new List<double>();
+        var key = new Dictionary<(long, long, long), long>(nv);
+        long[]? map = new long[nv];
+        double[] merged = new double[ve.Length];
+        int mergedCount = 0;
         for (int i = 0; i < nv; i++)
         {
             (long, long, long) k = (
                 (long)Math.Round(ve[i * 3] * 1e8), (long)Math.Round(ve[(i * 3) + 1] * 1e8), (long)Math.Round(ve[(i * 3) + 2] * 1e8));
             if (!key.TryGetValue(k, out long idx))
             {
-                idx = merged.Count / 3;
+                idx = mergedCount / 3;
                 key[k] = idx;
-                merged.Add(ve[i * 3]);
-                merged.Add(ve[(i * 3) + 1]);
-                merged.Add(ve[(i * 3) + 2]);
+                merged[mergedCount++] = ve[i * 3];
+                merged[mergedCount++] = ve[(i * 3) + 1];
+                merged[mergedCount++] = ve[(i * 3) + 2];
             }
             map[i] = idx;
         }
-        long[] f2 = faces.Select(x => map[x]).ToArray();
+        // 다 쓴 큰 배열은 바로 놓습니다 (한 번만 도는 메서드라 지역 변수가 끝까지 살아 있을 수 있음).
+        ve = null;
+        key = null;
+        long[] f2 = new long[faces.Length];
+        for (int q = 0; q < faces.Length; q++)
+        {
+            f2[q] = map[faces[q]];
+        }
+        map = null;
         // remove_unreferenced_vertices
-        long[] used = SortedUnique(f2, merged.Count / 3);
-        long[] remap = new long[merged.Count / 3];
+        long[] used = SortedUnique(f2, mergedCount / 3);
+        long[] remap = new long[mergedCount / 3];
         Array.Fill(remap, -1L);
         double[] verts = new double[used.Length * 3];
         for (long q = 0; q < used.Length; q++)
@@ -599,14 +655,20 @@ public static class Mesh
             verts[(q * 3) + 1] = merged[(int)(used[q] * 3) + 1];
             verts[(q * 3) + 2] = merged[(int)(used[q] * 3) + 2];
         }
-        long[] fFinal = f2.Select(x => remap[x]).ToArray();
+        merged = null!;
+        long[] fFinal = new long[f2.Length];
+        for (int q = 0; q < f2.Length; q++)
+        {
+            fFinal[q] = remap[f2[q]];
+        }
+        f2 = null!;
         double[] normals = VertexNormals(verts, fFinal);
         double[] probe = new double[verts.Length];
         for (int q = 0; q < verts.Length; q++)
         {
             probe[q] = verts[q] - (ColorProbeVoxels * voxelM * normals[q]);
         }
-        byte[] mat = volume.Evaluate(frame.ToLocal(probe)).SolidMaterial;
+        byte[] mat = volume.EvaluateFields(frame.ToLocal(probe), VolumeField.SolidMaterial).SolidMaterial;
         byte[] rgba = new byte[mat.Length * 4];
         for (int q = 0; q < mat.Length; q++)
         {
@@ -689,35 +751,24 @@ public static class Mesh
     {
         int nv = mesh.VertexCount;
         int nf = mesh.FaceCount;
-        byte[] idx = new byte[nf * 3 * 4];
-        for (int q = 0; q < mesh.Faces.Length; q++)
-        {
-            BinaryPrimitives.WriteUInt32LittleEndian(idx.AsSpan(q * 4), (uint)mesh.Faces[q]);
-        }
-        byte[] pos = new byte[nv * 12];
-        byte[] nrm = new byte[nv * 12];
         double[] mn = [double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity];
         double[] mx = [double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity];
         for (int q = 0; q < nv * 3; q++)
         {
             float fv = (float)mesh.Vertices[q];
-            BinaryPrimitives.WriteSingleLittleEndian(pos.AsSpan(q * 4), fv);
-            BinaryPrimitives.WriteSingleLittleEndian(nrm.AsSpan(q * 4), (float)mesh.Normals[q]);
             mn[q % 3] = Math.Min(mn[q % 3], fv);
             mx[q % 3] = Math.Max(mx[q % 3], fv);
         }
         byte[] col = mesh.Colors;
         static int Pad4(int x) => (x + 3) & ~3;
+        int idxLen = nf * 3 * 4;
+        int posLen = nv * 12;
+        int nrmLen = nv * 12;
         int oIdx = 0;
-        int oPos = Pad4(oIdx + idx.Length);
-        int oNrm = Pad4(oPos + pos.Length);
-        int oCol = Pad4(oNrm + nrm.Length);
+        int oPos = Pad4(oIdx + idxLen);
+        int oNrm = Pad4(oPos + posLen);
+        int oCol = Pad4(oNrm + nrmLen);
         int binLen = Pad4(oCol + col.Length);
-        byte[] bin = new byte[binLen];
-        idx.CopyTo(bin, oIdx);
-        pos.CopyTo(bin, oPos);
-        nrm.CopyTo(bin, oNrm);
-        col.CopyTo(bin, oCol);
         var gltf = new OrderedDictionary<string, object?>
         {
             ["scene"] = 0L,
@@ -750,38 +801,92 @@ public static class Mesh
             ["buffers"] = new List<object?> { new OrderedDictionary<string, object?> { ["byteLength"] = (long)binLen } },
             ["bufferViews"] = new List<object?>
             {
-                View(oIdx, idx.Length),
-                View(oPos, pos.Length),
-                View(oNrm, nrm.Length),
+                View(oIdx, idxLen),
+                View(oPos, posLen),
+                View(oNrm, nrmLen),
                 View(oCol, col.Length),
             },
         };
         byte[] json = System.Text.Encoding.UTF8.GetBytes(PyJson.Dumps(gltf, new PyJson.Options(EnsureAscii: false)));
         int jsonLen = Pad4(json.Length);
-        byte[] jsonPadded = new byte[jsonLen];
-        Array.Fill(jsonPadded, (byte)' ');
-        json.CopyTo(jsonPadded, 0);
         int total = 12 + 8 + jsonLen + 8 + binLen;
-        byte[] glb = new byte[total];
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(0), 0x46546C67); // "glTF"
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(4), 2);
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(8), (uint)total);
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(12), (uint)jsonLen);
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(16), 0x4E4F534A); // "JSON"
-        jsonPadded.CopyTo(glb, 20);
-        int ob = 20 + jsonLen;
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(ob), (uint)binLen);
-        BinaryPrimitives.WriteUInt32LittleEndian(glb.AsSpan(ob + 4), 0x004E4942); // "BIN\0"
-        bin.CopyTo(glb, ob + 8);
         string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (dir is not null)
         {
             Directory.CreateDirectory(dir);
         }
+        // 파일 전체를 메모리에 만들지 않고, 같은 바이트를 순서대로 흘려 씁니다
+        // (머리 → JSON 덩어리(빈칸으로 4바이트 맞춤) → BIN 덩어리(0 으로 4바이트 맞춤)).
         string tmp = path + ".part";
-        File.WriteAllBytes(tmp, glb);
+        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+        {
+            Span<byte> head = stackalloc byte[20];
+            BinaryPrimitives.WriteUInt32LittleEndian(head, 0x46546C67); // "glTF"
+            BinaryPrimitives.WriteUInt32LittleEndian(head[4..], 2);
+            BinaryPrimitives.WriteUInt32LittleEndian(head[8..], (uint)total);
+            BinaryPrimitives.WriteUInt32LittleEndian(head[12..], (uint)jsonLen);
+            BinaryPrimitives.WriteUInt32LittleEndian(head[16..], 0x4E4F534A); // "JSON"
+            fs.Write(head);
+            fs.Write(json);
+            for (int q = json.Length; q < jsonLen; q++)
+            {
+                fs.WriteByte((byte)' ');
+            }
+            Span<byte> binHead = stackalloc byte[8];
+            BinaryPrimitives.WriteUInt32LittleEndian(binHead, (uint)binLen);
+            BinaryPrimitives.WriteUInt32LittleEndian(binHead[4..], 0x004E4942); // "BIN\0"
+            fs.Write(binHead);
+            byte[] buf = new byte[1 << 20];
+            int fill = 0;
+            long written = 0;
+            void Flush()
+            {
+                fs.Write(buf, 0, fill);
+                written += fill;
+                fill = 0;
+            }
+            void PadTo(long offset)
+            {
+                while (written + fill < offset)
+                {
+                    if (fill == buf.Length)
+                    {
+                        Flush();
+                    }
+                    buf[fill++] = 0;
+                }
+            }
+            for (int q = 0; q < mesh.Faces.Length; q++)
+            {
+                if (fill + 4 > buf.Length)
+                {
+                    Flush();
+                }
+                BinaryPrimitives.WriteUInt32LittleEndian(buf.AsSpan(fill), (uint)mesh.Faces[q]);
+                fill += 4;
+            }
+            PadTo(oPos);
+            foreach (double[] src in new[] { mesh.Vertices, mesh.Normals })
+            {
+                for (int q = 0; q < nv * 3; q++)
+                {
+                    if (fill + 4 > buf.Length)
+                    {
+                        Flush();
+                    }
+                    BinaryPrimitives.WriteSingleLittleEndian(buf.AsSpan(fill), (float)src[q]);
+                    fill += 4;
+                }
+                PadTo(ReferenceEquals(src, mesh.Vertices) ? oNrm : oCol);
+            }
+            Flush();
+            fs.Write(col);
+            written += col.Length;
+            PadTo(binLen);
+            Flush();
+        }
         File.Move(tmp, path, true);
-        return glb.Length;
+        return total;
     }
 
     private static OrderedDictionary<string, object?> Accessor(int view, int componentType, int count, string type, bool normalized,
