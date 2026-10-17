@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
+using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.IO;
 using Bpcg.Volume;
@@ -170,13 +172,17 @@ public static class Mesh
     {
         var verts = new List<double>();
         var faces = new List<long>();
-        var edgeVert = new Dictionary<(long, long), long>();
+        // 모서리마다 처음 만든 꼭짓점 번호. Kuhn 분할의 모서리는 낮은 꼭짓점에서 높은 꼭짓점으로 가는 방향이 모두
+        // 성분 0·1 의 7가지라, (낮은 꼭짓점 번호·8 + 방향) 하나로 (min, max) 꼭짓점 쌍을 대신합니다.
+        var edgeVert = new Dictionary<long, long>();
         long Id(int i, int j, int k) => (((long)i * ny) + j) * nz + k;
         long Vert(int ia, int ja, int ka, int ib, int jb, int kb)
         {
             long a = Id(ia, ja, ka);
             long b = Id(ib, jb, kb);
-            (long, long) key = a < b ? (a, b) : (b, a);
+            long key = a < b
+                ? (a * 8) + (((ib - ia) << 2) | ((jb - ja) << 1) | (kb - ka))
+                : (b * 8) + (((ia - ib) << 2) | ((ja - jb) << 1) | (ka - kb));
             if (edgeVert.TryGetValue(key, out long idx))
             {
                 return idx;
@@ -229,12 +235,28 @@ public static class Mesh
         int[] ci = new int[4];
         int[] cj = new int[4];
         int[] ck = new int[4];
+        int[] ins = new int[4];
+        int[] outs = new int[4];
         for (int i = 0; i + 1 < nx; i++)
         {
             for (int j = 0; j + 1 < ny; j++)
             {
                 for (int k = 0; k + 1 < nz; k++)
                 {
+                    // 정육면체 꼭짓점 8개의 부호를 한 번만 읽습니다. 모두 같은 쪽이면 사면체 6개 모두 건너뛰므로 바로 다음 칸으로.
+                    int cubeIn = 0;
+                    for (int q = 0; q < 8; q++)
+                    {
+                        (int ddx, int ddy, int ddz) = Corner[q];
+                        if (f[Id(i + ddx, j + ddy, k + ddz)] < 0.0)
+                        {
+                            cubeIn |= 1 << q;
+                        }
+                    }
+                    if (cubeIn == 0 || cubeIn == 0xFF)
+                    {
+                        continue;
+                    }
                     foreach (int[] tet in Tets)
                     {
                         int maskIn = 0;
@@ -244,7 +266,7 @@ public static class Mesh
                             ci[q] = i + ddx;
                             cj[q] = j + ddy;
                             ck[q] = k + ddz;
-                            if (f[Id(ci[q], cj[q], ck[q])] < 0.0)
+                            if ((cubeIn & (1 << tet[q])) != 0)
                             {
                                 maskIn |= 1 << q;
                             }
@@ -254,27 +276,35 @@ public static class Mesh
                         {
                             continue;
                         }
-                        var ins = new List<int>();
-                        var outs = new List<int>();
+                        int nOut = 0;
+                        nIn = 0;
                         for (int q = 0; q < 4; q++)
                         {
-                            ((maskIn & (1 << q)) != 0 ? ins : outs).Add(q);
+                            if ((maskIn & (1 << q)) != 0)
+                            {
+                                ins[nIn++] = q;
+                            }
+                            else
+                            {
+                                outs[nOut++] = q;
+                            }
                         }
                         double ox = 0;
                         double oy = 0;
                         double oz = 0;
-                        foreach (int q in outs)
+                        for (int o = 0; o < nOut; o++)
                         {
+                            int q = outs[o];
                             ox += ci[q] * v;
                             oy += cj[q] * v;
                             oz += ck[q] * v;
                         }
-                        (double, double, double) outside = (ox / outs.Count, oy / outs.Count, oz / outs.Count);
+                        (double, double, double) outside = (ox / nOut, oy / nOut, oz / nOut);
                         long E(int qa, int qb) => Vert(ci[qa], cj[qa], ck[qa], ci[qb], cj[qb], ck[qb]);
                         if (nIn == 1 || nIn == 3)
                         {
                             int lone = nIn == 1 ? ins[0] : outs[0];
-                            List<int> rest = nIn == 1 ? outs : ins;
+                            int[] rest = nIn == 1 ? outs : ins;
                             AddTri(E(lone, rest[0]), E(lone, rest[1]), E(lone, rest[2]), outside);
                         }
                         else
@@ -291,6 +321,104 @@ public static class Mesh
             }
         }
         return (verts, faces);
+    }
+
+    private sealed class TileMesh
+    {
+        public bool HasBands;
+        public long Voxels;
+        public List<(double Ox, double Oy, double Oz, List<double> Verts, List<long> Faces)> Bands = [];
+        public ExceptionDispatchInfo? Error;
+    }
+
+    // 조각 하나의 띠별 등위면 (cave_surface 의 조각 몸체). 꼭짓점은 조각 원점 기준 국소 좌표, 원점은 Ox·Oy·Oz.
+    private static TileMesh CaveTile(HeroVolume volume, double[] xs, double[] ys, (int Ia, int Ib, int Ja, int Jb) tile,
+        double v, double pad, double clip)
+    {
+        (int ia, int ib, int ja, int jb) = tile;
+        var r = new TileMesh();
+        List<(double Lo, double Hi)> bands = CaveBands(volume, (xs[ia], xs[ib], ys[ja], ys[jb]), pad);
+        if (bands.Count == 0)
+        {
+            return r;
+        }
+        r.HasBands = true;
+        int ntx = ib - ia + 1;
+        int nty = jb - ja + 1;
+        double[] cx = new double[ntx * nty];
+        double[] cy = new double[ntx * nty];
+        for (int i = 0; i < ntx; i++)
+        {
+            for (int j = 0; j < nty; j++)
+            {
+                cx[(i * nty) + j] = xs[ia + i];
+                cy[(i * nty) + j] = ys[ja + j];
+            }
+        }
+        foreach ((double lo, double hi) in bands)
+        {
+            int k0 = (int)Math.Floor(lo / v);
+            int k1 = (int)Math.Ceiling(hi / v);
+            if (k1 - k0 < 2)
+            {
+                k1 = k0 + 2;
+            }
+            int nz = k1 - k0 + 1;
+            double[] up = new double[cx.Length * nz];
+            for (int c = 0; c < cx.Length; c++)
+            {
+                for (int k = 0; k < nz; k++)
+                {
+                    up[(c * nz) + k] = (k0 + k) * v;
+                }
+            }
+            double[] dc = (double[])volume.EvaluateGrid(cx, cy, up, nz, double.PositiveInfinity, "d_cave")["d_cave"];
+            double fmin = double.PositiveInfinity;
+            double fmax = double.NegativeInfinity;
+            for (int q = 0; q < dc.Length; q++)
+            {
+                dc[q] = Numerics.NpMath.Clip(dc[q], -clip, clip);
+                fmin = Math.Min(fmin, dc[q]);
+                fmax = Math.Max(fmax, dc[q]);
+            }
+            r.Voxels += dc.Length;
+            if (fmin >= 0.0 || fmax <= 0.0)
+            {
+                continue;
+            }
+            (List<double> vt, List<long> fc) = IsoSurface(dc, ntx, nty, nz, v);
+            if (fc.Count == 0)
+            {
+                continue;
+            }
+            r.Bands.Add((xs[ia], ys[ja], k0 * v, vt, fc));
+        }
+        return r;
+    }
+
+    // 삼각형이 쓰는 꼭짓점 번호를 오름차순·중복 없이 (Distinct().OrderBy() 와 같은 결과를 표시 배열 한 번으로).
+    private static long[] SortedUnique(IReadOnlyList<long> ids, long nVerts)
+    {
+        bool[] seen = new bool[nVerts];
+        long count = 0;
+        for (int q = 0; q < ids.Count; q++)
+        {
+            if (!seen[ids[q]])
+            {
+                seen[ids[q]] = true;
+                count++;
+            }
+        }
+        long[] used = new long[count];
+        long m = 0;
+        for (long c = 0; c < nVerts; c++)
+        {
+            if (seen[c])
+            {
+                used[m++] = c;
+            }
+        }
+        return used;
     }
 
     /// <summary>
@@ -311,75 +439,46 @@ public static class Mesh
         double[] ys = Enumerable.Range(0, nyv).Select(j => rect.YMin + (j * v)).ToArray();
         double pad = BandPadVoxels * v;
         double clip = SdfClipVoxels * v;
+        // 조각마다 (띠별 꼭짓점·삼각형) 을 따로 만든 뒤 조각 순서대로 이어 붙입니다. 조각끼리는 서로 독립이라
+        // 병렬로 만들어도 이어 붙인 결과는 한 조각씩 차례로 만든 것과 같습니다.
+        var tileStarts = new List<(int Ia, int Ib, int Ja, int Jb)>();
+        for (int ia = 0; ia < Math.Max(nxv - 1, 1); ia += TileVoxels)
+        {
+            int ib = Math.Min(ia + TileVoxels, nxv - 1);
+            for (int ja = 0; ja < Math.Max(nyv - 1, 1); ja += TileVoxels)
+            {
+                tileStarts.Add((ia, ib, ja, Math.Min(ja + TileVoxels, nyv - 1)));
+            }
+        }
+        var results = new TileMesh[tileStarts.Count];
+        Parallelism.ForTasks(tileStarts.Count, t =>
+        {
+            try
+            {
+                results[t] = CaveTile(volume, xs, ys, tileStarts[t], v, pad, clip);
+            }
+            catch (Exception e)
+            {
+                results[t] = new TileMesh { Error = ExceptionDispatchInfo.Capture(e) };
+            }
+        });
         var vertsL = new List<double>();
         var facesL = new List<long>();
         long nVert = 0;
         long tiles = 0;
         long tilesWithCaves = 0;
         long voxels = 0;
-        for (int ia = 0; ia < Math.Max(nxv - 1, 1); ia += TileVoxels)
+        for (int t = 0; t < results.Length; t++)
         {
-            int ib = Math.Min(ia + TileVoxels, nxv - 1);
-            for (int ja = 0; ja < Math.Max(nyv - 1, 1); ja += TileVoxels)
+            TileMesh r = results[t];
+            // 한 조각씩 돌 때처럼 앞 조각의 오류가 먼저 나갑니다.
+            r.Error?.Throw();
+            tiles++;
+            voxels += r.Voxels;
+            if (r.HasBands)
             {
-                int jb = Math.Min(ja + TileVoxels, nyv - 1);
-                tiles++;
-                List<(double Lo, double Hi)> bands = CaveBands(volume, (xs[ia], xs[ib], ys[ja], ys[jb]), pad);
-                if (bands.Count == 0)
+                foreach ((double ox, double oy, double oz, List<double> vt, List<long> fc) in r.Bands)
                 {
-                    continue;
-                }
-                int ntx = ib - ia + 1;
-                int nty = jb - ja + 1;
-                double[] cx = new double[ntx * nty];
-                double[] cy = new double[ntx * nty];
-                for (int i = 0; i < ntx; i++)
-                {
-                    for (int j = 0; j < nty; j++)
-                    {
-                        cx[(i * nty) + j] = xs[ia + i];
-                        cy[(i * nty) + j] = ys[ja + j];
-                    }
-                }
-                foreach ((double lo, double hi) in bands)
-                {
-                    int k0 = (int)Math.Floor(lo / v);
-                    int k1 = (int)Math.Ceiling(hi / v);
-                    if (k1 - k0 < 2)
-                    {
-                        k1 = k0 + 2;
-                    }
-                    int nz = k1 - k0 + 1;
-                    double[] up = new double[cx.Length * nz];
-                    for (int c = 0; c < cx.Length; c++)
-                    {
-                        for (int k = 0; k < nz; k++)
-                        {
-                            up[(c * nz) + k] = (k0 + k) * v;
-                        }
-                    }
-                    double[] dc = (double[])volume.EvaluateGrid(cx, cy, up, nz, double.PositiveInfinity, "d_cave")["d_cave"];
-                    double fmin = double.PositiveInfinity;
-                    double fmax = double.NegativeInfinity;
-                    for (int q = 0; q < dc.Length; q++)
-                    {
-                        dc[q] = Numerics.NpMath.Clip(dc[q], -clip, clip);
-                        fmin = Math.Min(fmin, dc[q]);
-                        fmax = Math.Max(fmax, dc[q]);
-                    }
-                    voxels += dc.Length;
-                    if (fmin >= 0.0 || fmax <= 0.0)
-                    {
-                        continue;
-                    }
-                    (List<double> vt, List<long> fc) = IsoSurface(dc, ntx, nty, nz, v);
-                    if (fc.Count == 0)
-                    {
-                        continue;
-                    }
-                    double ox = xs[ia];
-                    double oy = ys[ja];
-                    double oz = k0 * v;
                     for (int q = 0; q < vt.Count; q += 3)
                     {
                         vertsL.Add(vt[q] + ox);
@@ -397,7 +496,11 @@ public static class Mesh
                 }
                 tilesWithCaves++;
             }
-            log?.Invoke($"[동굴 메시] 열 {ib}/{nxv - 1} 조각 끝, 꼭짓점 {nVert}");
+            (int _, int ibTile, int jaTile, int _) = tileStarts[t];
+            if (jaTile + TileVoxels >= Math.Max(nyv - 1, 1))
+            {
+                log?.Invoke($"[동굴 메시] 열 {ibTile}/{nxv - 1} 조각 끝, 꼭짓점 {nVert}");
+            }
         }
         var diag = new OrderedDictionary<string, object?>
         {
@@ -440,7 +543,7 @@ public static class Mesh
             }
         }
         diag["faces_kept"] = (long)(keep.Count / 3);
-        long[] used = keep.Distinct().OrderBy(x => x).ToArray();
+        long[] used = SortedUnique(keep, verts.Length / 3);
         long[] remap = new long[verts.Length / 3];
         Array.Fill(remap, -1L);
         for (long q = 0; q < used.Length; q++)
@@ -485,7 +588,7 @@ public static class Mesh
         }
         long[] f2 = faces.Select(x => map[x]).ToArray();
         // remove_unreferenced_vertices
-        long[] used = f2.Distinct().OrderBy(x => x).ToArray();
+        long[] used = SortedUnique(f2, merged.Count / 3);
         long[] remap = new long[merged.Count / 3];
         Array.Fill(remap, -1L);
         double[] verts = new double[used.Length * 3];
@@ -520,13 +623,16 @@ public static class Mesh
     private static double[] VertexNormals(double[] v, long[] f)
     {
         double[] acc = new double[v.Length];
+        Span<long> idx = stackalloc long[3];
+        Span<double> p = stackalloc double[9];
         for (int t = 0; t < f.Length / 3; t++)
         {
-            long[] idx = [f[t * 3], f[(t * 3) + 1], f[(t * 3) + 2]];
-            double[] p = new double[9];
+            idx[0] = f[t * 3];
+            idx[1] = f[(t * 3) + 1];
+            idx[2] = f[(t * 3) + 2];
             for (int q = 0; q < 3; q++)
             {
-                Array.Copy(v, idx[q] * 3, p, q * 3, 3);
+                v.AsSpan((int)(idx[q] * 3), 3).CopyTo(p[(q * 3)..]);
             }
             double ux = p[3] - p[0];
             double uy = p[4] - p[1];

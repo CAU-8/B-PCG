@@ -1114,7 +1114,16 @@ public sealed class HeroVolume
             }
             if (sel.Count > 0)
             {
-                double[] nz = DetailNoise(sel.Select(p => px[p]).ToArray(), sel.Select(p => py[p]).ToArray(), sel.Select(p => up[p]).ToArray());
+                double[] sx = new double[sel.Count];
+                double[] sy = new double[sel.Count];
+                double[] sz = new double[sel.Count];
+                for (int q = 0; q < sel.Count; q++)
+                {
+                    sx[q] = px[sel[q]];
+                    sy[q] = py[sel[q]];
+                    sz[q] = up[sel[q]];
+                }
+                double[] nz = DetailNoise(sx, sy, sz);
                 for (int q = 0; q < sel.Count; q++)
                 {
                     xi[sel[q]] = nz[q];
@@ -1260,16 +1269,36 @@ public sealed class HeroVolume
         {
             throw new ArgumentException($"points 는 (M, 3) 배열이어야 합니다: 받은 길이 {points.Length}");
         }
-        if (points.Any(v => !double.IsFinite(v)))
+        foreach (double v in points)
         {
-            throw new ArgumentException("points 에 NaN 이나 inf 가 있습니다");
+            if (!double.IsFinite(v))
+            {
+                throw new ArgumentException("points 에 NaN 이나 inf 가 있습니다");
+            }
         }
         return points;
     }
 
     private static VolumeEval Concat(List<VolumeEval> parts)
     {
-        T[] C<T>(Func<VolumeEval, T[]> f) => parts.SelectMany(f).ToArray();
+        // 조각 순서대로 이어 붙입니다 (SelectMany().ToArray() 와 같은 결과를 Array.Copy 로).
+        T[] C<T>(Func<VolumeEval, T[]> f)
+        {
+            long total = 0;
+            foreach (VolumeEval part in parts)
+            {
+                total += f(part).Length;
+            }
+            T[] o = new T[total];
+            long at = 0;
+            foreach (VolumeEval part in parts)
+            {
+                T[] a = f(part);
+                Array.Copy(a, 0, o, at, a.Length);
+                at += a.Length;
+            }
+            return o;
+        }
         return new VolumeEval
         {
             D0 = C(p => p.D0),
@@ -1311,7 +1340,11 @@ public sealed class HeroVolume
                 pz[i] = pts[((s + i) * 3) + 2];
             }
             ColumnValues cols = Columns(px, py);
-            long[] col = Enumerable.Range(0, len).Select(i => (long)i).ToArray();
+            long[] col = new long[len];
+            for (int i = 0; i < len; i++)
+            {
+                col[i] = i;
+            }
             parts.Add(EvaluateCore(cols, col, px, py, pz, noiseBandM));
         }
         return parts.Count == 1 ? parts[0] : Concat(parts);
@@ -1338,9 +1371,12 @@ public sealed class HeroVolume
         {
             throw new ArgumentException($"up 은 (C, Z) 모양이어야 합니다: 길이 {up.Length}, C = {cN}");
         }
-        if (up.Any(v => !double.IsFinite(v)))
+        foreach (double v in up)
         {
-            throw new ArgumentException("up 에 NaN 이나 inf 가 있습니다");
+            if (!double.IsFinite(v))
+            {
+                throw new ArgumentException("up 에 NaN 이나 inf 가 있습니다");
+            }
         }
         var output = new Dictionary<string, Array>();
         int step = Math.Max(ChunkPoints / Math.Max(zCount, 1), 1);
