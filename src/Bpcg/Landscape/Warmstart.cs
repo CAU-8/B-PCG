@@ -119,6 +119,8 @@ public static class Warmstart
             byte[] r = new byte[nc * nr];
             double[] km = new double[nc * nr];
             double[] sc = new double[nc * nr];
+            double[] kmAll = columns.KMult;
+            double[] scAll = columns.SCrit;
             for (int k = 0; k < nc; k++)
             {
                 int jc = k / nxc;
@@ -128,8 +130,8 @@ public static class Warmstart
                 int pick = (jf * nx) + iff;
                 Array.Copy(columns.Bottom, pick * nl, b, k * nl, nl);
                 Array.Copy(columns.Rock, pick * nr, r, k * nr, nr);
-                Array.Copy(columns.KMult, pick * nr, km, k * nr, nr);
-                Array.Copy(columns.SCrit, pick * nr, sc, k * nr, nr);
+                Array.Copy(kmAll, pick * nr, km, k * nr, nr);
+                Array.Copy(scAll, pick * nr, sc, k * nr, nr);
             }
             colsC = new LayerColumns(b, r, km, sc, nl);
         }

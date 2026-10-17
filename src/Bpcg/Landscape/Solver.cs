@@ -649,6 +649,8 @@ public static class Solver
         {
             throw new ArgumentException($"layers 의 칸 수 {layers.NCells} 가 그래프 칸 수 {n} 와 다릅니다");
         }
+        double[] km = layers.KMult;
+        double[] sc = layers.SCrit;
         foreach (double v in layers.Bottom)
         {
             if (!double.IsFinite(v))
@@ -656,18 +658,18 @@ public static class Solver
                 throw new ArgumentException("layers 의 bottom·k_mult 에 NaN 이나 inf 가 있습니다");
             }
         }
-        for (int i = 0; i < layers.KMult.Length; i++)
+        for (int i = 0; i < km.Length; i++)
         {
-            if (!double.IsFinite(layers.KMult[i]))
+            if (!double.IsFinite(km[i]))
             {
                 throw new ArgumentException("layers 의 bottom·k_mult 에 NaN 이나 inf 가 있습니다");
             }
-            if (!(layers.KMult[i] > 0.0) || !(layers.SCrit[i] > 0.0))
+            if (!(km[i] > 0.0) || !(sc[i] > 0.0))
             {
                 throw new ArgumentException("layers 의 k_mult 와 s_crit 는 모두 0 보다 커야 합니다");
             }
         }
-        return (layers.Bottom, layers.NLayers, layers.KMult, layers.SCrit);
+        return (layers.Bottom, layers.NLayers, km, sc);
     }
 
     private static void CheckOutlets(bool[] isOutlet, int n)

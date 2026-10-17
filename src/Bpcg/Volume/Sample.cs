@@ -50,6 +50,28 @@ public sealed class ColumnValues
     public required byte[] StrataRock { get; init; }
 }
 
+/// <summary>
+/// evaluate 가 배열로 돌려줄 값. 요청하지 않은 값은 빈 배열로 둡니다. 요청한 값의 식과 연산 순서는 모두 계산할 때와 같습니다.
+/// </summary>
+[Flags]
+public enum VolumeField
+{
+    None = 0,
+    D0 = 1 << 0,
+    D1 = 1 << 1,
+    DCave = 1 << 2,
+    D = 1 << 3,
+    WaterLevel = 1 << 4,
+    Material = 1 << 5,
+    SolidMaterial = 1 << 6,
+    Rock = 1 << 7,
+    Water = 1 << 8,
+    Surface = 1 << 9,
+    Under = 1 << 10,
+    ZGw = 1 << 11,
+    All = (1 << 12) - 1,
+}
+
 /// <summary>점마다 계산의 모든 중간값 (HeroVolume.evaluate 의 반환).</summary>
 public sealed class VolumeEval
 {
@@ -92,6 +114,24 @@ public sealed class VolumeEval
         "surface" => Surface,
         "under" => Under,
         "z_gw" => ZGw,
+        _ => throw new KeyNotFoundException($"evaluate 에 '{key}' 가 없습니다"),
+    };
+
+    /// <summary><see cref="Get"/> 의 키 이름에 해당하는 <see cref="VolumeField"/>.</summary>
+    public static VolumeField FieldOf(string key) => key switch
+    {
+        "d0" => VolumeField.D0,
+        "d1" => VolumeField.D1,
+        "d_cave" => VolumeField.DCave,
+        "d" => VolumeField.D,
+        "water_level" => VolumeField.WaterLevel,
+        "material" => VolumeField.Material,
+        "solid_material" => VolumeField.SolidMaterial,
+        "rock" => VolumeField.Rock,
+        "water" => VolumeField.Water,
+        "surface" => VolumeField.Surface,
+        "under" => VolumeField.Under,
+        "z_gw" => VolumeField.ZGw,
         _ => throw new KeyNotFoundException($"evaluate 에 '{key}' 가 없습니다"),
     };
 }
@@ -1093,7 +1133,8 @@ public sealed class HeroVolume
         return Math.Sqrt((ex * ex) + (ey * ey) + (ez * ez));
     }
 
-    private VolumeEval EvaluateCore(ColumnValues cols, long[] col, double[] px, double[] py, double[] up, double noiseBandM)
+    private VolumeEval EvaluateCore(ColumnValues cols, long[] col, double[] px, double[] py, double[] up, double noiseBandM,
+        VolumeField need = VolumeField.All)
     {
         int mN = col.Length;
         double[] xi = new double[mN];
@@ -1102,12 +1143,12 @@ public sealed class HeroVolume
             var sel = new List<int>();
             for (int p = 0; p < mN; p++)
             {
-                bool need = cols.M[col[p]] > 0;
+                bool inBand = cols.M[col[p]] > 0;
                 if (double.IsFinite(noiseBandM))
                 {
-                    need &= Math.Abs(up[p] - cols.ZSurface[col[p]]) <= noiseBandM;
+                    inBand &= Math.Abs(up[p] - cols.ZSurface[col[p]]) <= noiseBandM;
                 }
-                if (need)
+                if (inBand)
                 {
                     sel.Add(p);
                 }
@@ -1130,15 +1171,26 @@ public sealed class HeroVolume
                 }
             }
         }
-        double[] oD0 = new double[mN];
-        double[] oD1 = new double[mN];
-        double[] oDCave = new double[mN];
-        double[] oD = new double[mN];
-        double[] oHw = new double[mN];
-        byte[] oMat = new byte[mN];
-        byte[] oSolid = new byte[mN];
-        byte[] oRock = new byte[mN];
-        bool[] oWater = new bool[mN];
+        bool wD0 = (need & VolumeField.D0) != 0;
+        bool wD1 = (need & VolumeField.D1) != 0;
+        bool wDCave = (need & VolumeField.DCave) != 0;
+        bool wD = (need & VolumeField.D) != 0;
+        bool wHw = (need & VolumeField.WaterLevel) != 0;
+        bool wMat = (need & VolumeField.Material) != 0;
+        bool wSolid = (need & VolumeField.SolidMaterial) != 0;
+        bool wRock = (need & VolumeField.Rock) != 0;
+        bool wWater = (need & VolumeField.Water) != 0;
+        // 동굴 거리(수준별 동굴·캡슐·녹는 층)는 d_cave 와 그것을 쓰는 d·material·water 에만 필요합니다.
+        bool needCave = wDCave || wD || wMat || wWater;
+        double[] oD0 = wD0 ? new double[mN] : [];
+        double[] oD1 = wD1 ? new double[mN] : [];
+        double[] oDCave = wDCave ? new double[mN] : [];
+        double[] oD = wD ? new double[mN] : [];
+        double[] oHw = wHw ? new double[mN] : [];
+        byte[] oMat = wMat ? new byte[mN] : [];
+        byte[] oSolid = wSolid ? new byte[mN] : [];
+        byte[] oRock = wRock ? new byte[mN] : [];
+        bool[] oWater = wWater ? new bool[mN] : [];
         int nL = NLayers;
         int nLv = NLevels;
         double amp = _amp;
@@ -1175,45 +1227,48 @@ public sealed class HeroVolume
             byte rock = cols.StrataRock[(c * (nL + 1)) + li];
             double depth = NpMath.PyMax(surf - z, 0.0);
             byte solid = depth < cols.Soil[c] ? Rocks.Soil : (depth < cols.Soil[c] + cols.Alluvium[c] ? Rocks.Alluvium : rock);
-            double dmin = double.PositiveInfinity;
-            for (int k = 0; k < nLv; k++)
-            {
-                double w = cols.CaveW[(c * nLv) + k];
-                if (w > 0.0)
-                {
-                    double tK = NpMath.PyMax(
-                        NpMath.PyMax(cols.NuDist[(c * nLv) + k] - rPass, Math.Abs(z - cols.CaveZ[(c * nLv) + k]) - rPass),
-                        (0.5 - w) * dx);
-                    dmin = NpMath.PyMin(dmin, tK);
-                }
-            }
-            if (_bItems.Length > 0)
-            {
-                int ib = Math.Clamp((int)Math.Floor((px[p] - bx0) / bsize), 0, nbx - 1);
-                int jb = Math.Clamp((int)Math.Floor((py[p] - by0) / bsize), 0, nby - 1);
-                int bb = (jb * nbx) + ib;
-                for (long q = _bStart[bb]; q < _bStart[bb + 1]; q++)
-                {
-                    long e = _bItems[q];
-                    dmin = NpMath.PyMin(dmin, CapsuleDist(px[p], py[p], z, capA, capB, e) - rPass);
-                }
-            }
             double dcave = double.PositiveInfinity;
-            if (dmin < double.PositiveInfinity)
+            if (needCave)
             {
-                double dSol = double.PositiveInfinity;
-                for (int i = 0; i <= nL; i++)
+                double dmin = double.PositiveInfinity;
+                for (int k = 0; k < nLv; k++)
                 {
-                    if (Rocks.Soluble[cols.StrataRock[(c * (nL + 1)) + i]])
+                    double w = cols.CaveW[(c * nLv) + k];
+                    if (w > 0.0)
                     {
-                        double top = i == 0 ? double.PositiveInfinity : cols.StrataBottom[(c * nL) + i - 1];
-                        double bot = i == nL ? double.NegativeInfinity : cols.StrataBottom[(c * nL) + i];
-                        dSol = NpMath.PyMin(dSol, NpMath.PyMax(z - top, bot - z));
+                        double tK = NpMath.PyMax(
+                            NpMath.PyMax(cols.NuDist[(c * nLv) + k] - rPass, Math.Abs(z - cols.CaveZ[(c * nLv) + k]) - rPass),
+                            (0.5 - w) * dx);
+                        dmin = NpMath.PyMin(dmin, tK);
                     }
                 }
-                double blend = NpMath.PyMin(cols.Alluvium[c] / AlluviumClipBlendM, 1.0);
-                double plane = surf - cols.Alluvium[c] - cols.Soil[c] + ((cols.Soil[c] + (2.0 * rPass)) * (1.0 - blend));
-                dcave = NpMath.PyMax(NpMath.PyMax(dmin, dSol), z - plane);
+                if (_bItems.Length > 0)
+                {
+                    int ib = Math.Clamp((int)Math.Floor((px[p] - bx0) / bsize), 0, nbx - 1);
+                    int jb = Math.Clamp((int)Math.Floor((py[p] - by0) / bsize), 0, nby - 1);
+                    int bb = (jb * nbx) + ib;
+                    for (long q = _bStart[bb]; q < _bStart[bb + 1]; q++)
+                    {
+                        long e = _bItems[q];
+                        dmin = NpMath.PyMin(dmin, CapsuleDist(px[p], py[p], z, capA, capB, e) - rPass);
+                    }
+                }
+                if (dmin < double.PositiveInfinity)
+                {
+                    double dSol = double.PositiveInfinity;
+                    for (int i = 0; i <= nL; i++)
+                    {
+                        if (Rocks.Soluble[cols.StrataRock[(c * (nL + 1)) + i]])
+                        {
+                            double top = i == 0 ? double.PositiveInfinity : cols.StrataBottom[(c * nL) + i - 1];
+                            double bot = i == nL ? double.NegativeInfinity : cols.StrataBottom[(c * nL) + i];
+                            dSol = NpMath.PyMin(dSol, NpMath.PyMax(z - top, bot - z));
+                        }
+                    }
+                    double blend = NpMath.PyMin(cols.Alluvium[c] / AlluviumClipBlendM, 1.0);
+                    double plane = surf - cols.Alluvium[c] - cols.Soil[c] + ((cols.Soil[c] + (2.0 * rPass)) * (1.0 - blend));
+                    dcave = NpMath.PyMax(NpMath.PyMax(dmin, dSol), z - plane);
+                }
             }
             double dFinal = NpMath.PyMax(d1, -dcave);
             double hW = cols.LakeLevel[c];
@@ -1226,25 +1281,69 @@ public sealed class HeroVolume
                 hW = NpMath.PyMax(hW, cols.RiverLevel[c]);
             }
             double lvl = d1 < 0.0 ? cols.ZGw[c] : hW;
-            oD0[p] = d0;
-            oD1[p] = d1;
-            oDCave[p] = dcave;
-            oD[p] = dFinal;
-            oSolid[p] = solid;
-            oRock[p] = rock;
-            oMat[p] = dFinal <= 0.0 ? solid : MaterialEmpty;
-            oWater[p] = dFinal > 0.0 && z < lvl;
-            oHw[p] = hW;
+            if (wD0)
+            {
+                oD0[p] = d0;
+            }
+            if (wD1)
+            {
+                oD1[p] = d1;
+            }
+            if (wDCave)
+            {
+                oDCave[p] = dcave;
+            }
+            if (wD)
+            {
+                oD[p] = dFinal;
+            }
+            if (wSolid)
+            {
+                oSolid[p] = solid;
+            }
+            if (wRock)
+            {
+                oRock[p] = rock;
+            }
+            if (wMat)
+            {
+                oMat[p] = dFinal <= 0.0 ? solid : MaterialEmpty;
+            }
+            if (wWater)
+            {
+                oWater[p] = dFinal > 0.0 && z < lvl;
+            }
+            if (wHw)
+            {
+                oHw[p] = hW;
+            }
         });
-        double[] surface = new double[mN];
-        bool[] under = new bool[mN];
-        double[] zgw = new double[mN];
-        for (int p = 0; p < mN; p++)
+        bool wSurface = (need & VolumeField.Surface) != 0;
+        bool wUnder = (need & VolumeField.Under) != 0;
+        bool wZgw = (need & VolumeField.ZGw) != 0;
+        double[] surface = wSurface ? new double[mN] : [];
+        bool[] under = wUnder ? new bool[mN] : [];
+        double[] zgw = wZgw ? new double[mN] : [];
+        if (wSurface || wUnder || wZgw)
         {
-            long c = col[p];
-            surface[p] = cols.ZSurface[c] + (cols.M[c] * _amp * xi[p]);
-            under[p] = oD1[p] < 0;
-            zgw[p] = cols.ZGw[c];
+            // under 는 d1 로 정하므로, d1 을 요청하지 않았으면 같은 식으로 다시 구합니다.
+            double[] d1Under = wUnder && !wD1 ? EvaluateCore(cols, col, px, py, up, noiseBandM, VolumeField.D1).D1 : oD1;
+            for (int p = 0; p < mN; p++)
+            {
+                long c = col[p];
+                if (wSurface)
+                {
+                    surface[p] = cols.ZSurface[c] + (cols.M[c] * _amp * xi[p]);
+                }
+                if (wUnder)
+                {
+                    under[p] = d1Under[p] < 0;
+                }
+                if (wZgw)
+                {
+                    zgw[p] = cols.ZGw[c];
+                }
+            }
         }
         return new VolumeEval
         {
@@ -1279,53 +1378,23 @@ public sealed class HeroVolume
         return points;
     }
 
-    private static VolumeEval Concat(List<VolumeEval> parts)
-    {
-        // 조각 순서대로 이어 붙입니다 (SelectMany().ToArray() 와 같은 결과를 Array.Copy 로).
-        T[] C<T>(Func<VolumeEval, T[]> f)
-        {
-            long total = 0;
-            foreach (VolumeEval part in parts)
-            {
-                total += f(part).Length;
-            }
-            T[] o = new T[total];
-            long at = 0;
-            foreach (VolumeEval part in parts)
-            {
-                T[] a = f(part);
-                Array.Copy(a, 0, o, at, a.Length);
-                at += a.Length;
-            }
-            return o;
-        }
-        return new VolumeEval
-        {
-            D0 = C(p => p.D0),
-            D1 = C(p => p.D1),
-            DCave = C(p => p.DCave),
-            D = C(p => p.D),
-            WaterLevel = C(p => p.WaterLevel),
-            Material = C(p => p.Material),
-            SolidMaterial = C(p => p.SolidMaterial),
-            Rock = C(p => p.Rock),
-            Water = C(p => p.Water),
-            Surface = C(p => p.Surface),
-            Under = C(p => p.Under),
-            ZGw = C(p => p.ZGw),
-        };
-    }
-
     /// <summary>점마다 계산의 모든 중간값 (evaluate). points: (M, 3) 국소 (동, 북, 위) [m].</summary>
     public VolumeEval Evaluate(double[] points, double noiseBandM = double.PositiveInfinity)
+        => EvaluateFields(points, VolumeField.All, noiseBandM);
+
+    /// <summary>
+    /// <see cref="Evaluate"/> 에서 need 로 고른 값만 배열로 돌려줍니다 (나머지는 빈 배열). 점마다 값은 Evaluate 와 같습니다.
+    /// 덩어리(ChunkPoints 점)마다 결과를 바로 제자리에 옮겨, 모든 값을 덩어리째 들고 있다가 이어 붙이지 않습니다.
+    /// </summary>
+    public VolumeEval EvaluateFields(double[] points, VolumeField need, double noiseBandM = double.PositiveInfinity)
     {
         double[] pts = CheckPoints(points);
         int mN = pts.Length / 3;
         if (mN == 0)
         {
-            return EvaluateCore(Columns([], []), [], [], [], [], 0.0);
+            return EvaluateCore(Columns([], []), [], [], [], [], 0.0, need);
         }
-        var parts = new List<VolumeEval>();
+        VolumeEval? whole = null;
         for (int s = 0; s < mN; s += ChunkPoints)
         {
             int e = Math.Min(s + ChunkPoints, mN);
@@ -1345,15 +1414,58 @@ public sealed class HeroVolume
             {
                 col[i] = i;
             }
-            parts.Add(EvaluateCore(cols, col, px, py, pz, noiseBandM));
+            VolumeEval part = EvaluateCore(cols, col, px, py, pz, noiseBandM, need);
+            if (len == mN)
+            {
+                return part;
+            }
+            whole ??= Allocate(need, mN);
+            CopyInto(part, whole, s);
         }
-        return parts.Count == 1 ? parts[0] : Concat(parts);
+        return whole!;
+    }
+
+    private static VolumeEval Allocate(VolumeField need, int n)
+    {
+        T[] A<T>(VolumeField f) => (need & f) != 0 ? new T[n] : [];
+        return new VolumeEval
+        {
+            D0 = A<double>(VolumeField.D0),
+            D1 = A<double>(VolumeField.D1),
+            DCave = A<double>(VolumeField.DCave),
+            D = A<double>(VolumeField.D),
+            WaterLevel = A<double>(VolumeField.WaterLevel),
+            Material = A<byte>(VolumeField.Material),
+            SolidMaterial = A<byte>(VolumeField.SolidMaterial),
+            Rock = A<byte>(VolumeField.Rock),
+            Water = A<bool>(VolumeField.Water),
+            Surface = A<double>(VolumeField.Surface),
+            Under = A<bool>(VolumeField.Under),
+            ZGw = A<double>(VolumeField.ZGw),
+        };
+    }
+
+    // 요청하지 않은 값은 빈 배열이라 길이 0 을 옮깁니다.
+    private static void CopyInto(VolumeEval part, VolumeEval whole, int at)
+    {
+        Array.Copy(part.D0, 0, whole.D0, part.D0.Length == 0 ? 0 : at, part.D0.Length);
+        Array.Copy(part.D1, 0, whole.D1, part.D1.Length == 0 ? 0 : at, part.D1.Length);
+        Array.Copy(part.DCave, 0, whole.DCave, part.DCave.Length == 0 ? 0 : at, part.DCave.Length);
+        Array.Copy(part.D, 0, whole.D, part.D.Length == 0 ? 0 : at, part.D.Length);
+        Array.Copy(part.WaterLevel, 0, whole.WaterLevel, part.WaterLevel.Length == 0 ? 0 : at, part.WaterLevel.Length);
+        Array.Copy(part.Material, 0, whole.Material, part.Material.Length == 0 ? 0 : at, part.Material.Length);
+        Array.Copy(part.SolidMaterial, 0, whole.SolidMaterial, part.SolidMaterial.Length == 0 ? 0 : at, part.SolidMaterial.Length);
+        Array.Copy(part.Rock, 0, whole.Rock, part.Rock.Length == 0 ? 0 : at, part.Rock.Length);
+        Array.Copy(part.Water, 0, whole.Water, part.Water.Length == 0 ? 0 : at, part.Water.Length);
+        Array.Copy(part.Surface, 0, whole.Surface, part.Surface.Length == 0 ? 0 : at, part.Surface.Length);
+        Array.Copy(part.Under, 0, whole.Under, part.Under.Length == 0 ? 0 : at, part.Under.Length);
+        Array.Copy(part.ZGw, 0, whole.ZGw, part.ZGw.Length == 0 ? 0 : at, part.ZGw.Length);
     }
 
     /// <summary>3D 샘플 함수 (sample): (d float32, material uint8 (빈 곳 255), water bool).</summary>
     public (float[] D, byte[] Material, bool[] Water) Sample(double[] points)
     {
-        VolumeEval ev = Evaluate(points);
+        VolumeEval ev = EvaluateFields(points, VolumeField.D | VolumeField.Material | VolumeField.Water);
         return (Array.ConvertAll(ev.D, v => (float)v), ev.Material, ev.Water);
     }
 
@@ -1378,6 +1490,11 @@ public sealed class HeroVolume
                 throw new ArgumentException("up 에 NaN 이나 inf 가 있습니다");
             }
         }
+        VolumeField need = VolumeField.None;
+        foreach (string key in keys)
+        {
+            need |= VolumeEval.FieldOf(key);
+        }
         var output = new Dictionary<string, Array>();
         int step = Math.Max(ChunkPoints / Math.Max(zCount, 1), 1);
         for (int s = 0; s < cN; s += step)
@@ -1400,7 +1517,7 @@ public sealed class HeroVolume
                     uz[p] = up[((s + c) * zCount) + k];
                 }
             }
-            VolumeEval ev = EvaluateCore(cols, col, px, py, uz, noiseBandM);
+            VolumeEval ev = EvaluateCore(cols, col, px, py, uz, noiseBandM, need);
             foreach (string key in keys)
             {
                 Array src = ev.Get(key);

@@ -355,6 +355,39 @@ public static class Corridor
     }
 
     /// <summary>재질 부피 strata.u8/.json 과 윗면 strata_top.bin/.json 을 씁니다 (bake_strata).</summary>
+    // 동굴 메시를 만들어 caves.glb 로 씁니다. 메시 배열(수백 MB)이 이 메서드 안에서 끝나, 뒤의 재질 부피 굽기 동안 남지 않습니다.
+    private static (OrderedDictionary<string, object?> Diag, string? Note) BakeCaves(
+        HeroVolume vol, (double XMin, double XMax, double YMin, double YMax) rect, double voxel, EngineFrame frame, string outDir,
+        OrderedDictionary<string, object?> files)
+    {
+        (double[] verts, long[] faces, OrderedDictionary<string, object?> cdiag) = Mesh.CaveSurface(vol, rect, voxel);
+        string? cavesNote = null;
+        if (faces.Length > 0)
+        {
+            CaveMesh mesh = Mesh.BuildMesh(verts, faces, vol, frame, voxel);
+            long size = Mesh.ExportGlb(mesh, Path.Combine(outDir, "caves.glb"));
+            files["caves"] = new OrderedDictionary<string, object?>
+            {
+                ["file"] = "caves.glb",
+                ["bytes"] = size,
+                ["vertices"] = (long)mesh.VertexCount,
+                ["faces"] = (long)mesh.FaceCount,
+                ["color_0"] = "rgb = rock color, alpha = material id (0..11) / 255",
+                ["normals"] = "point into the cave void (front faces seen from inside)",
+            };
+        }
+        else
+        {
+            cavesNote = "회랑 안에 동굴이 없어 caves.glb 를 쓰지 않았습니다";
+            string stale = Path.Combine(outDir, "caves.glb");
+            if (File.Exists(stale))
+            {
+                File.Delete(stale);
+            }
+        }
+        return (cdiag, cavesNote);
+    }
+
     public static OrderedDictionary<string, object?> BakeStrata(
         HeroVolume volume, (double XMin, double XMax, double YMin, double YMax) rect, EngineFrame frame, Config cfg, string outDir)
     {
@@ -573,31 +606,7 @@ public static class Corridor
 
         // --- 동굴 메시
         t = Stopwatch.GetTimestamp();
-        (double[] verts, long[] faces, OrderedDictionary<string, object?> cdiag) = Mesh.CaveSurface(vol, rect, voxel);
-        string? cavesNote = null;
-        if (faces.Length > 0)
-        {
-            CaveMesh mesh = Mesh.BuildMesh(verts, faces, vol, frame, voxel);
-            long size = Mesh.ExportGlb(mesh, Path.Combine(outDir, "caves.glb"));
-            files["caves"] = new OrderedDictionary<string, object?>
-            {
-                ["file"] = "caves.glb",
-                ["bytes"] = size,
-                ["vertices"] = (long)mesh.VertexCount,
-                ["faces"] = (long)mesh.FaceCount,
-                ["color_0"] = "rgb = rock color, alpha = material id (0..11) / 255",
-                ["normals"] = "point into the cave void (front faces seen from inside)",
-            };
-        }
-        else
-        {
-            cavesNote = "회랑 안에 동굴이 없어 caves.glb 를 쓰지 않았습니다";
-            string stale = Path.Combine(outDir, "caves.glb");
-            if (File.Exists(stale))
-            {
-                File.Delete(stale);
-            }
-        }
+        (OrderedDictionary<string, object?> cdiag, string? cavesNote) = BakeCaves(vol, rect, voxel, frame, outDir, files);
         sec["caves"] = Seconds(t);
         log?.Invoke($"[굽기] 동굴 메시: 삼각형 {LogText.N(Convert.ToInt64(cdiag.GetValueOrDefault("faces_kept") ?? 0L, CultureInfo.InvariantCulture))}개 (동굴이 든 조각 {cdiag["tiles_with_caves"]}/{cdiag["tiles"]}), {(double)sec["caves"]!:F2} s");
 

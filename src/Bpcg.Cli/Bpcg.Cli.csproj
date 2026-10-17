@@ -8,4 +8,8 @@
     <ProjectReference Include="../Bpcg/Bpcg.csproj" />
     <ProjectReference Include="../Bpcg.Figures/Bpcg.Figures.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- GC 가 다 쓴 큰 배열을 더 일찍 거두게 합니다 (0–9, 클수록 힙을 작게 유지). laptop all 최대 메모리 10.0 → 5.75 GB, 걸린 시간 +2% 였습니다. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 </Project>

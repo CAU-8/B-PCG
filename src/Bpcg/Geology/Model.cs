@@ -15,6 +15,12 @@ public sealed record Template(string Name, (byte Rock, double Thickness)[] Layer
 public sealed class LayerColumns
 {
     public LayerColumns(double[] bottom, byte[] rock, double[] kMult, double[] sCrit, int nLayers)
+        : this(bottom, rock, nLayers, kMult, sCrit)
+    {
+    }
+
+    // kMult·sCrit 이 null 이면 암석 표에서 그때그때 만듭니다 (FromColumns).
+    private LayerColumns(double[] bottom, byte[] rock, int nLayers, double[]? kMult, double[]? sCrit)
     {
         if (nLayers < 0 || bottom.Length % Math.Max(nLayers, 1) != 0)
         {
@@ -25,25 +31,40 @@ public sealed class LayerColumns
         {
             throw new ArgumentException("strata_rock 모양이 strata_bottom 모양과 맞지 않습니다 ((N, L+1) 이어야 함)");
         }
-        if (kMult.Length != rock.Length || sCrit.Length != rock.Length)
+        if ((kMult is not null && kMult.Length != rock.Length) || (sCrit is not null && sCrit.Length != rock.Length))
         {
             throw new ArgumentException("k_mult, s_crit 는 rock 과 같은 (N, L+1) 모양이어야 합니다");
         }
         Bottom = bottom;
         Rock = rock;
-        KMult = kMult;
-        SCrit = sCrit;
+        _kMult = kMult;
+        _sCrit = sCrit;
         NLayers = nLayers;
         NCells = n;
     }
+
+    private readonly double[]? _kMult;
+    private readonly double[]? _sCrit;
 
     public double[] Bottom { get; }
 
     public byte[] Rock { get; }
 
-    public double[] KMult { get; }
+    /// <summary>(N, L+1) 층별 K 배율. FromColumns 로 만든 경우 부를 때마다 암석 표에서 새 배열을 만듭니다 (한 번 읽어 두고 쓰세요).</summary>
+    public double[] KMult => _kMult ?? FromRockTable(Rocks.KMult);
 
-    public double[] SCrit { get; }
+    /// <summary>(N, L+1) 층별 S_crit. FromColumns 로 만든 경우 부를 때마다 암석 표에서 새 배열을 만듭니다 (한 번 읽어 두고 쓰세요).</summary>
+    public double[] SCrit => _sCrit ?? FromRockTable(Rocks.SCrit);
+
+    private double[] FromRockTable(double[] table)
+    {
+        double[] o = new double[Rock.Length];
+        for (int i = 0; i < Rock.Length; i++)
+        {
+            o[i] = table[Rock[i]];
+        }
+        return o;
+    }
 
     /// <summary>층 경계 수 L (암석 열은 L+1).</summary>
     public int NLayers { get; }
@@ -53,19 +74,14 @@ public sealed class LayerColumns
     /// <summary>층 바닥과 암석에서 암석 표(K 배율, S_crit)를 찾아 묶습니다.</summary>
     public static LayerColumns FromColumns(double[] strataBottom, byte[] strataRock, int nLayers)
     {
-        double[] k = new double[strataRock.Length];
-        double[] s = new double[strataRock.Length];
         for (int i = 0; i < strataRock.Length; i++)
         {
-            byte r = strataRock[i];
-            if (r >= Rocks.NRocks)
+            if (strataRock[i] >= Rocks.NRocks)
             {
                 throw new ArgumentException($"strata_rock 의 암석 번호는 0..{Rocks.NRocks - 1} 이어야 합니다");
             }
-            k[i] = Rocks.KMult[r];
-            s[i] = Rocks.SCrit[r];
         }
-        return new LayerColumns(strataBottom, strataRock, k, s, nLayers);
+        return new LayerColumns(strataBottom, strataRock, nLayers, null, null);
     }
 
     /// <summary>고도 z ((N,) 또는 (N, M) 행 우선) 가 속한 층 번호.</summary>
