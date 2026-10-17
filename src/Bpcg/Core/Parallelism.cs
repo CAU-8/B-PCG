@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,13 +47,21 @@ public static class Parallelism
         {
             options.MaxDegreeOfParallelism = max;
         }
-        Parallel.For(fromInclusive, toExclusive, options, i =>
+        // 인덱스마다 AsyncLocal 을 쓰면 쓸 때마다 실행 문맥을 새로 만들어, 호출 한 번에 수백 MB 를 할당하고
+        // 몸체보다 비싸집니다. 범위로 나눠 범위마다 한 번만 씁니다. 범위 수는 실행 수의 8배로 잡아
+        // 성능·효율 코어가 섞인 CPU 에서도 늦게 끝나는 범위가 전체를 붙잡지 않게 합니다.
+        int workers = degree ?? Environment.ProcessorCount;
+        int rangeSize = Math.Max(1, (count + (workers * 8) - 1) / (workers * 8));
+        Parallel.ForEach(Partitioner.Create(fromInclusive, toExclusive, rangeSize), options, range =>
         {
             int previous = Nesting.Value;
             Nesting.Value = previous + 1;
             try
             {
-                body(i);
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    body(i);
+                }
             }
             finally
             {
