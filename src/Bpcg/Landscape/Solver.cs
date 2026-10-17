@@ -181,16 +181,15 @@ public static class Solver
     /// <summary>
     /// 칸마다 고도 적분에 쓰는 값 가운데 고도와 상관없는 것 (받는 칸까지 거리 d, 침식률 e, qt = Q^θ, hill, ksRef).
     /// 수신 셀이나 Q·A·Qs 가 바뀐 칸만 다시 계산합니다. 식과 연산 순서는 고치기 전의 IntegrateCell 과 같아서
-    /// 값이 비트까지 같습니다. KPow 는 층 배율 kmult^(−1/n) 으로 풀이 내내 같습니다.
+    /// 값이 비트까지 같습니다. 층 배율 kmult^(−1/n) 과 S_crit 은 <see cref="LawTable"/> 이 맡습니다.
     /// </summary>
-    private sealed class CellLaw(int n, double[] kPow)
+    private sealed class CellLaw(int n)
     {
         public readonly double[] D = new double[n];
         public readonly double[] E = new double[n];
         public readonly double[] Qt = new double[n];
         public readonly double[] Hill = new double[n];
         public readonly double[] KsRef = new double[n];
-        public readonly double[] KPow = kPow;
 
         public void Update(int c, int[] rcv, int[] nbr, double[] dist, double[] q, double[] aUp, double[] qs,
             double[] u, double[] width, in LawParams p, double invN)
@@ -214,84 +213,42 @@ public static class Solver
         }
     }
 
-    private static int IntegrateKernel(
-        int[] order, int[] rcv, int nRoot, CellLaw law, double[] zOutlet, double[] bottom, int nl, double[] sCrit,
-        in LawParams p, double riseMin, double[] zNew, int[] position, int[] subtreeEnd, int[] level, int[] levelCounts,
-        int[] badByRoot, int[] frontier, int maxDegree, bool parallelSubtrees, bool[]? dirty, double[] zOld)
+    // 고도 적분: 출구에서 상류로 칸마다 높이를 쌓습니다. levels 가 있으면 출구에서 같은 칸 수만큼 떨어진
+    // 칸끼리 여러 코어로 쌓습니다(Parallelism.ForLevels). 칸마다 자기 높이(와 dirty 표시)만 쓰고 아래 칸 높이만
+    // 읽으므로 어느 쪽이든 결과가 같습니다.
+    private static void IntegrateKernel(
+        int[] order, Levels? levels, int[] rcv, CellLaw law, LawTable table, double[] zOutlet, double[] bottom, int nl,
+        in LawParams p, double riseMin, double[] zNew, bool[]? dirty, double[] zOld)
     {
         LawParams pp = p;
-        // 부분 나무 병렬은 잘린 깊이의 뿌리 수가 Parallelism.For 의 문턱을 넘을 때만 실제로 병렬입니다.
-        // 뿌리 수는 출구 수가 target 이상이면 출구 수이고, 아니면 칸마다 기여 셀이 8개 이하이므로 8·(target−1) 이하입니다.
-        // 둘 다 문턱 이하이면 준비 계산(깊이·부분 나무 끝) 없이 같은 순서 직렬로 돌아도 결과가 같습니다.
-        int target = Math.Max(4, maxDegree * 4);
-        bool canRunParallel = nRoot > Parallelism.ParallelThreshold || (8 * (target - 1)) > Parallelism.ParallelThreshold;
-        if (!parallelSubtrees || !canRunParallel)
+        if (levels is null)
         {
-            foreach (long c in order)
+            foreach (int c in order)
             {
-                sequentialBad += IntegrateIfDirty(order[k], dirty, zOld, rcv, law, zOutlet, bottom, nl, sCrit, pp,
-                    riseMin, zNew);
+                IntegrateIfDirty(c, dirty, zOld, rcv, law, table, zOutlet, bottom, nl, pp, riseMin, zNew);
             }
             return;
         }
         int nLevels = levels.Build(order, rcv);
-        Parallelism.ForLevels(levels.Start, nLevels, levels.Cells, c => IntegrateIfDirty(c, dirty, zOld, rcv, rDist,
-            zOutlet, q, aUp, qs, u, width, bottom, nl, law, pp, invN, riseMin, zNew));
+        Parallelism.ForLevels(levels.Start, nLevels, levels.Cells, c => IntegrateIfDirty(c, dirty, zOld, rcv, law,
+            table, zOutlet, bottom, nl, pp, riseMin, zNew));
     }
 
     private static void IntegrateIfDirty(
-        int c, bool[]? dirty, double[] zOld, long[] rcv, double[] rDist, double[] zOutlet, double[] q,
-        double[] aUp, double[] qs, double[] u, double[] width, double[] bottom, int nl, LawTable law,
-        in LawParams p, double invN, double riseMin, double[] zNew)
+        int c, bool[]? dirty, double[] zOld, int[] rcv, CellLaw law, LawTable table, double[] zOutlet, double[] bottom,
+        int nl, in LawParams p, double riseMin, double[] zNew)
     {
         if (dirty is not null && !dirty[c]
             && (rcv[c] == c || zNew[rcv[c]] == zOld[rcv[c]]))
         {
-            int c = order[k];
-            position[c] = k;
-            int parent = rcv[c];
-            level[c] = parent == c ? 0 : level[parent] + 1;
-            levelCounts[level[c]]++;
-            maxLevel = Math.Max(maxLevel, level[c]);
-            subtreeEnd[k] = k + 1;
+            zNew[c] = zOld[c];
+            return;
         }
-        // TopoInto emits a depth-first preorder: each receiver's descendants occupy one contiguous range.
-        for (int k = n - 1; k >= 0; k--)
+        if (dirty is not null)
         {
-            int c = order[k];
-            int parent = rcv[c];
-            if (parent != c)
-            {
-                int pk = position[parent];
-                subtreeEnd[pk] = Math.Max(subtreeEnd[pk], subtreeEnd[k]);
-            }
+            dirty[c] = true;
         }
-        IntegrateCell(c, rcv, rDist, zOutlet, q, aUp, qs, u, width, bottom, nl, law, p, invN, riseMin, zNew);
-    }
-
-        int cutLevel = -1;
-        for (int d = 0; d <= maxLevel; d++)
-        {
-            int count = 0;
-            for (int c = lo; c < hi; c++)
-            {
-                long r = rcv[c];
-                double d = r == c ? 0.0 : ReceiverSlotDistance(c, r, nbr, dist);
-                if (!double.IsFinite(d))
-                {
-                    count++;
-                    d = 0.0;
-                }
-                rDist[c] = d;
-            }
-            bad[lo / CountChunk] = count;
-        });
-        int total = 0;
-        foreach (int v in bad)
-        {
-            total += v;
-        }
-        return total;
+        IntegrateCell(c, rcv, law, table, zOutlet, bottom, nl, p, riseMin, zNew);
     }
 
     // (K 배율, S_crit) 쌍은 보통 암석 종류 수만큼뿐입니다. 쌍마다 번호를 매겨 칸·층마다 1바이트만 읽게 하고,
@@ -309,12 +266,7 @@ public static class Solver
             int m = last >= 0 && keyK[last] == k && keyS[last] == sc ? last : -1;
             for (int t = 0; m < 0 && t < keyK.Count; t++)
             {
-                int c = order[k];
-                if (level[c] < cutLevel)
-                {
-                    nBad += IntegrateIfDirty(c, dirty, zOld, rcv, law, zOutlet, bottom, nl, sCrit, pp, riseMin, zNew);
-                }
-                else if (level[c] == cutLevel)
+                if (keyK[t] == k && keyS[t] == sc)
                 {
                     m = t;
                 }
@@ -323,7 +275,9 @@ public static class Solver
             {
                 if (keyK.Count == 256)
                 {
-                    bad += IntegrateIfDirty(order[k], dirty, zOld, rcv, law, zOutlet, bottom, nl, sCrit, pp, riseMin, zNew);
+                    double[] kPowAll = new double[kMult.Length];
+                    Parallelism.For(0, kMult.Length, i => kPowAll[i] = Math.Pow(kMult[i], -invN));
+                    return new LawTable(null, kPowAll, sCrit);
                 }
                 m = keyK.Count;
                 keyK.Add(k);
@@ -335,17 +289,14 @@ public static class Solver
         double[] kPow = new double[keyK.Count];
         for (int t = 0; t < kPow.Length; t++)
         {
-            for (int k = 0; k < n; k++)
-            {
-                nBad += IntegrateIfDirty(order[k], dirty, zOld, rcv, law, zOutlet, bottom, nl, sCrit, pp, riseMin, zNew);
-            }
+            kPow[t] = Math.Pow(keyK[t], -invN);
         }
         return new LawTable(index, kPow, [.. keyS]);
     }
 
-    private static int IntegrateIfDirty(
-        int c, bool[]? dirty, double[] zOld, int[] rcv, CellLaw law, double[] zOutlet, double[] bottom, int nl,
-        double[] sCrit, in LawParams p, double riseMin, double[] zNew)
+    // 칸·층마다 경사 법칙에 쓰는 (K 배율^(−1/n), S_crit). index 가 있으면 칸·층 번호 j 의 값은 짧은 표의
+    // index[j] 번째에 있고, 없으면 배열의 j 번째에 있습니다.
+    internal sealed class LawTable(byte[]? index, double[] kPow, double[] sCrit)
     {
         public double[] KPow { get; } = kPow;
 
@@ -365,13 +316,12 @@ public static class Solver
         public int[] Cells { get; } = new int[n];
 
         // order 는 하류가 먼저 오는 순서라 수신 셀의 층이 늘 먼저 정해집니다. 반환: 층 수.
-        public int Build(long[] order, long[] rcv)
+        public int Build(int[] order, int[] rcv)
         {
             int nLevels = 0;
-            foreach (long cl in order)
+            foreach (int c in order)
             {
-                int c = (int)cl;
-                int r = (int)rcv[c];
+                int r = rcv[c];
                 int lv = r == c ? 0 : _level[r] + 1;
                 _level[c] = lv;
                 nLevels = Math.Max(nLevels, lv + 1);
@@ -386,14 +336,12 @@ public static class Solver
                 Start[lv + 1] += Start[lv];
             }
             Array.Copy(Start, _fill, nLevels);
-            foreach (long cl in order)
+            foreach (int c in order)
             {
-                int c = (int)cl;
                 Cells[_fill[_level[c]]++] = c;
             }
             return nLevels;
         }
-        return IntegrateCell(c, rcv, law, zOutlet, bottom, nl, sCrit, p, riseMin, zNew);
     }
 
     private static int MarkPath(int start, int[] receiver, bool[] marked)
@@ -529,8 +477,8 @@ public static class Solver
         return count;
     }
 
-    private static int IntegrateCell(
-        int c, int[] rcv, CellLaw law, double[] zOutlet, double[] bottom, int nl, double[] sCrit, in LawParams p,
+    private static void IntegrateCell(
+        int c, int[] rcv, CellLaw law, LawTable table, double[] zOutlet, double[] bottom, int nl, in LawParams p,
         double riseMin, double[] zNew)
     {
         int nr = nl + 1;
@@ -538,15 +486,13 @@ public static class Solver
         if (r == c)
         {
             zNew[c] = zOutlet[c];
-            return 0;
+            return;
         }
         double d = law.D[c];
-        int nBad = double.IsFinite(d) ? 0 : 1;
-        if (nBad != 0)
+        if (!double.IsFinite(d))
         {
             d = 0.0;
         }
-        double d = rDist[c];
         double z = zNew[r];
         double zFloor = z + riseMin;
         double e = law.E[c];
@@ -563,7 +509,8 @@ public static class Solver
         while (true)
         {
             int i = UpperLayer(bottom, nl, c, z);
-            double s = LawSlope(ksRef * law.KPow[(c * nr) + i], qt, hill, sCrit[(c * nr) + i], p.SMin);
+            int m = table.Slot((c * nr) + i);
+            double s = LawSlope(ksRef * table.KPow[m], qt, hill, table.SCrit[m], p.SMin);
             if (i == 0)
             {
                 z += rem * s;
@@ -606,20 +553,21 @@ public static class Solver
         });
     }
 
-    // 굳은 칸을 되돌린 뒤, 지난 반복과 수신 셀이 다른 칸을 changed 에 적습니다 (changed 의 모든 칸을 새로 씀).
-    // 반환한 NChanged 는 changed 가 참인 칸 수와 같습니다.
+    // 16번 넘게 뒤집힌 칸은 옛 방향에 묶고, 지난 반복과 수신 셀이 다른 칸을 changed 에 적습니다(changed 의 모든 칸을 새로 씀).
+    // 칸마다 자기 값만 바꾸므로 조각으로 나눠 돌리고 조각 순서로 셉니다. 반환한 NChanged 는 changed 가 참인 칸 수와 같습니다.
     private static (int NChanged, int NFrozen) FreezeKernel(double[] zt, int[] prev, int[] rcv, int[] flips, int maxFlips,
         bool[] changed)
     {
         int n = rcv.Length;
-        int[] changed = new int[(n + CountChunk - 1) / CountChunk];
-        int[] frozen = new int[changed.Length];
+        int[] changedCount = new int[(n + CountChunk - 1) / CountChunk];
+        int[] frozenCount = new int[changedCount.Length];
         Parallelism.ForChunks(0, n, CountChunk, (lo, hi) =>
         {
-            int p = prev[c];
-            if (rcv[c] != p)
+            int nChanged = 0;
+            int nFrozen = 0;
+            for (int c = lo; c < hi; c++)
             {
-                long p = prev[c];
+                int p = prev[c];
                 if (rcv[c] != p)
                 {
                     if (flips[c] >= maxFlips && p != c && zt[p] < zt[c])
@@ -632,16 +580,21 @@ public static class Solver
                         nChanged++;
                     }
                 }
+                changed[c] = rcv[c] != p;
                 if (flips[c] >= maxFlips)
                 {
                     nFrozen++;
                 }
             }
-            changed[c] = rcv[c] != p;
-            if (flips[c] >= maxFlips)
-            {
-                nFrozen++;
-            }
+            changedCount[lo / CountChunk] = nChanged;
+            frozenCount[lo / CountChunk] = nFrozen;
+        });
+        int totalChanged = 0;
+        int totalFrozen = 0;
+        for (int j = 0; j < changedCount.Length; j++)
+        {
+            totalChanged += changedCount[j];
+            totalFrozen += frozenCount[j];
         }
         return (totalChanged, totalFrozen);
     }
@@ -892,26 +845,11 @@ public static class Solver
             wSed[c] = u[c] * area[c];
         }
         double invN = 1.0 / p.N;
-        // 층 배율의 침식 계수 인자 kmult^(−1/n) 은 풀이 내내 같으므로 한 번만 계산합니다 (칸·층마다 독립).
-        double[] kPow = new double[kMult.Length];
-        Parallelism.ForChunks(0, kPow.Length, 65_536, (start, end) =>
-        {
-            for (int j = start; j < end; j++)
-            {
-                kPow[j] = Math.Pow(kMult[j], -invN);
-            }
-        });
-        var law = new CellLaw(n, kPow);
+        LawTable table = BuildLawTable(kMult, sCrit, invN);
+        var law = new CellLaw(n);
 
-        LawTable law = BuildLawTable(kMult, sCrit, invN);
         int maxDegree = Parallelism.MaxDegreeOfParallelism ?? Environment.ProcessorCount;
-        bool parallelSubtrees = graph.Kind == "flat" && maxDegree > 1;
-        int[] positionWork = parallelSubtrees ? new int[n] : [];
-        int[] subtreeEndWork = parallelSubtrees ? new int[n] : [];
-        int[] levelWork = parallelSubtrees ? new int[n] : [];
-        int[] levelCountsWork = parallelSubtrees ? new int[n] : [];
-        int[] badByRoot = parallelSubtrees ? new int[n] : [];
-        int[] frontierWork = parallelSubtrees ? new int[n] : [];
+        Levels? levels = maxDegree > 1 && n >= LevelParallelMinCells ? new Levels(n) : null;
         // 수신 셀은 두 버퍼를 번갈아 씁니다: 이번 반복은 한쪽에 쓰고, 다른 쪽은 지난 반복의 수신 셀로 남습니다.
         // 기여 셀 CSR·위상 순서·스택도 반복마다 같은 버퍼를 다시 씁니다 (반복마다 새 배열을 만들지 않음).
         int[] rcvA = new int[n];
@@ -922,7 +860,6 @@ public static class Solver
         int[] donorFill = new int[n];
         int[] topoStack = new int[n];
         int[] order = new int[n];
-        int nRoot = 0;
         int[] flips = new int[n];
         int nFrozen = 0;
         var history = new List<OrderedDictionary<string, object?>>();
@@ -973,7 +910,7 @@ public static class Solver
                 changedReceiverCells = nChanged;
             }
             Routing.DonorCsrInto(rcv, donorStart, donors, donorFill);
-            int nOrdered = Routing.TopoInto(rcv, donorStart, donors, topoStack, order, out nRoot);
+            int nOrdered = Routing.TopoInto(rcv, donorStart, donors, topoStack, order, out _);
             if (nOrdered != n)
             {
                 throw new ArgumentException($"수신 셀에 순환이 있어 출구에 닿지 않는 칸이 {n - nOrdered}개 있습니다");
@@ -1036,21 +973,36 @@ public static class Solver
 
             stageStart = Stopwatch.GetTimestamp();
             // 적분용 칸 값은 수신 셀이나 Q·A·Qs 가 바뀐 칸만 다시 계산합니다. 누적을 처음부터 했으면 모든 칸입니다.
+            // 수신 셀이 이웃이 아닌 칸(내부 오류)도 여기서 셉니다. 다시 계산하지 않은 칸은 지난 반복에 이미 확인했습니다.
             int[] rcvNow = rcv;
             bool[]? lawDirty = incremental ? hydrologyValueChanged : null;
             LawParams pLaw = p;
-            Parallelism.ForChunks(0, n, 16_384, (start, end) =>
+            int[] badCount = new int[(n + CountChunk - 1) / CountChunk];
+            Parallelism.ForChunks(0, n, CountChunk, (start, end) =>
             {
+                int bad = 0;
                 for (int c = start; c < end; c++)
                 {
                     if (lawDirty is null || lawDirty[c] || receiverChanged[c])
                     {
                         law.Update(c, rcvNow, nbr, dist, q, aUp, qs, u, width, pLaw, invN);
+                        if (rcvNow[c] != c && !double.IsFinite(law.D[c]))
+                        {
+                            bad++;
+                        }
                     }
                 }
+                badCount[start / CountChunk] = bad;
             });
-            int nBad = IntegrateKernel(order, rcv, nRoot, law, zo, bottom, nl, sCrit, p, eps, zNew, positionWork,
-                subtreeEndWork, levelWork, levelCountsWork, badByRoot, frontierWork, maxDegree, parallelSubtrees,
+            int nBad = 0;
+            foreach (int b in badCount)
+            {
+                nBad += b;
+            }
+            // 층별 병렬은 다시 쌓는 칸이 많을 때만 이득입니다. 증분 경로에서 다시 쌓을 칸이 적으면(행성처럼 출구가 많고
+            // 바뀌는 칸이 몇 %일 때) 반복마다 층 표를 만드는 비용이 더 커서 한 줄로 쌓습니다. 어느 쪽이든 결과는 같습니다.
+            Levels? levelsNow = integrationIncremental && dirtyIntegrationCells < n / 4 ? null : levels;
+            IntegrateKernel(order, levelsNow, rcv, law, table, zo, bottom, nl, p, eps, zNew,
                 integrationIncremental ? integrationDirty : null, z);
             if (integrationIncremental)
             {
@@ -1076,13 +1028,8 @@ public static class Solver
             integrationSeconds += iterIntegrationSeconds;
             if (verifyIncremental)
             {
-                int referenceBad = IntegrateKernel(order, rcv, nRoot, law, zo, bottom, nl, sCrit, p, eps,
-                    fullGridVerificationZ!, positionWork, subtreeEndWork, levelWork, levelCountsWork, badByRoot,
-                    frontierWork, maxDegree, parallelSubtrees, dirty: null, zOld: z);
-                if (referenceBad != nBad)
-                {
-                    throw new InvalidOperationException($"증분 고도 검증 경로 검사 실패: iteration={it}");
-                }
+                IntegrateKernel(order, levels, rcv, law, table, zo, bottom, nl, p, eps, fullGridVerificationZ!,
+                    dirty: null, zOld: z);
                 for (int c = 0; c < n; c++)
                 {
                     if (zNew[c] != fullGridVerificationZ![c])
@@ -1136,7 +1083,7 @@ public static class Solver
                 ["incremental"] = incremental && integrationIncremental,
                 ["n_frozen"] = (long)nFrozen,
             });
-            log?.Invoke($"솔버 반복 {it}: 방향이 바뀐 칸 {LogText.N(nChanged)}개, 가장 크게 변한 높이 {maxDz:G4} m, 방향을 묶은 칸 {LogText.N(nFrozen)}개");
+            log?.Invoke($"솔버 반복 {it}: 방향 변화 {nChanged}, 최대 고도 변화 {maxDz:G4} m, 고정 칸 {nFrozen}");
             if (nChanged == 0 && maxDz < stopDz)
             {
                 converged = true;
