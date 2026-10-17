@@ -181,8 +181,8 @@ public static class Flat
         {
             isOutlet[c] = true;
         }
-        Pipeline.Say(log, $"[평면 히어로] {nSide}×{nSide} ({n}칸, {PyFormat.General(dx)} m), U {u.Min() * 1e3:F2}~"
-            + $"{u.Max() * 1e3:F2} mm/yr, 강수 {pValue:F3} m/yr, 출구 남쪽 {OutletCells}칸");
+        Pipeline.Say(log, $"[평면 히어로] {nSide} × {nSide}칸 ({LogText.N(n)}칸, 간격 {PyFormat.General(dx)} m), 융기 {u.Min() * 1e3:F2}~"
+            + $"{u.Max() * 1e3:F2} mm/yr, 강수 {pValue:F3} m/yr, 출구 남쪽 가장자리 {OutletCells}칸");
 
         t = Stopwatch.GetTimestamp();
         int maxIter = Pipeline.SolverMaxIter(cfg, "hero");
@@ -224,7 +224,7 @@ public static class Flat
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = Pipeline.ScorecardSummary(card);
-        Pipeline.Say(log, $"[평면 히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 불합격 {Pipeline.PyListRepr((List<object?>)summary["failed"]!)}");
+        Pipeline.Say(log, $"[평면 히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
         var stages = new OrderedDictionary<string, object?>();
         foreach (KeyValuePair<string, object?> kv in st.Diag)
         {

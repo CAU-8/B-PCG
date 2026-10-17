@@ -42,24 +42,26 @@ public partial class GlobeHud : CanvasLayer
 
     /// <summary>자료 폴더에 globe.json 이 없을 때의 알림.</summary>
     public const string MissingText =
-        "지구본 자료가 없습니다: 처음 화면(N)에서 행성을 만들면 지구본도 함께 굽습니다 (평면 히어로 실행에는 지구본이 없음)";
+        "지구본 자료가 없습니다. N을 눌러 처음 화면에서 행성을 만들면 지구본도 함께 만듭니다. "
+        + "명령줄에서는 uv run bpcg all 이 지구본까지 만듭니다. 평면 히어로나 bake --no-globe 로 만든 결과에는 지구본이 없습니다.";
 
     /// <summary>globe.json 은 있는데 형식이 틀리거나 파일이 모자랄 때의 알림.</summary>
     public const string BrokenText =
-        "지구본 자료를 읽지 못했습니다: 파일이 잘못됐거나 서로 맞지 않습니다. 처음 화면(N)에서 다시 만드세요";
+        "지구본 자료를 읽지 못했습니다. globe 폴더의 파일이 잘못됐거나 서로 크기가 맞지 않습니다. "
+        + "N을 눌러 처음 화면에서 행성을 다시 만드세요.";
 
     public const string HelpText = """
-        [왼쪽 끌기] 돌리기    [휠] 확대·축소    [Space] 자동 회전    [F] 히어로 유역으로
-        [1~9] 레이어 고르기 (나머지는 패널에서 클릭)    [R] 강    [Shift+R] 강 등급 문턱    [K] 호수
-        [L] 경위선 15°    [G] 그늘·대기 빛 (꾸밈, 끄면 범례 색 그대로)    [ [ ] ] 고도 과장 줄이기·늘리기
+        [왼쪽 끌기] 지구본 돌리기    [휠] 확대·축소    [Space] 자동 회전    [F] 히어로 유역으로
+        [1~9] 레이어 고르기 (10번째부터 패널에서)    [R] 강    [Shift+R] 그릴 강 등급 바꾸기    [K] 호수
+        [L] 경위선 (15° 간격)    [G] 그늘·대기 빛 (꾸밈)    [ [ · ] ] 고도 과장 줄이기·늘리기
         [클릭] 그 자리 값 모두 고정    [Esc] 고정 풀기    [Tab] 패널 숨기기    [H] 도움말 숨기기
-        [M] 회랑으로 들어가기    [N] 처음 화면 (새 행성)    [-·=] 글자 크기
+        [M] 회랑으로 들어가 걷기    [N] 처음 화면 (새 행성 만들기)    [-·=] 글자·패널 작게·크게
         """;
 
     /// <summary>그늘·대기 빛 설명 (패널).</summary>
     public const string ShadingNote =
-        "그늘은 비탈만 밝게·어둡게 합니다(왼쪽 위에서 오는 빛). 평평한 곳은 지구본 어디서나 범례 색 그대로이고, "
-        + "끄면 모든 칸이 범례 색과 같습니다. 지구본 둘레의 푸른 빛은 지구본 바깥에만 그리는 꾸밈이고 자료가 아닙니다.";
+        "그늘은 비탈만 밝거나 어둡게 칠합니다(빛은 화면 왼쪽 위에서 옵니다). 평평한 곳은 어디서나 범례 색 그대로입니다. "
+        + "끄면 모든 칸이 범례 색과 같아집니다. 지구본 둘레의 푸른 빛은 보기 좋게 그린 꾸밈이고 자료가 아닙니다.";
 
     private GlobeView? _globe;
     private Label _status = null!;
@@ -182,7 +184,7 @@ public partial class GlobeHud : CanvasLayer
         about.Text = AboutText(data);
         _rows.AddChild(about);
 
-        _rows.AddChild(Section("레이어 (버튼을 누르면 그 값으로 지구본을 칠합니다)"));
+        _rows.AddChild(Section("레이어 (누르면 그 값으로 지구본을 칠합니다)"));
         var group = new ButtonGroup();
         List<string> ordered = data.OrderedFieldNames();
         string currentGroup = "";
@@ -219,7 +221,7 @@ public partial class GlobeHud : CanvasLayer
         {
             AddOverlayRows(o);
         }
-        _gridButton = Ui.Check($"L  경위선 ({(int)GlobeView.GridStepDeg}° 간격, 적도·본초 자오선은 굵게)");
+        _gridButton = Ui.Check($"L  경위선 ({(int)GlobeView.GridStepDeg}° 간격, 적도와 경도 0° 선은 굵게)");
         _gridButton.Toggled += on => _globe?.SetGridVisible(on);
         _rows.AddChild(_gridButton);
         _shadingButton = Ui.Check("G  그늘·대기 빛 (꾸밈, 자료 아님)");
@@ -234,7 +236,7 @@ public partial class GlobeHud : CanvasLayer
         var exRow = new HBoxContainer();
         exRow.AddThemeConstantOverride("separation", 6);
         Button down = Ui.Button("[  −");
-        down.TooltipText = "고도 과장을 한 단계 줄입니다";
+        down.TooltipText = "고도 과장을 한 단계 줄입니다 ([)";
         down.Pressed += () => _globe?.StepExaggeration(-1);
         exRow.AddChild(down);
         _exaggerationLabel = Ui.Label();
@@ -242,14 +244,14 @@ public partial class GlobeHud : CanvasLayer
         _exaggerationLabel.HorizontalAlignment = HorizontalAlignment.Center;
         exRow.AddChild(_exaggerationLabel);
         Button up = Ui.Button("+  ]");
-        up.TooltipText = "고도 과장을 한 단계 늘립니다";
+        up.TooltipText = "고도 과장을 한 단계 늘립니다 (])";
         up.Pressed += () => _globe?.StepExaggeration(1);
         exRow.AddChild(up);
         _rows.AddChild(exRow);
         Label exNote = Paragraph(FontSize - 3);
         exNote.Modulate = DimColor;
-        exNote.Text = "높이만 과장 배율만큼 늘려 그립니다 (×1 = 실제 비율, 가장 높은 산도 반지름의 "
-            + "0.1 % 남짓). 바다는 해수면 높이로 평평하게 두고 색으로만 깊이를 보입니다.";
+        exNote.Text = "땅 높이만 이 배율만큼 부풀려 그립니다. ×1 이 실제 비율인데, 그러면 가장 높은 산도 "
+            + "지구본 반지름의 0.1 % 남짓이라 거의 보이지 않습니다. 바다는 해수면 높이로 평평하게 두고 깊이는 색으로만 보입니다.";
         _rows.AddChild(exNote);
 
         _rows.AddChild(new HSeparator());
@@ -263,7 +265,7 @@ public partial class GlobeHud : CanvasLayer
         Button corridor = Ui.Button("M  회랑으로 들어가기 (걷는 장면)");
         corridor.Pressed += () => EmitSignal(SignalName.CorridorRequested);
         _rows.AddChild(corridor);
-        Button start = Ui.Button("N  처음 화면 (새 행성 만들기)");
+        Button start = Ui.Button("N  처음 화면으로 (새 행성 만들기)");
         start.Pressed += () => EmitSignal(SignalName.StartRequested);
         _rows.AddChild(start);
 
@@ -280,10 +282,10 @@ public partial class GlobeHud : CanvasLayer
     {
         _side.Visible = false;
         _pinnedPanel.Visible = false;
-        _missing.Text = (missing ? MissingText : BrokenText) + "\n\n(" + reason + ")";
+        _missing.Text = (missing ? MissingText : BrokenText) + "\n\n까닭: " + reason;
         _missing.Visible = true;
         _status.Text = (missing ? "지구본 자료 없음" : "지구본 자료를 읽지 못함")
-            + " · M 으로 회랑 장면, N 으로 처음 화면으로 갈 수 있습니다";
+            + " · M을 누르면 회랑으로, N을 누르면 처음 화면으로 갑니다";
     }
 
     /// <summary>버튼 상태와 고도 과장·강 등급 글을 지구본 상태에 맞춥니다 (신호를 다시 내지 않음).</summary>
@@ -309,7 +311,7 @@ public partial class GlobeHud : CanvasLayer
         }
         if (_riverClassButton is not null)
         {
-            _riverClassButton.Text = $"Shift+R  {_globe.RiverMinClass} 등급 이상만 그림 (누르면 바뀜)";
+            _riverClassButton.Text = $"Shift+R  {_globe.RiverMinClass} 등급 이상 강만 그림 (누르면 바꿈)";
         }
         foreach ((int k, Control chip) in _riverChips)
         {
@@ -411,7 +413,7 @@ public partial class GlobeHud : CanvasLayer
                 lines.Add(OverlayLine(o, v));
             }
         }
-        lines.Add("클릭하면 이 자리의 모든 레이어 값을 고정해 봅니다");
+        lines.Add("클릭하면 이 자리의 모든 레이어 값을 아래 상자에 고정합니다");
         return string.Join("\n", lines);
     }
 
@@ -422,7 +424,7 @@ public partial class GlobeHud : CanvasLayer
         GlobeData.Cell cell = data.DirectionToCell(dir);
         var lines = new List<string>
         {
-            "고정한 자리: " + GlobeData.FormatLatLon(GlobeData.LatLon(dir)) + "  (Esc 로 풀기)",
+            "고정한 자리: " + GlobeData.FormatLatLon(GlobeData.LatLon(dir)) + "  (Esc로 풀기)",
             $"칸: 면 {cell.Face}, 행 {cell.Row}, 열 {cell.Col} (면당 {data.FaceRes} × {data.FaceRes} 칸)",
         };
         string group = "";
@@ -492,7 +494,8 @@ public partial class GlobeHud : CanvasLayer
         string how = Json.Str(o, "how_to_read", "");
         if (oname == GlobeView.OverlayRivers)
         {
-            how += $" L0 칸이 커서 육지 대부분이 강 문턱을 넘으므로, 처음에는 큰 강({GlobeView.DefaultRiverMinClass} 등급)부터 그립니다.";
+            how += " 행성 지도(L0)는 칸이 커서 육지 대부분이 강으로 잡힙니다. "
+                + $"그래서 처음에는 {GlobeView.DefaultRiverMinClass} 등급 이상인 큰 강만 그립니다.";
         }
         if (how.Length > 0)
         {

@@ -20,13 +20,13 @@ public partial class Hud : CanvasLayer
     public delegate void ActionRequestedEventHandler(string name);
 
     public const string HelpText = """
-        [V] 날기(노클립) ↔ 걷기    [WASD] 이동    [Space·E] 위    [Q·Ctrl] 아래
-        [Shift] 빠르게    [휠] 나는 속력    [클릭] 마우스로 둘러보기    [Esc] 마우스 놓기
+        [V] 날기 ↔ 걷기    [WASD] 이동    [Space·E] 위로 (걷기에서는 Space로 뛰기)    [Q·Ctrl] 아래로
+        [Shift] 5배 빨리 날기    [휠] 나는 속력 바꾸기    [화면 클릭] 마우스로 둘러보기    [Esc] 마우스 놓기 (단추 누를 때)
         {layer_keys}
-        [X] 단면 켜기·끄기 (눈앞에 자르는 면)    [ [ ] ] 단면 당기기·밀기
-        [T] 다음 동굴 입구로    [Shift+T] 이전 입구    [G] 색: 자연색 ↔ 지질도    [F] 손전등
-        [M] 지구본 (행성 전체)    [N] 처음 화면 (새 행성)    [Tab] 레이어 패널 숨기기    [H] 도움말 숨기기
-        [-·=] 글자 크기
+        [X] 단면 칼 켜기·끄기 (눈앞의 땅을 잘라 지층 보기)    [ [ · ] ] 단면 당기기·밀기
+        [T] 다음 동굴 입구로 가기    [Shift+T] 이전 입구    [G] 땅 색: 자연색 ↔ 지질도    [F] 손전등
+        [M] 지구본(행성 전체)으로    [N] 처음 화면(새 행성 만들기)    [Tab] 레이어 패널 숨기기    [H] 도움말 숨기기
+        [-·=] 글자·패널 작게·크게
         """;
 
     private Label _status = null!;
@@ -95,7 +95,7 @@ public partial class Hud : CanvasLayer
             if (layers.CanSolo(id))
             {
                 Button solo = Ui.Button("만 보기");
-                solo.TooltipText = $"이 레이어만 보이고 나머지는 숨깁니다 (Shift+{index})";
+                solo.TooltipText = $"이 레이어만 남기고 나머지는 숨깁니다 (Shift+{index})";
                 solo.Pressed += () => layers.Solo(id);
                 row.AddChild(solo);
             }
@@ -104,6 +104,7 @@ public partial class Hud : CanvasLayer
         }
         _help.Text = HelpText.Replace("{layer_keys}", LayerKeysLine(layers));
         Button all = Ui.Button("0  모두 보기");
+        all.TooltipText = "처음 상태로 돌아갑니다: 지하수면과 지층 단면만 빼고 모두 켭니다 (0)";
         all.Pressed += layers.ShowAll;
         _rows.AddChild(all);
         _colorButton = Ui.Button("");
@@ -112,12 +113,12 @@ public partial class Hud : CanvasLayer
         _lampButton = Ui.Button("");
         _lampButton.Pressed += () => EmitSignal(SignalName.ActionRequested, "lamp");
         _rows.AddChild(_lampButton);
-        Button globe = Ui.Button("M  지구본 (행성 전체)");
-        globe.TooltipText = "행성 전체를 지구본으로 봅니다. 지구본에서 M 을 누르면 돌아옵니다";
+        Button globe = Ui.Button("M  지구본으로 (행성 전체)");
+        globe.TooltipText = "행성 전체를 돌려 보는 지구본 장면으로 갑니다. 지구본에서 M을 누르면 이 회랑으로 돌아옵니다";
         globe.Pressed += () => EmitSignal(SignalName.ActionRequested, "globe");
         _rows.AddChild(globe);
-        Button start = Ui.Button("N  처음 화면 (새 행성 만들기)");
-        start.TooltipText = "프로필과 시드를 골라 행성을 새로 만들거나 지난 결과를 엽니다";
+        Button start = Ui.Button("N  처음 화면으로 (새 행성 만들기)");
+        start.TooltipText = "프로필(크기)과 시드(출발 번호)를 골라 행성을 새로 만들거나, 지난 결과를 엽니다";
         start.Pressed += () => EmitSignal(SignalName.ActionRequested, "start");
         _rows.AddChild(start);
         layers.LayersChanged += RefreshLayers;
@@ -172,7 +173,7 @@ public partial class Hud : CanvasLayer
     {
         if (_colorButton is not null)
         {
-            _colorButton.Text = "G  색: " + colorLabel;
+            _colorButton.Text = "G  땅 색: " + colorLabel;
         }
         if (_lampButton is not null)
         {

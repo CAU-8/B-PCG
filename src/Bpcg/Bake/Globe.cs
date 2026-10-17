@@ -1259,8 +1259,8 @@ public static class Globe
         double[] unit = UnitOf(graph);
         var rs = new Resampler(unit, bases, res);
         sec["index"] = Seconds(t);
-        log?.Invoke($"[지구본] 면당 {res}칸 ({6 * res * res}칸)으로 다시 담습니다. L0 면당 {check["n_per_face"]}칸, "
-            + $"사상 검사 최대 {(double)check["max_error_cells"]!:F3} 칸 어긋남 (허용치의 {(double)check["max_error_ratio"]!:F3} 배), {sec["index"]:F2} s");
+        log?.Invoke($"[지구본] 면당 {res} × {res}칸 (모두 {LogText.N(6L * res * res)}칸)으로 다시 담습니다. L0 는 면당 {check["n_per_face"]}칸, "
+            + $"칸 대응 검사에서 가장 크게 어긋난 곳 {(double)check["max_error_cells"]!:F3}칸 (허용치의 {(double)check["max_error_ratio"]!:F3}배), {sec["index"]:F2} s");
 
         t = Stopwatch.GetTimestamp();
         (List<OrderedDictionary<string, object?>> entries, List<Array> arrays) = BuildFields(fields, rs, graph, cfg, log);

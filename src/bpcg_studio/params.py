@@ -20,14 +20,16 @@ CATEGORIES: dict[str, dict[str, str]] = {
     "learn": {
         "label": "학습 예정",
         "long": "학습 예정(데이터로 맞출 값)",
-        "description": "실제 지형 자료로 맞출 값입니다. 지금 값은 문헌 기본값이고, "
-        "configs/learned/ 에 맞춘 값이 생기면 그 값이 덮어씁니다.",
+        "description": "진짜 지형 자료로 맞출 숫자입니다(딥러닝이 아닙니다). 지금 값은 논문 "
+        "기본값이고, configs/learned/ 에 맞춘 값이 생기면 그 값이 덮어씁니다.",
     },
     "hand": {
         "label": "손 보정(임시)",
         "long": "손 보정(임시)",
-        "description": "첫 실행에서 생긴 문제(높이 폭주, 격자 결, 물길 진동)를 고치려고 "
-        "손으로 바꾼 값입니다. 데이터 학습 전까지만 쓰는 임시 값입니다.",
+        "description": "첫 실행에서 생긴 문제를 고치려고 손으로 바꾼 임시 값입니다. "
+        "산이 끝없이 높아지고, 강이 바둑판 줄을 따라 곧게 뻗고, "
+        "물길이 반복마다 이쪽저쪽 뒤집히는 문제였습니다. "
+        "자료로 숫자를 맞추기 전까지만 씁니다.",
     },
     "physics": {
         "label": "물리 상수",
@@ -37,8 +39,8 @@ CATEGORIES: dict[str, dict[str, str]] = {
     "resolution": {
         "label": "해상도·성능",
         "long": "해상도·성능 (프로필)",
-        "description": "프로필 값입니다. 격자 크기와 걸리는 시간을 정합니다. 해상도가 바뀌면 결과 "
-        "모양도 조금 달라집니다.",
+        "description": "프로필(크기 묶음)이 정하는 값입니다. 칸의 크기와 개수, 걸리는 시간을 "
+        "정합니다. 칸 크기가 바뀌면 지형 모양도 조금 달라집니다.",
     },
     "detail": {
         "label": "보기용 디테일 (굽기)",
@@ -49,7 +51,7 @@ CATEGORIES: dict[str, dict[str, str]] = {
     "literature": {
         "label": "문헌 기본값",
         "long": "문헌 기본값",
-        "description": "논문·관측 범위에서 고른 기본값입니다. 바꿔 볼 수 있지만 바꾼 이유를 "
+        "description": "논문과 관측 범위에서 고른 기본값입니다. 바꿔 볼 수 있고, 바꾸면 그 이유를 "
         "기록해 둡니다.",
     },
 }
@@ -87,15 +89,21 @@ CATEGORY_TABLE: dict[str, str] = {
 
 # 손 보정 기록: 무엇을 왜 바꿨나 (커밋 메시지 요약)
 HAND_HISTORY: dict[str, str] = {
-    "landscape.slope_exponent_n": "1 → 2. n = 1 이면 L0 골짜기 바닥이 수십 km 까지 쌓였습니다",
-    "landscape.jitter": "0.4 → 1.0. 격자 정렬 지수가 1.70 에서 1.12 로 내려갔습니다",
-    "landscape.deposition_g_l0": "새로 둠 (0 = 끔). L0 칸에서는 퇴적 항이 물길을 진동시켰습니다",
-    "uplift.orogen_factor": "0.04 → 0.03. 산맥이 너무 높았습니다",
-    "uplift.collision_factor": "0.06 → 0.04. 충돌대가 너무 높았습니다",
-    "uplift.orogen_width_m": "150 km → 80 km. 띠가 넓으면 L0 높이가 10 km 를 넘었습니다",
-    "uplift.collision_width_m": "새로 둠 (100 km)",
-    "uplift.elevation_limit_m": "새로 둠. 한계가 없으면 첫 풀이 평균 지표가 14 km 를 넘었습니다",
-    "uplift.elevation_limit_power": "새로 둠",
+    "landscape.slope_exponent_n": "1 → 2 로 바꿨습니다. n = 1 에서는 행성 지도(L0)의 골짜기 바닥이 "
+    "수십 km 높이까지 쌓였습니다",
+    "landscape.jitter": "0.4 → 1.0 으로 키웠습니다. 강이 바둑판 줄을 따르는 정도(격자 정렬 지수)가 "
+    "1.70 에서 1.12 로 내려갔습니다",
+    "landscape.deposition_g_l0": "새로 두고 0(끔)으로 했습니다. "
+    "L0 칸에서 퇴적 항을 켜면 물길 방향이 반복마다 이쪽저쪽 뒤집혔습니다(진동)",
+    "uplift.orogen_factor": "0.04 → 0.03 으로 줄였습니다. 산맥이 너무 높았습니다",
+    "uplift.collision_factor": "0.06 → 0.04 로 줄였습니다. 충돌대가 너무 높았습니다",
+    "uplift.orogen_width_m": "150 km → 80 km 로 줄였습니다. "
+    "띠가 넓으면 L0 높이가 10 km 를 넘었습니다",
+    "uplift.collision_width_m": "새로 두었습니다 (100 km). "
+    "이 키가 없으면 산맥 띠 폭의 1.5배를 씁니다",
+    "uplift.elevation_limit_m": "새로 두었습니다. 한계가 없으면 첫 풀이의 평균 지표가 14 km 를 "
+    "넘었습니다",
+    "uplift.elevation_limit_power": "elevation_limit_m 과 함께 새로 두었습니다",
 }
 
 SECTION_LABELS: dict[str, str] = {
@@ -165,65 +173,100 @@ UNIT_OVERRIDES: dict[str, str] = {
 
 # 주석이 없는 행성 키의 설명
 HELP_FALLBACK: dict[str, str] = {
-    "planet.name": "행성 설정 이름 (결과 manifest 에 기록)",
-    "planet.radius_m": "행성 반지름. 격자 칸 크기와 중력(g = 4/3·π·G·ρ·R)이 이 값으로 정해집니다",
-    "planet.mean_density_kg_m3": "행성 평균 밀도. 반지름과 함께 중력을 정하고, 중력은 지하수 "
-    "계산에 들어갑니다",
-    "crust.continental_thickness_m": "보통 대륙 지각 두께. 지각평형으로 대륙이 뜨는 높이의 기준",
-    "crust.oceanic_thickness_m": "해양 지각 두께",
-    "crust.rho_crust": "지각 밀도 (지각평형 계산)",
-    "crust.rho_mantle": "맨틀 밀도 (지각평형 계산)",
-    "crust.rho_water": "바닷물 밀도 (물에 잠긴 지각의 지각평형)",
-    "ocean.trench_width_m": "해구 단면의 폭 (trench_depth_m 만큼 깊어지는 띠)",
-    "climate.p_equator": "적도 강수 띠의 크기 p₁ (위 강수 식)",
-    "climate.p_equator_sigma_deg": "적도 강수 띠의 폭 (위도, 가우스 σ)",
-    "climate.p_midlat": "중위도 강수 띠의 크기 p₂",
-    "climate.p_midlat_center_deg": "중위도 강수 띠의 가운데 위도",
-    "climate.p_midlat_sigma_deg": "중위도 강수 띠의 폭 (위도, 가우스 σ)",
-    "climate.t_equator_c": "적도 해수면 연평균 기온",
-    "climate.t_pole_c": "극 해수면 연평균 기온 (그 사이는 sin²(위도)로 이음)",
-    "climate.lapse_rate_c_per_m": "기온 감률: 1 m 오를 때 내려가는 기온 (0.0065 = 6.5 °C/km)",
-    "climate.pet_base_m_per_yr": "잠재 증발산의 바닥값 b (잠재 증발산 = a·max(T, 0) + b)",
-    "climate.runoff_floor_m_per_yr": "침식에 쓰는 유출의 가장 작은 값 "
-    "(사막에서도 강이 조금은 깎게)",
-    "relief.hack_exponent": "Hack 법칙 지수 h (본류 길이 L = c·A^h)",
-    "groundwater.fan_beta": "대수층 깊이 식의 경사 계수 β (f = α / (1 + β·S))",
-    "landscape.hillslope_diffusivity_m2_per_yr": "산비탈 흙이 기어 내려가는 확산 계수 (둥근 능선)",
-    "fans.enabled": "선상지 후처리를 켭니다 (false 면 선상지를 만들지 않음)",
-    "fans.min_discharge_m3_per_yr": "선상지를 만들 강의 가장 작은 유량",
-    "fans.max_discharge_m3_per_yr": "선상지를 만들 강의 가장 큰 유량 "
-    "(큰 강은 선상지를 만들지 않음)",
-    "fans.radius_m": "선상지 부채꼴의 반지름",
-    "fans.slope": "선상지 표면 경사",
-    "geology.surface_temperature_c": "변성 정도를 정할 때 쓰는 지표 온도 (깊은 곳 온도 = 이 값 + "
-    "지온 경사 × 깊이)",
-    "geology.fold_amplitude_m": "습곡 진폭 (지층이 위아래로 휘는 높이)",
-    "geology.arc_belt_width_m": "화산호 띠의 폭 (섭입대 위판 쪽 화산암 지대)",
-    "soil.decay_depth_m": "흙이 두꺼울수록 흙 생산이 줄어드는 깊이 h₀ (Heimsath 지수 감소)",
-    "soil.thickness_cap_m": "흙 두께의 상한",
-    "soil.alluvium_max_m": "충적층(강이 쌓은 퇴적층) 두께의 상한",
-    "groundwater.max_depth_m": "지하수면이 지표 아래로 내려갈 수 있는 가장 깊은 값",
-    "caves.levels": "동굴 층 수 (0층 = 지금 지하수면, 1층 = 옛 지하수면)",
-    "caves.entrance_tolerance_m": "동굴 층이 지표와 이만큼 가까우면 입구로 봄 (τ)",
-    "caves.passage_radius_m": "동굴 통로 반지름 (r)",
-    "caves.noise_wavelength_m": "동굴 통로를 구불구불하게 하는 노이즈의 파장",
+    "planet.name": "행성 설정의 이름입니다. 결과 묶음의 목차(manifest.json)에 적힙니다",
+    "planet.radius_m": "행성의 반지름입니다. 칸 크기와 중력(g = 4/3·π·G·ρ·R)이 이 값으로 "
+    "정해집니다. 지구의 6,371 km 는 서울–부산 직선거리의 약 20배입니다",
+    "planet.mean_density_kg_m3": "행성의 평균 밀도입니다. 반지름과 함께 중력을 정하고, 중력은 "
+    "지하수 계산에만 들어갑니다. 키우면 땅속 물이 잘 흘러 지하수면이 낮아집니다",
+    "crust.continental_thickness_m": "보통 대륙 지각의 두께입니다. 이 두께의 대륙이 "
+    "continental_platform_m 높이에 뜨고, 더 두꺼운 곳은 더 높이 뜹니다(지각평형)",
+    "crust.oceanic_thickness_m": "바다 밑 지각(해양 지각)의 두께입니다. 지각 두께 지도에만 "
+    "들어가고, 바다 깊이는 해양저 나이로 정합니다",
+    "crust.rho_crust": "지각 암석의 밀도입니다. 두꺼운 지각이 더 높이 뜨는 정도(지각평형)를 셀 때 "
+    "씁니다",
+    "crust.rho_mantle": "지각 아래 맨틀의 밀도입니다. 지각평형 계산에 쓰고, 지각과 바닷물의 "
+    "밀도보다 커야 합니다",
+    "crust.rho_water": "바닷물의 밀도입니다. 해수면 아래로 내려간 대륙 가장자리의 지각평형 계산에 "
+    "씁니다",
+    "ocean.trench_width_m": "해구 단면의 폭입니다. 판 경계에서 이 거리면 더 깊어지는 양"
+    "(trench_depth_m)이 약 37%로 줄어듭니다",
+    "climate.p_equator": "적도 강수 띠에서 더하는 비의 최댓값 p₁ 입니다 (위 강수 식). 키우면 "
+    "적도에 비가 더 옵니다",
+    "climate.p_equator_sigma_deg": "적도 강수 띠의 폭(위도)입니다. 적도에서 이 위도만큼 떨어지면 "
+    "더하는 비가 약 37%로 줄어듭니다",
+    "climate.p_midlat": "중위도 강수 띠에서 더하는 비의 최댓값 p₂ 입니다",
+    "climate.p_midlat_center_deg": "중위도 강수 띠의 가운데 위도입니다 (북반구와 남반구에 같은 "
+    "위도로 놓임)",
+    "climate.p_midlat_sigma_deg": "중위도 강수 띠의 폭(위도)입니다. 가운데에서 이 위도만큼 "
+    "떨어지면 더하는 비가 약 37%로 줄어듭니다",
+    "climate.t_equator_c": "적도 해수면의 연평균 기온입니다",
+    "climate.t_pole_c": "극 해수면의 연평균 기온입니다. 그 사이 위도는 sin²(위도)로 잇습니다",
+    "climate.lapse_rate_c_per_m": "높이 1 m 오를 때 내려가는 기온(기온 감률)입니다. 0.0065 면 "
+    "1 km 에 6.5 °C 라, 2,000 m 산꼭대기는 해수면보다 13 °C 낮습니다",
+    "climate.pet_base_m_per_yr": "잠재 증발산(물이 넉넉할 때 증발할 수 있는 양)의 바닥값 b "
+    "입니다 (잠재 증발산 = a·max(T, 0) + b). 0 °C 아래에서도 이만큼은 증발할 수 있습니다",
+    "climate.runoff_floor_m_per_yr": "침식에 쓰는 유출의 가장 작은 값입니다. 사막에서도 강이 "
+    "조금은 깎게 합니다",
+    "relief.hack_exponent": "Hack 법칙(본류 길이 L = c·A^h, A 는 유역 넓이)의 지수 h 입니다. "
+    "지구의 강은 0.49~0.6 입니다",
+    "groundwater.fan_beta": "대수층 깊이 식 f = α / (1 + β·S) 의 경사 계수 β 입니다. 키우면 "
+    "비탈(경사 S)에서 대수층이 얕아져 지하수면이 높아집니다",
+    "landscape.hillslope_diffusivity_m2_per_yr": "산비탈 흙이 아주 천천히 흘러내리는 빠르기"
+    "(사면 확산 계수)입니다. 키우면 비탈이 완만해지고 능선이 둥글어집니다",
+    "fans.enabled": "선상지(산에서 평야로 나오는 곳에 강이 흙을 부채꼴로 쌓은 땅) 후처리를 "
+    "켭니다. false 면 선상지를 만들지 않습니다",
+    "fans.min_discharge_m3_per_yr": "선상지를 만들 강의 가장 작은 유량입니다. 이보다 작은 "
+    "개울은 선상지를 만들지 않습니다",
+    "fans.max_discharge_m3_per_yr": "선상지를 만들 강의 가장 큰 유량입니다. 이보다 큰 강은 "
+    "선상지를 만들지 않습니다",
+    "fans.radius_m": "선상지 부채꼴의 반지름입니다. 꼭짓점끼리 이 거리의 2배 안이면 유량이 큰 "
+    "하나만 남깁니다",
+    "fans.slope": "선상지 표면의 경사입니다 (0.03 은 100 m 에 3 m, 약 1.7°). 키우면 "
+    "꼭짓점에서 빨리 낮아져 부채꼴이 작아집니다",
+    "geology.surface_temperature_c": "변성 정도를 정할 때 쓰는 지표 온도입니다. 묻혔던 곳의 "
+    "온도 = 이 값 + 지온 경사 × 깊이",
+    "geology.fold_amplitude_m": "습곡에서 지층이 위아래로 휘는 높이(진폭)입니다. 습곡충상대에서만 "
+    "쓰고, 융기가 빠른 곳일수록 크게 휩니다",
+    "geology.arc_belt_width_m": "화산호 띠의 폭입니다. 섭입대 위쪽 판에서 화산호 가운데로부터 "
+    "이 폭의 0.4배 안이 화산암 지대가 됩니다",
+    "soil.decay_depth_m": "흙이 두꺼울수록 흙 생산이 줄어드는 깊이 h₀ 입니다 (Heimsath 지수 "
+    "감소). 흙 두께 = h₀·ln(흙 생산 / 깎임) 이라 키우면 흙이 같은 비율로 두꺼워집니다",
+    "soil.thickness_cap_m": "흙 두께의 상한입니다",
+    "soil.alluvium_max_m": "충적층(강이 쌓은 모래·자갈 층) 두께의 상한입니다. 완만한 큰 강가에 "
+    "쌓입니다",
+    "groundwater.max_depth_m": "지하수면이 지표 아래로 내려갈 수 있는 가장 깊은 값입니다. 회랑 "
+    "재질 부피를 굽는 깊이(이 값 + 동굴 통로 지름)도 이 값으로 정해집니다",
+    "caves.levels": "동굴 층 수입니다 (0층 = 지금 지하수면이라 물에 잠김, 1층 = 옛 지하수면이라 "
+    "마름). 필드 표에 두 층만 있어 1 또는 2 를 씁니다",
+    "caves.entrance_tolerance_m": "동굴 층이 지표와 이 거리(+ 통로 반지름) 안으로 가까우면 "
+    "입구로 봅니다 (τ). 키우면 입구가 늘어납니다",
+    "caves.passage_radius_m": "동굴 통로의 반지름 r 입니다. 지표에서 지름(2r)보다 깊은 곳에만 "
+    "동굴이 생깁니다",
+    "caves.noise_wavelength_m": "동굴 통로를 구불구불하게 하는 노이즈의 파장입니다. 통로는 "
+    "노이즈가 0 인 선을 따라 나므로, 키우면 굽이가 커지고 통로 사이가 멀어집니다",
 }
 
 # 프로필 키의 일반 설명 (파일 주석은 프로필마다 달라서 note 로 붙임)
 PROFILE_HELP: dict[str, str] = {
-    "profile.grid.coarse_n_per_face": "거친 격자 해상도: 정육면체 면 한 변의 칸 수. 판·지각·기후를 "
-    "이 격자에서 만듭니다",
-    "profile.grid.l0_n_per_face": "행성 L0 격자 해상도: 면 한 변의 칸 수. 칸 수 6·n², 칸 크기 "
-    "≈ 40,000 km / (4·n)",
-    "profile.hero.max_flow_iterations": "히어로 솔버 반복 상한 "
-    "(L0 는 landscape.max_flow_iterations)",
-    "profile.hero.spacing_m": "히어로 유역 칸 간격 (L2). 줄이면 칸 수가 제곱으로 늘어납니다",
-    "profile.hero.size_m": "히어로 유역 한 변 길이. spacing_m 의 배수로 맞춥니다. 클수록 바다에서 "
-    "먼 육지 자리가 필요하고, 행성에 그런 자리가 없으면 평면 히어로로 바뀝니다",
-    "profile.corridor.voxel_m": "회랑 높이맵·동굴 메시 간격 (L3, 작을수록 굽기가 오래 걸림)",
-    "profile.corridor.width_m": "걷는 회랑의 폭 (히어로 한 변보다 크면 히어로에 맞춰 줄어듦)",
-    "profile.corridor.length_m": "걷는 회랑의 길이 (강을 따라, 히어로 한 변보다 크면 줄어듦)",
-    "profile.compute.numba_threads": "계산에 쓸 CPU 스레드 수 (0 = 모든 코어)",
+    "profile.grid.coarse_n_per_face": "거친 격자의 해상도입니다. 큐브스피어(정육면체 여섯 면을 "
+    "부풀린 공 모양 격자) 면 한 변의 칸 수입니다. 판·지각·융기·기후처럼 넓게 변하는 값을 "
+    "여기서 먼저 만들어 L0 로 옮깁니다",
+    "profile.grid.l0_n_per_face": "행성 지도(L0)의 해상도로, 면 한 변의 칸 수 n 입니다. 칸 수는 "
+    "6·n², 칸 한 변은 약 40,000 km / (4·n) 입니다. 늘리면 칸 수가 제곱으로 늘어납니다",
+    "profile.hero.max_flow_iterations": "히어로 유역 솔버의 반복 상한입니다. 행성 지도(L0)는 "
+    "landscape.max_flow_iterations 를 씁니다",
+    "profile.hero.spacing_m": "히어로 유역(L2)의 칸 간격입니다. 반으로 줄이면 칸 수가 4배로 "
+    "늘어납니다",
+    "profile.hero.size_m": "히어로 유역 한 변의 길이입니다. spacing_m 의 정수배로 맞추고, 간격의 "
+    "3배 이상, 5000 × 5000칸 이하여야 합니다. 클수록 바다에서 먼 육지 자리가 필요하고, 행성에 "
+    "그런 자리가 없으면 전체 실행(all)에서는 평면 히어로로 바뀝니다",
+    "profile.corridor.voxel_m": "회랑(L3) 높이맵과 동굴 메시의 간격입니다. 작을수록 자세하지만 "
+    "굽기가 오래 걸립니다",
+    "profile.corridor.width_m": "걷는 회랑의 폭입니다. 히어로 한 변보다 크면 히어로에 맞춰 "
+    "줄어듭니다",
+    "profile.corridor.length_m": "걷는 회랑의 길이(강을 따라)입니다. 히어로 한 변보다 크면 "
+    "줄어듭니다",
+    "profile.compute.numba_threads": "계산에 쓸 CPU 스레드 수입니다. 0 이면 모든 코어를 씁니다",
 }
 
 # 왼쪽 패널에서 바로 고치지 않는 키 (시드는 따로 입력 칸이 있음)
@@ -233,10 +276,12 @@ READ_ONLY: dict[str, str] = {
     "profile.name": "프로필은 위의 '프로필' 칸에서 고릅니다",
 }
 
+# 프로필마다 걸리는 시간. 화면에는 '<힌트>. <파일 첫 주석>' 으로 이어 보이므로
+# 끝에 마침표를 찍지 않습니다.
 PROFILE_HINTS: dict[str, str] = {
-    "tiny": "몇 초. 파이프라인이 도는지만 보는 시험용이라 모양은 보지 않습니다",
-    "laptop": "수 분. 데모와 평소 실험용 (노트북 16 GB)",
-    "lab": "오래 걸림. 보고용 고해상도 (연구실 PC)",
+    "tiny": "몇 초 걸립니다",
+    "laptop": "몇 분 걸립니다",
+    "lab": "오래 걸립니다",
 }
 
 _SECTION = re.compile(r"^\s*\[\s*([A-Za-z0-9_.\-]+)\s*\]\s*(?:#(.*))?$")

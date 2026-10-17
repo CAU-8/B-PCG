@@ -20,129 +20,153 @@ from bpcg_studio.params import config_diff_parts, flat_config
 
 EARTH_OCEAN_FRACTION = 0.708  # Scorecard.cs 의 DefaultThresholds["earth_ocean_fraction"] 과 같음
 
-# 점수표 항목 (planet./hero. 를 뗀 이름) → 뜻, 지구 값(있을 때), 기준
+# 점수표 항목 (planet./hero. 를 뗀 이름) → 이름, 뜻, 지구 값이나 합격 기준(있을 때).
+# 뜻은 docs/pipeline.md 12장과 src/Bpcg/Metrics/Scorecard.cs 의 계산을 쉬운 말로 옮긴 것입니다.
 SCORE_TEXT: dict[str, dict[str, str]] = {
     "ocean_fraction": {
         "label": "바다 비율",
-        "meaning": "물 부피를 보존하는 해수면 아래 바다 넓이의 비율입니다",
+        "meaning": "행성 넓이 가운데 바다의 몫입니다. 바닷물 양을 정해 두고 낮은 곳부터 채우므로, "
+        "이 비율은 입력이 아니라 결과로 나옵니다.",
         "earth": "",  # earth_ocean_fraction() 으로 채움 (점수표 기준과 같은 값)
     },
     "shelf_area": {
         "label": "대륙붕 넓이",
-        "meaning": "대륙 지각 위이면서 수심 200 m 보다 얕은 바다 넓이입니다",
+        "meaning": "대륙 지각 위에 있으면서 수심이 200 m 보다 얕은 바다(대륙붕)의 넓이입니다.",
         "earth": "약 2,700만 km² (바다의 약 7%)",
     },
     "hypsometry_bimodal": {
         "label": "고도 분포의 두 봉우리 간격",
-        "meaning": "면적 가중 고도 분포에서 대륙 봉우리와 해양 봉우리 사이 간격입니다. "
-        "지각 비율과 지각평형으로 거의 정해지는 '반쯤 입력' 검사입니다",
+        "meaning": "높이마다 넓이를 세면 지구는 육지 높이와 바다 밑 높이 두 곳에 몰립니다(봉우리 "
+        "둘). 그 두 봉우리 사이의 간격이고, 1 km 넘게 떨어지면 합격입니다. 지각 두께와 지각평형이 "
+        "거의 정하는 값이라 '지구답다'는 근거로 세지 않습니다.",
         "earth": "약 4,500~5,000 m (0~500 m 와 −4,000~−5,000 m)",
     },
     "hack_exponent": {
         "label": "Hack 법칙 지수",
-        "meaning": "본류 길이 L = c·A^h 의 h 입니다. 유역이 커질 때 강이 얼마나 길어지는지 봅니다",
+        "meaning": "유역이 넓어질 때 본류가 얼마나 길어지는지입니다. 본류 길이 L = c·A^h (A 는 "
+        "유역 넓이) 의 h 이고, h = 0.5 면 넓이가 4배일 때 길이가 2배입니다.",
         "earth": "0.49~0.6",
     },
     "gw_surface_fraction": {
         "label": "지하수가 땅 겉에 닿는 육지 비율",
-        "meaning": "지하수면이 지표에서 0.5 m 안인 육지 넓이 비율입니다 (습지·강가)",
-        "earth": "0.22~0.32 (Fan 2013)",
+        "meaning": "지하수면이 땅 겉에서 0.5 m 안까지 올라온 육지의 넓이 비율입니다(습지·강가 "
+        "같은 땅).",
+        "earth": "0.22~0.32, 열 칸 가운데 두세 칸 (Fan 2013)",
     },
     "river_reach_fraction": {
         "label": "강이 바다·호수·출구에 닿는 비율",
-        "meaning": "강 칸에서 물길을 따라가면 바다나 호수, 출구에 닿는 비율입니다 (0~1)",
+        "meaning": "강 칸에서 물길을 따라 내려가면 바다나 호수, 유역 출구에 닿는 칸의 비율입니다. "
+        "1 이면 모든 강이 끊기지 않고 이어집니다.",
         "earth": "기준 1 (100%)",
     },
     "river_backflow": {
         "label": "거꾸로 흐르는 강 칸",
-        "meaning": "물을 받는 칸의 수면이 더 높은 강 칸 수입니다",
+        "meaning": "물을 받는 아래 칸의 수면이 보내는 칸보다 높은 강 칸의 수입니다. 물이 비탈을 "
+        "거슬러 오르는 셈이라 0 이어야 합니다.",
         "earth": "기준 0",
     },
     "law_consistency": {
-        "label": "정상상태 법칙 자기일관성",
-        "meaning": "칸마다 경사가 강 법칙이 요구하는 경사와 얼마나 다른지 (상대 오차 중앙값)",
+        "label": "경사 법칙과 실제 경사의 차이",
+        "meaning": "칸마다 실제 경사가 솔버의 경사 법칙(강과 산비탈이 깎는 양으로 정한 경사)과 "
+        "얼마나 다른지 잰 상대 오차의 중앙값입니다. 0.001 은 0.1% 차이입니다. 선상지·후처리 칸, "
+        "출구, 지층 경계를 넘는 칸은 뺍니다.",
         "earth": "기준 0.001 미만",
     },
     "water_budget": {
         "label": "물 수지 오차",
-        "meaning": "유량 Q 가 상류 면적 × 유효 유출의 합과 맞는지 (상대 오차)",
-        "earth": "기준 1e-6 이하",
+        "meaning": "물이 새거나 생기지 않았는지 봅니다. 유량 Q 가 칸마다 (넓이 × 침식에 쓰는 "
+        "유출)을 상류부터 더한 값과 맞는지 잰 상대 오차입니다(히어로는 행성에서 들어오는 물을 "
+        "더함).",
+        "earth": "기준 1e-6 (100만분의 1) 이하",
     },
     "sediment_budget": {
         "label": "퇴적물 수지 오차",
-        "meaning": "퇴적물 흐름 Qs 가 상류의 융기 × 면적 합과 맞는지 (상대 오차)",
-        "earth": "기준 1e-6 이하",
+        "meaning": "흙이 새거나 생기지 않았는지 봅니다. 퇴적물 유량 Qs 가 상류의 (융기 × 넓이)를 "
+        "더한 값과 맞는지 잰 상대 오차입니다.",
+        "earth": "기준 1e-6 (100만분의 1) 이하",
     },
     "rock_consistency": {
         "label": "경사를 만든 암석 = 보이는 암석",
-        "meaning": "솔버가 경사를 정할 때 쓴 암석과 지표에 보이는 암석이 같은 칸의 비율 (0~1)",
+        "meaning": "솔버가 경사를 정할 때 쓴 암석과 지표에 보이는 암석이 같은 칸의 "
+        "비율입니다(표본으로 셈). 1 이면 모두 같습니다.",
         "earth": "기준 1 (100%)",
     },
     "cave_in_soluble": {
         "label": "동굴이 녹는 암석 안에 있음",
-        "meaning": "동굴 층이 있는 칸이 석회암·대리암 안인 비율 (0~1)",
+        "meaning": "동굴 층이 있는 자리(칸마다, 층마다) 가운데 그 높이의 암석이 석회암·대리암인 "
+        "비율입니다. 1 이면 모든 동굴이 녹는 암석 안에 있습니다.",
         "earth": "기준 1 (100%)",
     },
     "water_rule_violations": {
         "label": "물 규칙 위반 칸",
-        "meaning": "지하수면이 땅 위로 솟음, 물 칸 수면 불일치, 최대 깊이 넘음, NaN 의 합",
+        "meaning": "물 규칙을 어긴 칸 수의 합입니다: 지하수면이 땅 위로 솟음, 물 칸의 지하수면이 "
+        "수면과 다름, 지하수면이 땅 겉에서 최대 깊이(groundwater.max_depth_m, 기본 300 m)보다 "
+        "깊음, 값이 비어 있음(NaN).",
         "earth": "기준 0",
     },
     "grid_alignment": {
         "label": "격자 정렬 지수",
-        "meaning": "강이 격자 방향(동서남북)에 몰리는 정도. 1 이면 결이 없습니다",
+        "meaning": "강이 바둑판 칸의 줄(가로·세로·45°)을 얼마나 따르는지입니다. 강 칸마다 6칸 "
+        "아래까지의 방향이 이 줄에서 5° 안인 비율을, 아무 방향으로 흐를 때의 비율(약 22%)로 "
+        "나눕니다. 1 이면 격자를 편들지 않습니다.",
         "earth": "기준 1.3 미만",
     },
     "grid_alignment_edge": {
         "label": "격자 정렬 지수 (면 경계 띠)",
-        "meaning": "정육면체 면 경계 근처에서 강이 격자 방향에 몰리는 정도. 1 이면 결이 없습니다",
+        "meaning": "행성 격자(정육면체 여섯 면을 부풀린 공)에서 면 경계 근처만 잰 격자 정렬 "
+        "지수입니다. 면 경계에서 바둑판 방향이 꺾이므로 따로 봅니다. 1 이면 격자를 편들지 "
+        "않습니다.",
         "earth": "기준 1.3 미만",
     },
     "grid_alignment_center": {
         "label": "격자 정렬 지수 (면 가운데)",
-        "meaning": "정육면체 면 가운데에서 강이 격자 방향에 몰리는 정도. 1 이면 결이 없습니다",
+        "meaning": "행성 격자에서 면 가운데만 잰 격자 정렬 지수입니다. 1 이면 격자를 편들지 "
+        "않습니다.",
         "earth": "기준 1.3 미만",
     },
     "solver_converged": {
         "label": "솔버 수렴",
-        "meaning": "물길 방향이 더 바뀌지 않고 고도 변화가 멈춤 기준보다 작아졌는지",
+        "meaning": "솔버가 반복 상한 안에 멈췄는지입니다. 물길 방향이 바뀐 칸이 0 이고 가장 크게 "
+        "바뀐 높이가 멈춤 기준(landscape.stop_dz_m, 기본 0.1 m)보다 작아야 멈춥니다.",
         "earth": "기준 수렴",
     },
     "flat_fraction": {
         "label": "평탄지 비율",
-        "meaning": "경사 0.02 미만인 땅의 비율 (범람원·분지)",
-        "earth": "지구 산지 유역은 보통 몇 % 이상",
+        "meaning": "경사가 0.02(100 m 에 2 m)보다 완만한 육지의 넓이 비율입니다(범람원·분지). "
+        "히어로에서만 잽니다.",
+        "earth": "보고만 함 (합격선 없음)",
     },
 }
 
+# 점수표 종류. 이름(check·emergent·forced)은 CLAUDE.md 2.6 과 docs/glossary.md 7장의 것입니다.
 KIND_TEXT = {
-    "check": "검사 (반드시 맞아야 함)",
-    "emergent": "결과 (입력으로 정하지 않음, 지구와 비교)",
-    "forced": "반쯤 입력 (입력이 거의 정함)",
+    "check": "검사 (check): 꼭 지켜야 하는 규칙",
+    "emergent": "결과 (emergent): 입력에 없던 성질, 지구와 견줌",
+    "forced": "반쯤 입력 (forced): 입력이 거의 정함, 근거로 쓰지 않음",
 }
 
 SECONDS_LABELS: dict[str, str] = {
     "materials_coarse": "거친 격자 재료 (판·지각·해수면·융기·기후)",
-    "transfer": "L0 격자로 옮기기",
+    "transfer": "거친 격자에서 행성 지도(L0)로 옮기기",
     "geology": "지질",
     "strength_limit": "지각 세기 한계 (첫 풀이)",
     "stages": "2~4단계 (솔버·선상지·물·흙·지하수·동굴)",
     "scorecard": "점수표",
     "total": "합계",
-    "solver": "솔버",
+    "solver": "솔버 (산과 강의 모양 풀기)",
     "fans": "선상지",
     "relief": "기복 보정",
-    "climate_final": "최종 고도 기온",
+    "climate_final": "기온 다시 계산 (최종 고도)",
     "water": "물 (강·호수)",
     "surface_rock": "지표 암석",
     "soil": "흙",
     "groundwater": "지하수면",
     "caves": "동굴 층",
-    "rivers": "강 구간",
-    "sample": "L0 값 표본",
-    "boundary": "경계조건",
+    "rivers": "강 구간 나누기",
+    "sample": "히어로 격자 만들고 행성 값 옮기기",
+    "boundary": "히어로 가장자리 조건 (출구·들어오는 물)",
     "find": "히어로 자리 찾기",
-    "volume": "3D 샘플 준비",
+    "volume": "3D 샘플 함수 준비",
     "choose": "회랑 고르기",
     "heightmap": "높이맵",
     "strata": "재질 부피",
@@ -151,12 +175,12 @@ SECONDS_LABELS: dict[str, str] = {
 # 회랑(굽기) manifest 의 seconds 는 같은 키라도 뜻이 달라 따로 이름을 붙입니다.
 CORRIDOR_SECONDS_LABELS: dict[str, str] = {
     **SECONDS_LABELS,
-    "volume": "3D 샘플 준비",
+    "volume": "3D 샘플 함수 준비",
     "choose": "회랑 고르기",
     "heightmap": "지표 높이맵",
     "water": "수면·지하수면 높이맵",
     "cave_mouth": "동굴 입구 구멍 (cave_mouth)",
-    "detail": "프랙탈 디테일 높이맵",
+    "detail": "프랙탈 디테일 높이맵 (보기용 잔무늬)",
     "caves": "동굴 메시 (caves.glb)",
     "strata": "재질 부피 (strata.u8)",
 }
@@ -166,8 +190,8 @@ FIGURE_TEXT: dict[str, dict[str, str]] = {
     "planet_elevation_plain.png": {
         "title": "행성 평균 지표 고도 (위경도 지도)",
         "what": "행성 전체의 평균 지표 고도(z_mean_m)를 경도 −180~180°, 위도 −90~90° 지도로 "
-        "편 그림입니다. 골짜기 바닥 고도에 칸 안 능선 기복을 더한 값이고, 음영으로 산맥을 "
-        "도드라지게 했습니다.",
+        "편 그림입니다. 골짜기 바닥 고도에 칸 안 기복의 절반(기본값)을 더한 값이고, 음영으로 "
+        "산맥을 도드라지게 했습니다.",
         "how": "파랑은 바다(아래로 갈수록 깊음), 초록→갈색→흰색은 육지 높이입니다. 오른쪽 "
         "색 막대가 고도 [m] 입니다. 극 근처는 위경도 지도라 옆으로 늘어나 보입니다.",
         "look": "산맥이 판 수렴 경계를 따라 좁은 띠로 서는지, 바다가 해령에서 멀어질수록 "
@@ -183,7 +207,8 @@ FIGURE_TEXT: dict[str, dict[str, str]] = {
     "planet_globes.png": {
         "title": "지구본 세 방향",
         "what": "같은 행성을 히어로 유역 쪽, 정육면체 꼭짓점 쪽(세 면이 만나는 곳), 북극 쪽에서 "
-        "본 정사영입니다. 아래 줄은 같은 그림에 면 경계를 겹쳤습니다.",
+        "본 정사영(아주 멀리서 평행하게 내려다본 그림)입니다. 아래 줄은 같은 그림에 면 경계를 "
+        "겹쳤습니다.",
         "how": "왼쪽 위 노란 원이 히어로 유역입니다. 가운데 열은 이웃이 7개뿐인 꼭짓점을 정면에서 "
         "봅니다.",
         "look": "꼭짓점과 면 경계에서 지형에 이음새나 별 모양 무늬가 생기지 않았는지 봅니다.",
@@ -509,24 +534,31 @@ def _warnings(
 
     if pm and hm and not site and not any("평면 히어로" in (m or "") for m in seen):
         add(
-            "행성 묶음은 있는데 히어로가 평면 히어로입니다. 히어로를 행성에 놓지 못해 가짜 "
-            "경계조건으로 바꾼 것입니다. 이유는 실행 기록의 '[히어로]' 줄에 있습니다. 바다에서 "
-            "먼 육지가 모자라서라면 profile.hero.size_m 를 줄이거나 시드를 바꿔 보세요."
+            "행성은 만들었지만 히어로 유역을 행성 위에 놓지 못해, 정해 둔 융기와 출구로 만드는 "
+            "평면 히어로로 바꿨습니다. 까닭은 실행 기록의 '[히어로]' 줄에 있습니다. 바다에서 먼 "
+            "육지가 모자라서라면 profile.hero.size_m 을 줄이거나 시드를 바꿉니다."
         )
     for name, diag in (("행성", pdiag), ("히어로", hdiag)):
         s = (diag or {}).get("solver") or {}
         if s and s.get("converged") is False:
-            add(f"{name} 솔버가 반복 상한({s.get('iterations')}회) 안에 수렴하지 않았습니다.")
+            add(
+                f"{name} 솔버가 반복 상한({s.get('iterations')}회) 안에 수렴하지 않았습니다. "
+                "마지막 반복에서도 물길 방향이 바뀌거나 높이가 멈춤 기준(기본 0.1 m)보다 크게 "
+                "바뀌었다는 뜻입니다. 반복 상한(행성은 landscape.max_flow_iterations, 히어로는 "
+                "profile.hero.max_flow_iterations)을 늘리거나, 아래 '솔버 수렴' 표에서 방향을 "
+                "묶은 칸 수를 봅니다."
+            )
         sl = ((diag or {}).get("stages") or {}).get("strength_limit") or {}
         if sl.get("applied") and sl.get("first_pass_converged") is False:
             z = sl.get("first_pass_z_mean_max_m")
             n = sl.get("reduced_cells")
-            ztxt = f", 그때 평균 지표 최고 {z:,.0f} m" if isinstance(z, int | float) else ""
-            ntxt = f"칸 {n:,}개" if isinstance(n, int) else "칸"
+            ztxt = f"(그때 가장 높은 평균 지표 {z:,.0f} m)" if isinstance(z, int | float) else ""
+            ntxt = f"({n:,}칸)" if isinstance(n, int) else ""
             add(
                 f"{name} 지각 세기 한계의 첫 풀이가 반복 상한({sl.get('first_pass_iterations')}회) "
-                f"안에 수렴하지 않았습니다{ztxt}. 융기 줄임({ntxt})은 수렴 전 지형으로 "
-                "계산됐습니다. 솔버 수렴 표의 반복 수는 두 번째 풀이입니다."
+                f"안에 수렴하지 않았습니다{ztxt}. 그래서 덜 풀린 지형을 보고 융기를 줄일 칸을 "
+                f"골랐습니다{ntxt}. 산맥 높이가 이상하면 landscape.max_flow_iterations 를 늘려 "
+                "다시 돌립니다. '솔버 수렴' 표의 행성 반복 수는 두 번째 풀이의 것입니다."
             )
     if failed:
         names = ", ".join(
@@ -534,7 +566,11 @@ def _warnings(
             for f in failed
         )
         notes = " / ".join(f"{f['key']}: {f['note']}" for f in failed if f["note"])
-        add(f"점수표 검사 {len(failed)}개가 불합격입니다: {names}.", notes)
+        add(
+            f"점수표 검사 {len(failed)}개가 불합격입니다: {names}. 아래 점수표의 회색 메모 "
+            "줄에 받은 값과 기준이 있습니다.",
+            notes,
+        )
     return out
 
 

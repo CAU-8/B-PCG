@@ -34,7 +34,7 @@ public partial class Main : Node3D
     public static readonly Dictionary<int, string> ColorModeNames = new()
     {
         [1] = "자연색",
-        [2] = "지질도 (흙 아래 기반암)",
+        [2] = "지질도 (흙 아래 첫 암석)",
     };
 
     /// <summary>M 키로 가는 지구본 장면 (행성 전체).</summary>
@@ -250,7 +250,7 @@ public partial class Main : Node3D
         string colorLabel = ColorModeNames.GetValueOrDefault(_colorMode, "높이 무늬");
         if (Baked.Strata is null)
         {
-            colorLabel = Baked.Loaded ? "자연색" : "높이 무늬 (표본)";
+            colorLabel = Baked.Loaded ? "자연색" : "높이 무늬 (표본 지형)";
         }
         Hud.SetOptionLabels(colorLabel, Lamp.Visible);
     }
@@ -289,7 +289,7 @@ public partial class Main : Node3D
     {
         Vector3 eye = Player.EyePosition();
         var lines = new List<string>();
-        string mode = Player.Noclip ? "날기 (노클립)" : "걷기";
+        string mode = Player.Noclip ? "날기 (땅을 뚫고 지나감)" : "걷기";
         lines.Add($"{mode} · 속력 {Player.CurrentSpeedMS():F0} m/s");
         string where = $"동 {eye.X:+0;-0;+0} m, 북 {-eye.Z:+0;-0;+0} m (회랑 가운데 기준)";
         if (Baked.Loaded)
@@ -302,17 +302,17 @@ public partial class Main : Node3D
         {
             if (eye.Y < ground)
             {
-                string info = $"땅속 {ground - eye.Y:F0} m";
+                string info = $"지표 아래 {ground - eye.Y:F0} m";
                 if (Baked.Strata is not null)
                 {
                     int id = Baked.Strata.IdAt(eye);
                     if (id >= 0)
                     {
-                        info += $" · {Baked.Strata.NameOf(id)}";
+                        info += $" · {Baked.Strata.NameOf(id)} 속";
                     }
                     else if (ground - eye.Y > Baked.Strata.DepthM())
                     {
-                        info += $" · 구운 깊이({Baked.Strata.DepthM():F0} m)보다 깊음";
+                        info += $" · 암석 자료는 지표 아래 {Baked.Strata.DepthM():F0} m까지만 있음";
                     }
                 }
                 lines.Add(info);
@@ -324,18 +324,18 @@ public partial class Main : Node3D
             float wt = Baked.WaterTableY(eye);
             if (float.IsFinite(wt))
             {
-                lines.Add($"이 자리 지하수면: 지표 아래 {ground - wt:F1} m");
+                lines.Add($"땅속 물이 차 있는 높이(지하수면): 지표 아래 {ground - wt:F1} m");
             }
         }
         if (Baked.SectionOn)
         {
             float d = Math.Abs(Baked.SectionNormal.Dot(eye - Baked.SectionPoint));
-            lines.Add($"단면 켜짐 · 눈에서 {d:F0} m ([ ] 로 옮김, X 로 끔)");
+            lines.Add($"단면 칼 켜짐 · 눈앞 {d:F0} m ([ ]로 옮기기, X로 끄기)");
         }
         if (Baked.EntrancesInside.Count > 0)
         {
-            string at = _entranceIndex < 0 ? "" : $" (지금 {_entranceIndex + 1} 번)";
-            lines.Add($"동굴 입구 {Baked.EntrancesInside.Count} 곳{at} · T 로 옮겨 가기");
+            string at = _entranceIndex < 0 ? "" : $" (지금 {_entranceIndex + 1}번 앞)";
+            lines.Add($"동굴 입구 {Baked.EntrancesInside.Count}곳{at} · T로 다음 입구 앞에 가기");
         }
         string notice = UiScale.Notice();
         if (notice.Length > 0)

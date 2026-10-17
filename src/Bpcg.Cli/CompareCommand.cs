@@ -171,6 +171,26 @@ public static class CompareCommand
         _ => v.ToString() ?? "",
     };
 
+    /// <summary>표에 쓰는 숫자: 1,000 이상은 쉼표 정수, 그 아래는 유효숫자 세 자리 소수 (1.5E+03 → "1,500", 0.000163 → "0.000163").</summary>
+    public static string Plain(double v)
+    {
+        if (!double.IsFinite(v))
+        {
+            return "-";
+        }
+        double a = Math.Abs(v);
+        if (a >= 1000.0)
+        {
+            return v.ToString("N0", CultureInfo.InvariantCulture);
+        }
+        if (a == 0.0)
+        {
+            return "0";
+        }
+        int decimals = Math.Clamp(2 - (int)Math.Floor(Math.Log10(a)), 0, 12);
+        return Math.Round(v, decimals).ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+    }
+
     private static int Methods(Args a)
     {
         if (a.Json)
@@ -244,7 +264,7 @@ public static class CompareCommand
                 IEnumerable<string> vals = cols.Select(c =>
                 {
                     object? v = c == "seconds" ? e["seconds"] : metrics.GetValueOrDefault(c);
-                    return v is null ? "-" : Convert.ToDouble(v, CultureInfo.InvariantCulture).ToString("G3", CultureInfo.InvariantCulture);
+                    return v is null ? "-" : Plain(Convert.ToDouble(v, CultureInfo.InvariantCulture));
                 });
                 Say(((string)e["id"]!).PadRight(16) + string.Join(" | ", vals));
             }

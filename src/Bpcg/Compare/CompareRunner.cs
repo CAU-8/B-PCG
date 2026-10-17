@@ -365,7 +365,7 @@ public static partial class CompareRunner
         if (!force && meta is not null && meta.GetValueOrDefault("z_key") as string == zKey && File.Exists(zPath))
         {
             z = Array.ConvertAll(Npy.ReadFile(zPath).AsFloat(), v => (double)v);
-            log?.Invoke($"  [{inst.Id}] 그대로 (캐시)");
+            log?.Invoke($"  [{inst.Id}] 저장해 둔 결과를 씁니다 (캐시)");
         }
         else
         {
@@ -425,7 +425,7 @@ public static partial class CompareRunner
                 ["version"] = Package.Version,
             };
             WriteJson(Path.Combine(dir, "meta.json"), meta);
-            log?.Invoke($"  [{inst.Id}] {seconds:F2} s");
+            log?.Invoke($"  [{inst.Id}] 끝: {seconds:F2} s");
         }
         string mKey = Sha(new OrderedDictionary<string, object?> { ["z"] = zKey, ["metrics"] = CodeVersion });
         OrderedDictionary<string, object?>? mj = ReadJson(Path.Combine(dir, "metrics.json"));
@@ -496,7 +496,7 @@ public static partial class CompareRunner
         int k = 0;
         foreach (long s in runSeeds)
         {
-            log?.Invoke($"[비교] 시드 {s} ({cfg.Grid.N}×{cfg.Grid.N}, {cfg.Grid.Dx:G} m)");
+            log?.Invoke($"[비교] 시드 {s}: {cfg.Grid.N} × {cfg.Grid.N}칸, 칸 간격 {cfg.Grid.Dx:G} m");
             foreach (MethodInstance inst in insts)
             {
                 k++;

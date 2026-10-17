@@ -115,7 +115,8 @@ public partial class StartMenu : Control
             StartGeneration();
             if (_task is null && _quitWhenDone)
             {
-                GD.Print("BPCG_GENERATE_FAIL: 생성을 시작하지 못했습니다 (설정 폴더?)");
+                GD.Print("BPCG_GENERATE_FAIL: 생성을 시작하지 못했습니다. 설정 폴더(configs)를 찾지 못했습니다. "
+                    + "저장소의 configs 폴더 경로를 환경 변수 BPCG_CONFIGS 에 넣으세요");
                 GetTree().Quit(1);
             }
         }
@@ -131,7 +132,12 @@ public partial class StartMenu : Control
                 return;
             }
         }
-        GD.PushError($"'{text}' 를 고를 수 없습니다");
+        var names = new List<string>();
+        for (int i = 0; i < option.ItemCount; i++)
+        {
+            names.Add(option.GetItemText(i));
+        }
+        GD.PushError($"'{text}' 는 목록에 없어 고를 수 없습니다. 고를 수 있는 이름: {string.Join(", ", names)}");
     }
 
     public override void _Process(double delta)
@@ -168,7 +174,7 @@ public partial class StartMenu : Control
         string runDir = Path.Combine(EnginePaths.RunsRoot(), $"{DateTime.Now:yyyyMMdd-HHmmss}-{profile}-s{seed}");
         _log.Clear();
         _logLines = 0;
-        AppendLog($"[엔진] 만들기: 행성 {planet}, 프로필 {profile}, 시드 {seed}{(flat ? ", 평면 히어로" : "")}");
+        AppendLog($"[엔진] 만들기 시작: 행성 설정 {planet}, 프로필 {profile}, 시드 {seed}{(flat ? ", 평면 히어로" : "")}");
         AppendLog($"[엔진] 결과 폴더: {runDir}");
         _stages = new StageProgress(flat);
         _startedAt = Stopwatch.GetTimestamp();
@@ -195,7 +201,7 @@ public partial class StartMenu : Control
             Exception e = task.Exception!.GetBaseException();
             AppendLog($"[오류] {e.GetType().Name}: {e.Message}");
             GD.PushError($"생성 실패: {e}");
-            _stage.Text = $"실패 · {StageProgress.FormatSeconds(elapsed)}";
+            _stage.Text = $"만들지 못했습니다 ({StageProgress.FormatSeconds(elapsed)}). 아래 기록의 [오류] 줄을 보세요";
             _stages = null;
             if (_quitWhenDone)
             {
@@ -206,12 +212,13 @@ public partial class StartMenu : Control
         }
         _stages!.Finish();
         _progress.Value = 100.0;
-        _stage.Text = $"끝 · {StageProgress.FormatSeconds(elapsed)}";
+        _stage.Text = $"다 만들었습니다 ({StageProgress.FormatSeconds(elapsed)})";
         _stages = null;
         string runDir = task.Result;
         BakedPaths.RuntimeDir = Path.Combine(runDir, Runs.CorridorDir);
         RefreshRuns();
-        AppendLog($"[엔진] 다 만들었습니다 ({StageProgress.FormatSeconds(elapsed)}). 회랑 장면에서 M 을 누르면 지구본이 나옵니다");
+        AppendLog($"[엔진] 다 만들었습니다: {StageProgress.FormatSeconds(elapsed)}. "
+            + "회랑 장면에서 M을 누르면 지구본으로 갑니다 (평면 히어로는 지구본 없음)");
         if (_quitWhenDone)
         {
             GD.Print($"BPCG_GENERATE_OK {runDir}");
@@ -273,8 +280,8 @@ public partial class StartMenu : Control
             _runs.Select(select >= 0 ? select : 0);
         }
         _runsNote.Text = _runEntries.Count == 0
-            ? $"아직 만든 행성이 없습니다. 결과는 {EnginePaths.RunsRoot()} 에 쌓입니다"
-            : $"결과 폴더: {EnginePaths.RunsRoot()}";
+            ? $"아직 만든 행성이 없습니다. 만든 결과는 {EnginePaths.RunsRoot()} 에 쌓입니다"
+            : $"결과 폴더: {EnginePaths.RunsRoot()}\n줄을 두 번 누르면 그 결과의 회랑 장면이 열립니다";
         SetBusy(IsGenerating);
     }
 
@@ -316,7 +323,7 @@ public partial class StartMenu : Control
         {
             _log.Clear();
             _logLines = 0;
-            _log.AddText("(앞 기록은 지웠습니다)\n");
+            _log.AddText($"(기록이 {MaxLogLines}줄을 넘어 앞부분을 지웠습니다)\n");
         }
         _log.AddText(line + "\n");
         _logLines++;
@@ -347,8 +354,8 @@ public partial class StartMenu : Control
         title.Text = "B-PCG · 행성 만들기";
         root.AddChild(title);
         Label sub = Ui.Label(Ui.FontSize - 1);
-        sub.Text = "판·비·강이 만든 지구 크기 행성을 C# 으로 만들고, 회랑을 걸어 다니며 봅니다. "
-            + "결과는 회랑(2 m 지형·물·동굴·지층)과 지구본(행성 전체)으로 구워집니다.";
+        sub.Text = "판이 땅을 밀어 올리고 비와 강이 깎아 만든, 지구 크기의 행성을 만듭니다.\n"
+            + "다 만들면 강 유역 안의 좁고 긴 띠(회랑)를 걸어 다니며 보고, M 키로 행성 전체(지구본)를 돌려 봅니다.";
         sub.Modulate = GlobeHud.DimColor;
         root.AddChild(sub);
 
@@ -372,12 +379,25 @@ public partial class StartMenu : Control
         grid.AddChild(FieldLabel("행성 설정"));
         _planet = new OptionButton { FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         grid.AddChild(_planet);
-        grid.AddChild(FieldLabel("프로필"));
-        _profile = new OptionButton { FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        grid.AddChild(FieldLabel("프로필 (크기)"));
+        _profile = new OptionButton
+        {
+            FocusMode = FocusModeEnum.None,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "행성의 크기와 칸 수 묶음입니다. tiny 는 몇 초 만에 끝나는 시험용, laptop 은 노트북 기본입니다",
+        };
         _profile.ItemSelected += OnProfileSelected;
         grid.AddChild(_profile);
-        grid.AddChild(FieldLabel("시드"));
-        _seed = new SpinBox { MinValue = 0, MaxValue = int.MaxValue, Step = 1, Value = 0, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        grid.AddChild(FieldLabel("시드 (출발 번호)"));
+        _seed = new SpinBox
+        {
+            MinValue = 0,
+            MaxValue = int.MaxValue,
+            Step = 1,
+            Value = 0,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "같은 시드면 어느 컴퓨터에서든 같은 행성이 나옵니다. 다른 행성을 보려면 번호를 바꾸세요",
+        };
         grid.AddChild(_seed);
 
         _profileNote = Ui.Label(Ui.FontSize - 2);
@@ -386,7 +406,7 @@ public partial class StartMenu : Control
         _profileNote.Modulate = GlobeHud.DimColor;
         left.AddChild(_profileNote);
 
-        _flat = new CheckBox { Text = "평면 히어로 (행성 없이 히어로 유역만, 지구본 없음)", FocusMode = FocusModeEnum.None };
+        _flat = new CheckBox { Text = "평면 히어로: 행성 없이 강 유역 하나만 빨리 만들기 (지구본 없음)", FocusMode = FocusModeEnum.None };
         _flat.AddThemeFontOverride("font", Ui.Font);
         left.AddChild(_flat);
         _openWhenDone = new CheckBox { Text = "다 만들면 바로 회랑 장면 열기", ButtonPressed = true, FocusMode = FocusModeEnum.None };
@@ -400,7 +420,7 @@ public partial class StartMenu : Control
         _progress = new ProgressBar { MinValue = 0, MaxValue = 100, Value = 0, CustomMinimumSize = new Vector2(0, 20) };
         left.AddChild(_progress);
         _stage = Ui.Label(Ui.FontSize - 1);
-        _stage.Text = "대기 중";
+        _stage.Text = "'행성 만들기'를 누르면 시작합니다";
         left.AddChild(_stage);
 
         // 오른쪽: 지난 결과
@@ -431,7 +451,7 @@ public partial class StartMenu : Control
             OS.ShellOpen(EnginePaths.RunsRoot());
         };
         buttons.AddChild(folder);
-        Button refresh = Ui.Button("새로 고침");
+        Button refresh = Ui.Button("목록 새로 고침");
         refresh.Pressed += RefreshRuns;
         buttons.AddChild(refresh);
         right.AddChild(buttons);
