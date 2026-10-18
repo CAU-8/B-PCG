@@ -117,12 +117,16 @@ def runtime_env(base: dict[str, str] | None = None) -> dict[str, str]:
     """Godot 를 띄울 환경: base (기본 os.environ) 에 RUNTIME_ENV 를 더합니다.
 
     사용자가 이미 정한 값은 그대로 둡니다. .NET 은 옛 이름 COMPlus_* 도 읽는데 DOTNET_* 가 이기므로,
-    COMPlus_* 로 정해 둔 것도 정한 것으로 봅니다.
+    COMPlus_* 로 정해 둔 것도 정한 것으로 봅니다. 윈도우는 환경 변수 이름의 대소문자를 가리지
+    않고 os.environ 도 이름을 대문자로 두므로, 윈도우에서는 대소문자를 무시하고 견줍니다. 그래야
+    같은 변수가 두 번 들어가 사용자 값이 가려지지 않습니다.
     """
     env = dict(os.environ if base is None else base)
+    fold = str.upper if sys.platform == "win32" else str
+    present = {fold(k) for k in env}
     for name, value in RUNTIME_ENV.items():
         legacy = "COMPlus_" + name.removeprefix("DOTNET_")
-        if name not in env and legacy not in env:
+        if fold(name) not in present and fold(legacy) not in present:
             env[name] = value
     return env
 

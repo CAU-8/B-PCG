@@ -536,6 +536,16 @@ def test_isolated_env_points_home_to_temp(tmp_path):
         assert Path(env[name]).is_relative_to(tmp_path)
 
 
+def _upper_keys(env: dict[str, str]) -> dict[str, str]:
+    """환경 변수 이름을 대문자로 (윈도우는 이름의 대소문자를 가리지 않음).
+
+    같은 이름이 대소문자만 달리해 두 번 들어 있으면 실패합니다.
+    """
+    out = {k.upper(): v for k, v in env.items()}
+    assert len(out) == len(env), "대소문자만 다른 같은 환경 변수가 두 번 들어 있습니다"
+    return out
+
+
 def test_runtime_env_adds_dotnet_settings_unless_user_set_them():
     env = gd.runtime_env({"PATH": "/bin"})
     assert env["DOTNET_GCConserveMemory"] == "7" and env["DOTNET_TC_CallCountingDelayMs"] == "0"
@@ -559,8 +569,9 @@ def test_launch_passes_runtime_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DOTNET_TC_CallCountingDelayMs", "50")
     assert gd.launch(tmp_path / "Godot", "play", tmp_path, tmp_path / "godot.log") == 4321
     assert seen["cmd"][-1] == gd.CORRIDOR_SCENE
-    assert seen["env"]["DOTNET_GCConserveMemory"] == "7"
-    assert seen["env"]["DOTNET_TC_CallCountingDelayMs"] == "50"
+    env = _upper_keys(seen["env"])  # 윈도우의 os.environ 은 이름을 대문자로 둡니다
+    assert env["DOTNET_GCCONSERVEMEMORY"] == "7"
+    assert env["DOTNET_TC_CALLCOUNTINGDELAYMS"] == "50"  # 사용자 값이 그대로
 
 
 def test_install_corridor_copies_manifest_files(runs, tmp_path):
