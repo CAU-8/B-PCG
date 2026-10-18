@@ -425,7 +425,8 @@ def test_server_api_smoke(runs, tmp_path):
 
 # ---------------------------------------------------------------- 실행 관리
 @pytest.mark.parametrize("built", [True, False])
-def test_generate_builds_only_when_release_dll_is_missing(monkeypatch, tmp_path, built):
+def test_generate_always_builds_console_first(monkeypatch, tmp_path, built):
+    # DLL 이 이미 있어도 빌드합니다 (바뀐 것만 빌드). git pull 뒤 예전 DLL 로 생성하지 않게.
     import bpcg_studio.jobs as jobs_mod
 
     dll = tmp_path / "Bpcg.Cli.dll"
@@ -433,18 +434,12 @@ def test_generate_builds_only_when_release_dll_is_missing(monkeypatch, tmp_path,
         dll.touch()
     monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
-
-    def build():
-        assert not built, "기존 DLL이 있으면 빌드 명령을 만들지 않아야 합니다"
-        return ["dotnet", "build"]
-
-    monkeypatch.setattr(jobs_mod, "build_command", build)
+    monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": False})
     commands = JobManager(out_dir=tmp_path).commands_for(spec, tmp_path / "run")
-    assert len(commands) == (1 if built else 2)
-    assert commands[-1][1:3] == [str(dll), "all"]
-    if not built:
-        assert commands[0] == ["dotnet", "build"]
+    assert commands[0] == ["dotnet", "build"]
+    assert len(commands) == 2
+    assert commands[1][1:3] == [str(dll), "all"]
 
 
 @pytest.mark.parametrize("flat", [False, True])
@@ -455,12 +450,14 @@ def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
     dll.touch()
     monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
+    monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": True, "flat": flat})
     run_dir = tmp_path / "run"
     commands = JobManager(out_dir=tmp_path).commands_for(spec, run_dir)
-    assert commands[0][1:3] == [str(dll), "all"]
+    assert commands[0] == ["dotnet", "build"]
+    assert commands[1][1:3] == [str(dll), "all"]
     if flat:  # 평면 히어로는 행성 묶음이 없어 그림을 그리지 않음
-        assert len(commands) == 1
+        assert len(commands) == 2
     else:
         assert commands[-1] == ["dotnet", str(dll), "figures", "results", str(run_dir)]
 

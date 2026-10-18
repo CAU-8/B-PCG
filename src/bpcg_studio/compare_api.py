@@ -122,6 +122,10 @@ class CompareService:
         self._render_lock = threading.Lock()  # 그림은 한 번에 한 장
         self._pngs: dict[tuple, Path] = {}
         self._methods: tuple[float, dict] | None = None
+        self._built = False  # 이 서버에서 C# 콘솔을 한 번 빌드했는지
+        self._build_lock = (
+            threading.Lock()
+        )  # 빌드는 한 번에 하나 (같은 프로젝트를 둘이 빌드하면 파일이 겹침)
         self._proc: subprocess.Popen | None = None
         self._lines: deque[str] = deque(maxlen=MAX_LINES)
         self._first = 0  # deque 맨 앞 줄의 번호
@@ -149,8 +153,12 @@ class CompareService:
     def _console(self, args: list[str], timeout: float = RENDER_TIMEOUT_S) -> str:
         """C# 콘솔을 불러 표준 출력을 돌려줍니다. 실패하면 JobError."""
         try:
-            if not CLI_DLL.is_file():
-                ensure_built()
+            # 서버를 켠 뒤 처음 부를 때 한 번 빌드합니다(바뀐 것만). 이미 있는 DLL 만 보면
+            # git pull 로 받은 코드가 아니라 예전 코드의 방법 목록·그림을 돌려줍니다.
+            with self._build_lock:
+                if not self._built:
+                    ensure_built()
+                    self._built = True
             cmd = cli_command(args)
         except CSharpError as e:
             raise JobError(str(e), status=500) from None
