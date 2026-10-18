@@ -15,7 +15,8 @@
    import_project: `Godot --headless --path engine --import` 를 임시 HOME 으로 돌립니다.
 4. launch: `Godot --path engine res://scenes/main.tscn` (보기, 처음 화면을 건너뛰고 회랑 장면)
    또는 `Godot --path engine -e` (편집기) 를 사용자 환경 그대로 따로 띄웁니다. 편집기는 사용자
-   설정을 써야 하므로 이 단계만 HOME 을 바꾸지 않습니다.
+   설정을 써야 하므로 이 단계만 HOME 을 바꾸지 않습니다. 환경에는 .NET 런타임 설정 두 개
+   (RUNTIME_ENV) 만 더합니다.
 
 주의: Godot 는 편집기 설정을 사용자 폴더에 씁니다. 1·3 단계처럼 사용자가 보지 않는 실행은 반드시
 --headless 와 임시 HOME (리눅스 XDG_*, 윈도우 APPDATA·LOCALAPPDATA) 으로 돌립니다.
@@ -52,6 +53,16 @@ GLOBE_DIR = "globe"  # 실행 폴더와 engine/baked 안의 지구본 폴더 이
 CORRIDOR_MAYBE = ("caves.glb", "entrances.json")  # 실행에 따라 없을 수 있는 회랑 파일
 IMPORT_TIMEOUT_S = 600
 VERSION_TIMEOUT_S = 60
+
+# Godot 안에서 생성할 때 쓰는 .NET 런타임 설정. 콘솔(bpcg)은 같은 값을 runtimeconfig 로 받습니다.
+# 그런데 Godot 는 프로젝트를 돌릴 때 프로젝트의 runtimeconfig 를 읽지 않고, Godot 설치 폴더의
+# GodotPlugins.runtimeconfig.json 으로 .NET 을 띄웁니다. 그래서 engine/Bpcg.Engine.csproj 에
+# 적은 값은 들어가지 않고, 환경 변수로 주어야 들어갑니다 (엔진 안에서 GC 설정과 JIT 재컴파일을
+# 재어 확인함).
+RUNTIME_ENV = {
+    "DOTNET_GCConserveMemory": "7",  # GC 가 다 쓴 큰 배열을 더 일찍 거둠 (0–9, 클수록 힙이 작음)
+    "DOTNET_TC_CallCountingDelayMs": "0",  # 자주 부르는 메서드를 곧바로 최적화 컴파일로 올림
+}
 
 
 class GodotError(Exception):
@@ -99,6 +110,20 @@ def isolated_env(tmp: Path) -> dict[str, str]:
             d = Path(tmp) / name.lower()
             d.mkdir(exist_ok=True)
             env[name] = str(d)
+    return env
+
+
+def runtime_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Godot 를 띄울 환경: base (기본 os.environ) 에 RUNTIME_ENV 를 더합니다.
+
+    사용자가 이미 정한 값은 그대로 둡니다. .NET 은 옛 이름 COMPlus_* 도 읽는데 DOTNET_* 가 이기므로,
+    COMPlus_* 로 정해 둔 것도 정한 것으로 봅니다.
+    """
+    env = dict(os.environ if base is None else base)
+    for name, value in RUNTIME_ENV.items():
+        legacy = "COMPlus_" + name.removeprefix("DOTNET_")
+        if name not in env and legacy not in env:
+            env[name] = value
     return env
 
 
@@ -408,7 +433,7 @@ def launch(godot: Path, mode: str, engine_dir: Path = ENGINE, log_path: Path | N
         out = fh
     try:
         proc = subprocess.Popen(
-            cmd, cwd=ROOT, env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=out,
+            cmd, cwd=ROOT, env=runtime_env(), stdin=subprocess.DEVNULL, stdout=out,
             stderr=subprocess.STDOUT, **kwargs,
         )  # fmt: skip
     except OSError as e:

@@ -536,6 +536,33 @@ def test_isolated_env_points_home_to_temp(tmp_path):
         assert Path(env[name]).is_relative_to(tmp_path)
 
 
+def test_runtime_env_adds_dotnet_settings_unless_user_set_them():
+    env = gd.runtime_env({"PATH": "/bin"})
+    assert env["DOTNET_GCConserveMemory"] == "7" and env["DOTNET_TC_CallCountingDelayMs"] == "0"
+    assert env["PATH"] == "/bin"
+    mine = gd.runtime_env({"DOTNET_GCConserveMemory": "3", "COMPlus_TC_CallCountingDelayMs": "100"})
+    assert mine["DOTNET_GCConserveMemory"] == "3"  # 사용자가 정한 값은 그대로
+    assert "DOTNET_TC_CallCountingDelayMs" not in mine  # 옛 이름으로 정한 것도 덮지 않음
+
+
+def test_launch_passes_runtime_env(tmp_path, monkeypatch):
+    seen = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            seen["cmd"], seen["env"] = cmd, kwargs["env"]
+            self.pid = 4321
+
+    monkeypatch.setattr(gd.subprocess, "Popen", FakePopen)
+    monkeypatch.delenv("DOTNET_GCConserveMemory", raising=False)
+    monkeypatch.delenv("COMPlus_GCConserveMemory", raising=False)
+    monkeypatch.setenv("DOTNET_TC_CallCountingDelayMs", "50")
+    assert gd.launch(tmp_path / "Godot", "play", tmp_path, tmp_path / "godot.log") == 4321
+    assert seen["cmd"][-1] == gd.CORRIDOR_SCENE
+    assert seen["env"]["DOTNET_GCConserveMemory"] == "7"
+    assert seen["env"]["DOTNET_TC_CallCountingDelayMs"] == "50"
+
+
 def test_install_corridor_copies_manifest_files(runs, tmp_path):
     out, _ = runs
     corridor = out / "tiny" / "corridor"
