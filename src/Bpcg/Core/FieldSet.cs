@@ -216,7 +216,34 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
     public static Array CastToField(string name, Array a) => CastTo(a, Fields.ElementType(Fields.All[name].Dtype));
 
     /// <summary>np.asarray(a)[idx]: 1차원 배열에서 idx 칸을 모읍니다 (원소 형 유지).</summary>
-    public static Array Take(Array a, long[] idx)
+    public static Array Take(Array a, long[] idx) => a switch
+    {
+        // 기본 수 형은 원소마다 상자(GetValue·SetValue)를 만들지 않고 바로 모읍니다.
+        double[] x => TakeTyped(x, idx),
+        float[] x => TakeTyped(x, idx),
+        bool[] x => TakeTyped(x, idx),
+        byte[] x => TakeTyped(x, idx),
+        sbyte[] x => TakeTyped(x, idx),
+        short[] x => TakeTyped(x, idx),
+        ushort[] x => TakeTyped(x, idx),
+        int[] x => TakeTyped(x, idx),
+        uint[] x => TakeTyped(x, idx),
+        long[] x => TakeTyped(x, idx),
+        ulong[] x => TakeTyped(x, idx),
+        _ => TakeBoxed(a, idx),
+    };
+
+    private static T[] TakeTyped<T>(T[] a, long[] idx)
+    {
+        T[] o = new T[idx.Length];
+        for (int k = 0; k < idx.Length; k++)
+        {
+            o[k] = a[idx[k]];
+        }
+        return o;
+    }
+
+    private static Array TakeBoxed(Array a, long[] idx)
     {
         Type t = a.GetType().GetElementType()!;
         Array o = Array.CreateInstance(t, idx.Length);
