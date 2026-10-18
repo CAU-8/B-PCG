@@ -32,21 +32,37 @@ public static class Runs
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
 
     // 디스크를 거치던 단계 경계의 float32 반올림을 유지합니다.
-    // 배열을 직접 갱신하므로 상태 객체와 strata_bottom_m을 공유하는 Columns도 그대로 씁니다.
+    // 배열을 직접 갱신하므로 같은 배열을 들고 있는 다른 객체(strata_bottom_m 을 공유하는 Columns 등)도 반올림한 값을 봅니다.
+    // 그다음 필드 묶음에는 같은 값의 float[] 를 넣어 메모리를 반으로 줄입니다(읽는 쪽은 FieldSet.GetReal 등으로 넓혀 읽음).
+    // strata_bottom_m 은 Columns 가 double[] 로 함께 쓰므로 바꾸지 않습니다(바꾸면 두 벌이 됨).
     private static void UseSavedPrecision(FieldSet fields)
     {
+        var narrowed = new List<(string Name, float[] Values)>();
         foreach (KeyValuePair<string, Array> field in fields)
         {
             if (Core.Fields.All.TryGetValue(field.Key, out FieldInfo? info)
                 && info.Dtype == "float32" && field.Value is double[] values)
             {
-                for (int i = 0; i < values.Length; i++)
+                float[] f = new float[values.Length];
+                Parallelism.For(0, values.Length, i =>
                 {
-                    values[i] = (double)(float)values[i];
+                    f[i] = (float)values[i];
+                    values[i] = f[i];
+                });
+                if (field.Key != SharedWithColumns)
+                {
+                    narrowed.Add((field.Key, f));
                 }
             }
         }
+        foreach ((string name, float[] f) in narrowed)
+        {
+            fields[name] = f;
+        }
     }
+
+    // 층 기둥(LayerColumns.Bottom)과 같은 배열이라 double[] 로 남기는 필드.
+    internal const string SharedWithColumns = "strata_bottom_m";
 
     /// <summary>--set 키=값 목록 → 순서 있는 덮어쓰기 (틀리면 RunError).</summary>
     public static OrderedDictionary<string, object?> SetOverrides(IEnumerable<string>? items)

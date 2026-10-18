@@ -416,12 +416,14 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
         return new Config(d);
     }
 
+    // float32 로 저장한 필드는 float[] 그대로 둡니다(읽는 쪽이 FieldSet.GetReal 등으로 넓혀 읽음). 층 기둥이 double[] 로
+    // 함께 쓰는 strata_bottom_m 만 넓혀 둡니다 (Runs.UseSavedPrecision 과 같은 규칙).
     private static FieldSet FloatFields(FieldSet fields)
     {
         var o = new FieldSet();
         foreach (KeyValuePair<string, Array> kv in fields)
         {
-            Array v = kv.Value is float[] f ? Array.ConvertAll(f, x => (double)x) : kv.Value;
+            Array v = kv.Value is float[] f && kv.Key == Runs.SharedWithColumns ? FieldSet.ToFloat64(f) : kv.Value;
             if (fields.Columns.TryGetValue(kv.Key, out int c))
             {
                 o.Set2D(kv.Key, v, c);
