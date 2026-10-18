@@ -623,9 +623,10 @@ public static class Corridor
         int hny = (int)g.Shape[0];
         int hnx = (int)g.Shape[1];
         double dxh = g.Spacing;
-        double[] zHero = heroState.Fields.GetFloat64("z_m");
         double[] oS = [g.Origin.East + (0.5 * dxh) - cx, -frame.YOffset, -((g.Origin.North - (0.5 * dxh)) - cy)];
-        files["surround25"] = Heightmap.WriteHeightmap(Path.Combine(outDir, "surround25"), zHero, hny, hnx, dxh, oS);
+        files["surround25"] = heroState.Fields["z_m"] is float[] zHeroF
+            ? Heightmap.WriteHeightmap(Path.Combine(outDir, "surround25"), zHeroF, hny, hnx, dxh, oS)
+            : Heightmap.WriteHeightmap(Path.Combine(outDir, "surround25"), heroState.Fields.GetFloat64("z_m"), hny, hnx, dxh, oS);
 
         // --- 동굴 메시
         t = Stopwatch.GetTimestamp();

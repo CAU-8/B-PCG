@@ -10,7 +10,9 @@ namespace Bpcg.Core;
 /// <remarks>
 /// 삽입 순서를 지킵니다(이미 있는 이름에 다시 넣으면 자리는 그대로, Python dict 와 같음).
 /// 배열은 원소 형 그대로(double[], float[], int[], byte[], sbyte[], bool[], long[]) 둡니다. FIELDS 가 float32 인
-/// 필드도 계산 중에는 Python 처럼 double[] 일 수 있고, 묶음에 쓸 때만 FIELDS dtype 으로 바꿉니다.
+/// 필드도 계산 중에는 Python 처럼 double[] 일 수 있고, 묶음에 쓸 때만 FIELDS dtype 으로 바꿉니다. 단계가 끝나 저장
+/// 정밀도로 반올림한 뒤(Runs.UseSavedPrecision)와 묶음에서 읽은 뒤에는 float[] 로 둡니다. 그런 필드는
+/// <see cref="GetReal"/> 로 복사 없이 읽습니다.
 /// (N, L) 필드는 행 우선 평평한 배열이고 열 수를 <see cref="Columns"/> 에 둡니다.
 /// </remarks>
 public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
@@ -34,16 +36,27 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
     /// <summary>np.asarray(fields[name], dtype=np.float64): double[] 는 그대로, float[] 는 정확히 넓힌 새 배열.</summary>
     public double[] GetFloat64(string name) => ToFloat64(this[name]);
 
+    /// <summary>실수 필드(double[] 또는 float[])를 복사하지 않고 읽습니다. float 은 읽을 때 정확히 넓힙니다.</summary>
+    public RealView GetReal(string name) => new(this[name]);
+
     /// <summary>원소 형에 상관없이 np.asarray(fields[name], dtype=np.float64).</summary>
     public double[] GetFloat64Any(string name) => this[name] is double[] d ? d : (double[])CastTo(this[name], typeof(double));
 
     /// <summary>실수 배열을 double[] 로 (np.asarray(a, dtype=np.float64)).</summary>
+    /// <remarks>float[] 는 새 배열로 넓힙니다(칸마다 제 자리만 쓰므로 나눠 돌림). 한 번 읽고 놓는 곳에서만 씁니다.</remarks>
     public static double[] ToFloat64(Array a) => a switch
     {
         double[] d => d,
-        float[] f => Array.ConvertAll(f, v => (double)v),
+        float[] f => Widen(f),
         _ => throw new InvalidCastException($"실수 배열이어야 합니다: {a.GetType().Name}"),
     };
+
+    private static double[] Widen(float[] f)
+    {
+        double[] o = new double[f.Length];
+        Parallelism.For(0, f.Length, i => o[i] = f[i]);
+        return o;
+    }
 
     /// <summary>
     /// a.astype(t) (numpy 규칙): 실수 → float32 는 가장 가까운 값, 실수 → 정수는 0 쪽으로 자름, 정수끼리는 비트를 잘라 감쌈,
@@ -304,4 +317,39 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
     public IEnumerator<KeyValuePair<string, Array>> GetEnumerator() => _data.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+/// <summary>
+/// 실수 필드를 복사하지 않고 읽는 창: double[] 이나 float[] 를 그대로 가리키고, float 은 읽을 때 double 로 넓힙니다.
+/// float → double 은 값이 정확히 그대로라, double[] 로 넓혀 둔 배열을 읽는 것과 같은 값입니다.
+/// </summary>
+public readonly struct RealView
+{
+    private readonly double[]? _d;
+    private readonly float[]? _f;
+
+    public RealView(Array a)
+    {
+        switch (a)
+        {
+            case double[] d:
+                _d = d;
+                break;
+            case float[] f:
+                _f = f;
+                break;
+            default:
+                throw new InvalidCastException($"실수 배열이어야 합니다: {a.GetType().Name}");
+        }
+    }
+
+    public int Length => _d?.Length ?? _f!.Length;
+
+    public double this[int i] => _d is not null ? _d[i] : _f![i];
+
+    /// <summary>double[] 로 담긴 창이면 그 배열 (아니면 null).</summary>
+    public double[]? AsDoubles => _d;
+
+    /// <summary>float[] 로 담긴 창이면 그 배열 (아니면 null).</summary>
+    public float[]? AsFloats => _f;
 }

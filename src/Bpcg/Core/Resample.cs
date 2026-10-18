@@ -231,9 +231,48 @@ public static class Resample
     /// </summary>
     public static double[] AddGhostLayers(double[] faces, int n, int layers = 1)
     {
-        if (faces.Length != 6 * n * n)
+        double[] flat = GhostFrame(faces.Length, n, layers);
+        int L = layers;
+        int P = n + (2 * L);
+        for (int f = 0; f < 6; f++)
         {
-            throw new ArgumentException($"faces 는 (6, n, n) 배열이어야 합니다: 원소 수 {faces.Length}, n = {n}");
+            for (int j = 0; j < n; j++)
+            {
+                Array.Copy(faces, (f * n * n) + (j * n), flat, (f * P * P) + ((j + L) * P) + L, n);
+            }
+        }
+        FillGhosts(flat, n, L);
+        return flat;
+    }
+
+    /// <summary>add_ghost_layers (float32 입력). 넓힌 사본을 따로 만들지 않고 안쪽 칸에 바로 넓혀 넣습니다 (값은 같음).</summary>
+    public static double[] AddGhostLayers(float[] faces, int n, int layers = 1)
+    {
+        double[] flat = GhostFrame(faces.Length, n, layers);
+        int L = layers;
+        int P = n + (2 * L);
+        for (int f = 0; f < 6; f++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                int src = (f * n * n) + (j * n);
+                int dst = (f * P * P) + ((j + L) * P) + L;
+                for (int i = 0; i < n; i++)
+                {
+                    flat[dst + i] = faces[src + i];
+                }
+            }
+        }
+        FillGhosts(flat, n, L);
+        return flat;
+    }
+
+    // 입력을 확인하고 고스트를 붙일 빈 (6, n+2L, n+2L) 배열을 만듭니다.
+    private static double[] GhostFrame(int length, int n, int layers)
+    {
+        if (length != 6 * n * n)
+        {
+            throw new ArgumentException($"faces 는 (6, n, n) 배열이어야 합니다: 원소 수 {length}, n = {n}");
         }
         if (layers < 1)
         {
@@ -243,16 +282,13 @@ public static class Resample
         {
             throw new ArgumentException($"layers 는 n/2 이하여야 합니다: layers={layers}, n={n}");
         }
-        int L = layers;
-        int P = n + (2 * L);
-        double[] flat = new double[6 * P * P];
-        for (int f = 0; f < 6; f++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Array.Copy(faces, (f * n * n) + (j * n), flat, (f * P * P) + ((j + L) * P) + L, n);
-            }
-        }
+        int P = n + (2 * layers);
+        return new double[6 * P * P];
+    }
+
+    // 안쪽 칸을 채운 배열에 인접 면에서 1D 보간한 고스트 줄을 채웁니다.
+    private static void FillGhosts(double[] flat, int n, int L)
+    {
         GhostStencil st = GetGhostStencil(n, L);
         for (int e = 0; e < st.EdgeDst.Length; e++)
         {
@@ -269,12 +305,7 @@ public static class Resample
             }
             flat[st.CornerDst[c]] = acc;
         }
-        return flat;
     }
-
-    /// <summary>add_ghost_layers (float32 입력은 float64 로 넓혀 계산).</summary>
-    public static double[] AddGhostLayers(float[] faces, int n, int layers = 1) =>
-        AddGhostLayers(Array.ConvertAll(faces, v => (double)v), n, layers);
 
     /// <summary>add_ghost_layers (정수 입력은 float64 로 바꿔 계산).</summary>
     public static double[] AddGhostLayers(int[] faces, int n, int layers = 1) =>
@@ -372,21 +403,41 @@ public static class Resample
     /// </summary>
     public static double[] SampleSphere(double[] field, int n, double[] unit)
     {
-        CheckField(field.Length, n);
+        CheckSample(field.Length, n, unit);
+        return SamplePadded(AddGhostLayers(field, n, 1), n, unit);
+    }
+
+    /// <summary>sample_sphere linear (float32 필드). 넓힌 사본 없이 고스트 배열에 바로 넓혀 넣습니다 (값은 같음).</summary>
+    public static double[] SampleSphere(float[] field, int n, double[] unit)
+    {
+        CheckSample(field.Length, n, unit);
+        return SamplePadded(AddGhostLayers(field, n, 1), n, unit);
+    }
+
+    /// <summary>sample_sphere linear (실수 필드: double[] 또는 float[]).</summary>
+    public static double[] SampleSphereReal(Array field, int n, double[] unit) => field switch
+    {
+        double[] d => SampleSphere(d, n, unit),
+        float[] f => SampleSphere(f, n, unit),
+        _ => throw new InvalidCastException($"실수 배열이어야 합니다: {field.GetType().Name}"),
+    };
+
+    private static void CheckSample(int length, int n, double[] unit)
+    {
+        CheckField(length, n);
         CheckUnit(unit);
         if (n < 2)
         {
             throw new ArgumentException("linear 보간에는 n ≥ 2 가 필요합니다");
         }
-        double[] padded = AddGhostLayers(field, n, 1);
+    }
+
+    private static double[] SamplePadded(double[] padded, int n, double[] unit)
+    {
         double[] output = new double[unit.Length / 3];
         BilinearKernel(padded, unit, n, 1, output);
         return output;
     }
-
-    /// <summary>sample_sphere linear (float32 필드).</summary>
-    public static double[] SampleSphere(float[] field, int n, double[] unit) =>
-        SampleSphere(Array.ConvertAll(field, v => (double)v), n, unit);
 
     /// <summary>sample_sphere method="nearest": field[cell_of(unit)] (범주 값용, 원래 형 그대로).</summary>
     public static T[] SampleSphereNearest<T>(T[] field, int n, double[] unit)

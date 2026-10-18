@@ -302,7 +302,8 @@ public sealed class HeroVolume
             {
                 throw new ArgumentException($"fields['{name}'] 의 길이가 칸 수 {n} 와 다릅니다");
             }
-            return (double[])FieldSet.ToFloat64(a).Clone();
+            // float[] 는 ToFloat64 가 이미 새 배열로 넓히므로 한 번만 복사합니다.
+            return a is double[] d ? (double[])d.Clone() : FieldSet.ToFloat64(a);
         }
         bool[] ImgB(string name) => (bool[])FieldSet.CastTo(fields[name], typeof(bool));
         Z = Img("z_m");

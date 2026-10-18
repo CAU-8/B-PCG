@@ -62,7 +62,10 @@ public static class Finder
 
     /// <summary>융기 기울기 |∇U| ≈ sqrt(2·평균_s ((U_n − U_c)/d)²) [1/yr] (uplift_gradient).</summary>
     /// <remarks>TODO(port): numpy 의 축 1 합(길이 8)의 덧셈 순서를 1차원 pairwise 합으로 두었습니다(대조 안 함).</remarks>
-    public static double[] UpliftGradient(CellGraph graph, double[] uplift)
+    public static double[] UpliftGradient(CellGraph graph, double[] uplift) => UpliftGradient(graph, new RealView(uplift));
+
+    /// <summary>융기 기울기 (실수 필드를 복사 없이 읽음).</summary>
+    public static double[] UpliftGradient(CellGraph graph, RealView uplift)
     {
         const int ns = CellGraph.NSlots;
         int n = graph.NCells;
@@ -210,8 +213,10 @@ public static class Finder
         int n = g.NCells;
         bool[] cand = CandidateMask(planet, cfg);
         bool[] ocean = f.Get<bool>("is_ocean");
-        double[] grad = UpliftGradient(g, f.GetFloat64("uplift_m_per_yr"));
-        double[] relief = Array.ConvertAll(f.GetFloat64("relief_m"), NpMath.NanToNum);
+        double[] grad = UpliftGradient(g, f.GetReal("uplift_m_per_yr"));
+        RealView reliefField = f.GetReal("relief_m");
+        double[] relief = new double[n];
+        Parallelism.For(0, n, c => relief[c] = NpMath.NanToNum(reliefField[c]));
         var parts = new OrderedDictionary<string, double[]>
         {
             ["uplift_gradient"] = Normalize(grad, cand),
@@ -225,7 +230,7 @@ public static class Finder
             int nl = f.Columns["strata_bottom_m"];
             double[] bottomAll = f.GetFloat64("strata_bottom_m");
             byte[] rockAll = (byte[])FieldSet.CastTo(f["strata_rock"], typeof(byte));
-            double[] zAll = f.GetFloat64("z_m");
+            RealView zAll = f.GetReal("z_m");
             double[] b = new double[idx.Length * nl];
             byte[] r = new byte[idx.Length * (nl + 1)];
             double[] zs = new double[idx.Length];
@@ -239,8 +244,8 @@ public static class Finder
                 rs[k] = relief[c];
             }
             double[] carb = CarbonateFraction(b, r, nl, zs, rs);
-            double[] p = f.GetFloat64("precip_m_per_yr");
-            double[] pet = f.GetFloat64("pet_m_per_yr");
+            RealView p = f.GetReal("precip_m_per_yr");
+            RealView pet = f.GetReal("pet_m_per_yr");
             bool[] isDry = new bool[n];
             Parallelism.For(0, n, c =>
             {

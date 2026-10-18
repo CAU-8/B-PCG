@@ -37,7 +37,7 @@ public static class Refine
         var output = new FieldSet();
         foreach (string name in LinearFields)
         {
-            double[] v = Resample.SampleSphere(f.GetFloat64(name), nL0, unit);
+            double[] v = Resample.SampleSphereReal(f[name], nL0, unit);
             if (v.Any(x => !double.IsFinite(x)))
             {
                 throw new ArgumentException($"L0 '{name}' 을 히어로로 보간한 값에 NaN 이나 inf 가 있습니다");
@@ -59,8 +59,10 @@ public static class Refine
             return Convert.ToDouble(um, System.Globalization.CultureInfo.InvariantCulture);
         }
         double mx = double.NegativeInfinity;
-        foreach (double v in planet.Fields.GetFloat64("uplift_m_per_yr"))
+        RealView u = planet.Fields.GetReal("uplift_m_per_yr");
+        for (int c = 0; c < u.Length; c++)
         {
+            double v = u[c];
             if (double.IsFinite(v))
             {
                 mx = Math.Max(mx, Math.Max(v, 0.0));
@@ -95,7 +97,7 @@ public static class Refine
             isOutlet[c] = true;
         }
         double[] pOut = Domain.LocalToUnit(site, [hit.X], [hit.Y], r);
-        double zOut = Resample.SampleSphere(f0.GetFloat64("z_m"), (int)g0.Shape[1], pOut)[0];
+        double zOut = Resample.SampleSphereReal(f0["z_m"], (int)g0.Shape[1], pOut)[0];
         if (!double.IsFinite(zOut))
         {
             throw new ArgumentException("출구 위치의 L0 고도가 NaN 입니다");

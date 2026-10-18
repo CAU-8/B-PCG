@@ -32,7 +32,23 @@ public static class Heightmap
     /// </summary>
     public static OrderedDictionary<string, object?> WriteHeightmap(string pathStem, double[] z, int rows, int cols, double spacingM, double[]? origin = null)
     {
-        if (z.Length != rows * cols)
+        double[] o = CheckHeightmap(z.Length, rows, cols, spacingM, origin);
+        return WriteFloats(pathStem, Array.ConvertAll(z, v => (float)v), rows, cols, spacingM, o);
+    }
+
+    /// <summary>
+    /// 이미 float32 인 높이(예: 저장 정밀도로 둔 z_m)를 그대로 씁니다. double 로 넓혔다가 다시 float 로 줄이는 것과 같은 바이트입니다.
+    /// </summary>
+    public static OrderedDictionary<string, object?> WriteHeightmap(string pathStem, float[] z, int rows, int cols, double spacingM, double[]? origin = null)
+    {
+        double[] o = CheckHeightmap(z.Length, rows, cols, spacingM, origin);
+        return WriteFloats(pathStem, z, rows, cols, spacingM, o);
+    }
+
+    // 크기·간격·원점을 확인하고 원점을 돌려줍니다 (없으면 0, 0, 0).
+    private static double[] CheckHeightmap(int length, int rows, int cols, double spacingM, double[]? origin)
+    {
+        if (length != rows * cols)
         {
             throw new ArgumentException("높이맵은 2차원 배열이어야 합니다");
         }
@@ -49,7 +65,13 @@ public static class Heightmap
         {
             throw new ArgumentException("origin 은 유한한 값 3개 (x, y, z) 여야 합니다");
         }
-        float[] data = Array.ConvertAll(z, v => (float)v);
+        return o;
+    }
+
+    // float32 표본을 .bin 으로, 정보를 .json 으로 씁니다 (data 는 읽기만 함).
+    private static OrderedDictionary<string, object?> WriteFloats(
+        string pathStem, float[] data, int rows, int cols, double spacingM, double[] o)
+    {
         int bad = data.Count(v => !float.IsFinite(v));
         if (bad > 0)
         {
