@@ -12,7 +12,8 @@
     <!-- GC 가 다 쓴 큰 배열을 더 일찍 거두게 합니다 (0–9, 클수록 힙을 작게 유지). laptop all 최대 메모리 10.0 → 5.75 GB, 걸린 시간 +2% 였습니다. -->
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
     <!-- 자주 부르는 메서드를 곧바로 최적화 컴파일로 올립니다. 기본값은 새 메서드가 컴파일되는 동안 100 ms 씩 미루는데,
-         단계마다 새 코드가 나와서 계속 미뤄지고, 한 번만 도는 큰 반복이 덜 최적화된 코드로 돕니다. 계산 결과는 같고, 이 값만 바꿔 잰 laptop all 이 49.2 → 44.1 s 였습니다. -->
+         단계마다 새 코드가 나와서 계속 미뤄지고, 한 번만 도는 큰 반복이 덜 최적화된 코드로 돕니다. 계산 결과는 같고,
+         이 값만 바꿔 잰 laptop all 이 49.2 → 44.1 s 였습니다. -->
     <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation.CallCountingDelayMs" Value="0" />
   </ItemGroup>
 </Project>
