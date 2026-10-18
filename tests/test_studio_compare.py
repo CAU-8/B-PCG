@@ -53,6 +53,25 @@ def compare_out(csharp_cli, tmp_path_factory) -> Path:
     return out
 
 
+def test_console_builds_once_per_server(monkeypatch, tmp_path):
+    # 서버를 켠 뒤 처음 콘솔을 부를 때만 빌드합니다 (DLL 이 있어도).
+    # 그다음 부르기는 빌드하지 않습니다.
+    import subprocess
+
+    import bpcg_studio.compare_api as ca
+
+    built: list[int] = []
+    monkeypatch.setattr(ca, "ensure_built", lambda: built.append(1))
+    monkeypatch.setattr(ca, "cli_command", lambda args: ["dotnet", "Bpcg.Cli.dll", *args])
+    monkeypatch.setattr(
+        ca.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "ok", "")
+    )
+    cs = CompareService(tmp_path)
+    assert cs._console(["compare", "methods", "--json"]) == "ok"
+    assert cs._console(["compare", "methods", "--json"]) == "ok"
+    assert built == [1]
+
+
 def test_service_reads_sets_groups_and_process(compare_out):
     cs = CompareService(compare_out / "compare")
     sets = cs.sets()

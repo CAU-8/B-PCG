@@ -6,7 +6,7 @@
     job.log    파이프라인과 그림 그리기가 찍은 줄 전체
     planet/ hero/ corridor/ globe/   C# 콘솔 `all` 의 결과 (figures/ 는 그림 단계가 돌 때만)
 
-명령: Release DLL이 없을 때만 [dotnet, build, src/Bpcg.Cli, -c, Release …]
+명령: [dotnet, build, src/Bpcg.Cli, -c, Release …] (C# 콘솔을 바뀐 것만 빌드, 바뀐 게 없으면 1–2 s)
 → [dotnet, Bpcg.Cli.dll, all, --planet, --profile, --seed, --out, (--flat), --set 키=값 …]
 → (그림을 켰고 평면 히어로가 아니면) [dotnet, Bpcg.Cli.dll, figures, results, <실행 폴더>].
 기록 줄은 스레드에서 한 줄씩 읽어 progress.ProgressTracker 에 넣습니다. 한 번에 한 실행만 돕니다
@@ -442,7 +442,9 @@ class JobManager:
 
     def commands_for(self, spec: dict, run_dir: Path) -> list[list[str]]:
         try:
-            build = build_command() if not CLI_DLL.is_file() else None
+            # 매번 빌드합니다. dotnet build 는 바뀐 것만 다시 빌드해 바뀐 게 없으면 1–2 s 입니다.
+            # 이미 있는 DLL 을 그대로 쓰면 git pull 로 코드를 받아도 예전 코드로 생성합니다.
+            build = build_command()
             cmd = cli_command(["all", "--planet", spec["planet"]])
             figures = cli_command(["figures", "results", str(run_dir)])
         except CSharpError as e:
@@ -452,7 +454,7 @@ class JobManager:
             cmd.append("--flat")
         for key, value in spec["overrides"].items():
             cmd += ["--set", f"{key}={toml_literal(value)}"]
-        out = [build, cmd] if build is not None else [cmd]
+        out = [build, cmd]
         if spec["figures"] and not spec["flat"]:
             out.append(figures)
         return out
