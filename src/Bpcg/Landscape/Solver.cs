@@ -381,13 +381,21 @@ public static class Solver
                 MarkPath(c, receiver, newPath);
             }
         }
-        for (int c = 0; c < dirty.Length; c++)
+        // 칸마다 제 자리만 쓰고, 덩어리별 수를 덩어리 순서대로 더합니다 (정수라 순서와 상관없이 같음).
+        int[] chunkCount = new int[(dirty.Length + CountChunk - 1) / CountChunk];
+        Parallelism.ForChunks(0, dirty.Length, CountChunk, (lo, hi) =>
         {
-            dirty[c] = oldPath[c] || newPath[c];
-            if (dirty[c])
+            int k = 0;
+            for (int c = lo; c < hi; c++)
             {
-                count++;
+                dirty[c] = oldPath[c] || newPath[c];
+                k += dirty[c] ? 1 : 0;
             }
+            chunkCount[lo / CountChunk] = k;
+        });
+        foreach (int k in chunkCount)
+        {
+            count += k;
         }
         return count;
     }
@@ -458,8 +466,10 @@ public static class Solver
         return count;
     }
 
+    // 영향받는 칸 수가 limit 을 넘으면 거기서 멈추고 그때까지 센 수를 돌려줍니다. 부르는 쪽은 limit 이하인지만 보고,
+    // 넘으면 dirty 를 쓰지 않습니다(다음에 쓸 때 처음부터 다시 씀).
     private static int BuildIntegrationDependencyUpperBound(int[] receiver, int[] order,
-        bool[] receiverChanged, bool[] hydrologyDirty, bool[] dirty)
+        bool[] receiverChanged, bool[] hydrologyDirty, bool[] dirty, int limit)
     {
         int count = 0;
         for (int k = 0; k < order.Length; k++)
@@ -472,6 +482,10 @@ public static class Solver
             if (affected)
             {
                 count++;
+                if (count > limit)
+                {
+                    return count;
+                }
             }
         }
         return count;
@@ -599,16 +613,26 @@ public static class Solver
         return (totalChanged, totalFrozen);
     }
 
+    // 출구가 아닌 모든 칸이 수신 셀보다 eps 이상 높은지. 덩어리마다 나눠 보고, 하나라도 아니면 거짓입니다.
     private static bool HasEpsDrop(double[] z, int[] rcv, bool[] isOutlet, double eps)
     {
-        for (int c = 0; c < z.Length; c++)
+        int bad = 0;
+        Parallelism.ForChunks(0, z.Length, CountChunk, (lo, hi) =>
         {
-            if (!isOutlet[c] && !(z[c] >= z[rcv[c]] + eps))
+            if (System.Threading.Volatile.Read(ref bad) != 0)
             {
-                return false;
+                return;
             }
-        }
-        return true;
+            for (int c = lo; c < hi; c++)
+            {
+                if (!isOutlet[c] && !(z[c] >= z[rcv[c]] + eps))
+                {
+                    System.Threading.Volatile.Write(ref bad, 1);
+                    return;
+                }
+            }
+        });
+        return bad == 0;
     }
 
     private static LawParams ReadLawParams(Config cfg)
@@ -861,6 +885,9 @@ public static class Solver
         int[] donors = new int[n];
         int[] donorFill = new int[n];
         int[] topoStack = new int[n];
+        var topoScratch = new Routing.TopoScratch(n);
+        double topoSplitArea = Numerics.NpReduce.Sum(area)
+            / (8.0 * (Parallelism.MaxDegreeOfParallelism ?? Environment.ProcessorCount));
         int[] order = new int[n];
         int[] flips = new int[n];
         int nFrozen = 0;
@@ -912,7 +939,9 @@ public static class Solver
                 changedReceiverCells = nChanged;
             }
             Routing.DonorCsrInto(rcv, donorStart, donors, donorFill);
-            int nOrdered = Routing.TopoInto(rcv, donorStart, donors, topoStack, order, out _);
+            // 큰 나무를 나눌 자리는 지난 반복의 집수 면적으로 짐작합니다 (첫 반복은 0 이라 출구 묶음으로만 나눔). 결과는 같습니다.
+            int nOrdered = Routing.TopoIntoParallel(rcv, donorStart, donors, topoStack, order, topoScratch,
+                aUp, topoSplitArea, out _);
             if (nOrdered != n)
             {
                 throw new ArgumentException($"수신 셀에 순환이 있어 출구에 닿지 않는 칸이 {n - nOrdered}개 있습니다");
@@ -933,7 +962,7 @@ public static class Solver
                 if (integrationIncremental)
                 {
                     int dependencyUpperBound = BuildIntegrationDependencyUpperBound(rcv, order,
-                        receiverChanged, hydrologyDirty, integrationDirty);
+                        receiverChanged, hydrologyDirty, integrationDirty, (int)(n * 0.75));
                     integrationIncremental = dependencyUpperBound <= (int)(n * 0.75);
                 }
             }

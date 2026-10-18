@@ -163,6 +163,9 @@ public sealed class HeroVolume
     public const int SurfaceFixedPointIters = 10;
     public const int SurfaceBisectIters = 48;
     public const int ChunkPoints = 1_000_000;
+
+    // 점을 고르거나 확인하는 반복에서 덩어리 하나의 점 수.
+    private const int SelectChunkPoints = 65_536;
     public const double FarM = 1.0e12;
     public const byte MaterialEmpty = 255;
     private const long StreamDetail = 7201;
@@ -1162,35 +1165,51 @@ public sealed class HeroVolume
         double[] xi = new double[mN];
         if (_amp > 0)
         {
-            var sel = new List<int>();
-            for (int p = 0; p < mN; p++)
+            // 잡음을 더할 점을 번호 순서대로 모읍니다. 덩어리마다 수를 세고 앞 덩어리 수만큼 띄워 적으므로 한 줄로 모은 것과 같습니다.
+            bool finiteBand = double.IsFinite(noiseBandM);
+            bool InBand(int p) => cols.M[col[p]] > 0
+                && (!finiteBand || Math.Abs(up[p] - cols.ZSurface[col[p]]) <= noiseBandM);
+            int nChunks = (mN + SelectChunkPoints - 1) / SelectChunkPoints;
+            int[] selStart = new int[nChunks + 1];
+            Parallelism.ForChunks(0, mN, SelectChunkPoints, (lo, hi) =>
             {
-                bool inBand = cols.M[col[p]] > 0;
-                if (double.IsFinite(noiseBandM))
+                int k = 0;
+                for (int p = lo; p < hi; p++)
                 {
-                    inBand &= Math.Abs(up[p] - cols.ZSurface[col[p]]) <= noiseBandM;
+                    k += InBand(p) ? 1 : 0;
                 }
-                if (inBand)
-                {
-                    sel.Add(p);
-                }
+                selStart[(lo / SelectChunkPoints) + 1] = k;
+            });
+            for (int j = 0; j < nChunks; j++)
+            {
+                selStart[j + 1] += selStart[j];
             }
-            if (sel.Count > 0)
+            int nSel = selStart[nChunks];
+            if (nSel > 0)
             {
-                double[] sx = new double[sel.Count];
-                double[] sy = new double[sel.Count];
-                double[] sz = new double[sel.Count];
-                for (int q = 0; q < sel.Count; q++)
+                int[] sel = new int[nSel];
+                Parallelism.ForChunks(0, mN, SelectChunkPoints, (lo, hi) =>
+                {
+                    int q = selStart[lo / SelectChunkPoints];
+                    for (int p = lo; p < hi; p++)
+                    {
+                        if (InBand(p))
+                        {
+                            sel[q++] = p;
+                        }
+                    }
+                });
+                double[] sx = new double[nSel];
+                double[] sy = new double[nSel];
+                double[] sz = new double[nSel];
+                Parallelism.For(0, nSel, q =>
                 {
                     sx[q] = px[sel[q]];
                     sy[q] = py[sel[q]];
                     sz[q] = up[sel[q]];
-                }
+                });
                 double[] nz = DetailNoise(sx, sy, sz);
-                for (int q = 0; q < sel.Count; q++)
-                {
-                    xi[sel[q]] = nz[q];
-                }
+                Parallelism.For(0, nSel, q => xi[sel[q]] = nz[q]);
             }
         }
         bool wD0 = (need & VolumeField.D0) != 0;
@@ -1505,12 +1524,21 @@ public sealed class HeroVolume
         {
             throw new ArgumentException($"up 은 (C, Z) 모양이어야 합니다: 길이 {up.Length}, C = {cN}");
         }
-        foreach (double v in up)
+        int notFinite = 0;
+        Parallelism.ForChunks(0, up.Length, SelectChunkPoints, (lo, hi) =>
         {
-            if (!double.IsFinite(v))
+            for (int p = lo; p < hi; p++)
             {
-                throw new ArgumentException("up 에 NaN 이나 inf 가 있습니다");
+                if (!double.IsFinite(up[p]))
+                {
+                    System.Threading.Volatile.Write(ref notFinite, 1);
+                    return;
+                }
             }
+        });
+        if (notFinite != 0)
+        {
+            throw new ArgumentException("up 에 NaN 이나 inf 가 있습니다");
         }
         VolumeField need = VolumeField.None;
         foreach (string key in keys)
@@ -1528,17 +1556,18 @@ public sealed class HeroVolume
             double[] px = new double[len * zCount];
             double[] py = new double[len * zCount];
             double[] uz = new double[len * zCount];
-            for (int c = 0; c < len; c++)
+            int s0 = s;
+            Parallelism.For(0, len, c =>
             {
                 for (int k = 0; k < zCount; k++)
                 {
                     int p = (c * zCount) + k;
                     col[p] = c;
-                    px[p] = x[s + c];
-                    py[p] = y[s + c];
-                    uz[p] = up[((s + c) * zCount) + k];
+                    px[p] = x[s0 + c];
+                    py[p] = y[s0 + c];
+                    uz[p] = up[((s0 + c) * zCount) + k];
                 }
-            }
+            });
             VolumeEval ev = EvaluateCore(cols, col, px, py, uz, noiseBandM, need);
             foreach (string key in keys)
             {

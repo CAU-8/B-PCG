@@ -121,12 +121,22 @@ public static class Routing
     internal static void D8IntoTrusted(double[] zt, int[] nbr, double[] dist, bool[] isOutlet, int[]? prev, double eta, int[] rcv)
     {
         int n = zt.Length;
-        foreach (double value in zt)
+        // 유한한지는 덩어리마다 나눠 보고, 수신 셀을 하나라도 쓰기 전에 오류를 냅니다.
+        int notFinite = 0;
+        Parallelism.ForChunks(0, n, D8ChunkCells, (start, end) =>
         {
-            if (!double.IsFinite(value))
+            for (int c = start; c < end; c++)
             {
-                throw new ArgumentException("zt 에 NaN 이나 무한대가 있습니다");
+                if (!double.IsFinite(zt[c]))
+                {
+                    System.Threading.Volatile.Write(ref notFinite, 1);
+                    return;
+                }
             }
+        });
+        if (notFinite != 0)
+        {
+            throw new ArgumentException("zt 에 NaN 이나 무한대가 있습니다");
         }
         int nSlot = n == 0 ? 0 : nbr.Length / n;
         bool hasPrev = prev is not null;
@@ -215,6 +225,292 @@ public static class Routing
             }
         }
         return m;
+    }
+
+    // 출구를 모을 때 덩어리 하나의 칸 수.
+    private const int RootChunkCells = 16_384;
+
+    /// <summary><see cref="TopoIntoParallel"/> 의 작업 버퍼. 반복마다 다시 씁니다.</summary>
+    internal sealed class TopoScratch
+    {
+        // 작업 하나가 순서를 적는 조각의 길이. 작업들은 공용 버퍼에서 조각을 하나씩 받아 씁니다.
+        internal const int BlockSize = 4096;
+
+        // 작업 수의 상한. 작업마다 마지막 조각이 덜 찰 수 있어 공용 버퍼를 이만큼 넉넉히 잡습니다.
+        internal const int MaxTasks = 512;
+
+        internal TopoScratch(int n)
+        {
+            Pool = new int[(((n + BlockSize - 1) / BlockSize) + MaxTasks) * BlockSize];
+        }
+
+        internal int[] Pool { get; }
+
+        internal System.Collections.Generic.List<int>[] Blocks { get; } = new System.Collections.Generic.List<int>[MaxTasks];
+
+        internal int[] LastFill { get; } = new int[MaxTasks];
+
+        internal int[]?[] Stacks { get; } = new int[MaxTasks][];
+
+        // 순서를 이루는 토막: 출구 번호 [A, B) 의 나무들(출구 자신은 빼고), 칸 A 의 부분 나무, 칸 A 하나.
+        internal System.Collections.Generic.List<(byte Kind, int A, int B)> Pieces { get; } = [];
+
+        internal System.Collections.Generic.List<int> TaskStart { get; } = [];
+    }
+
+    private const byte PieceRoots = 0;
+    private const byte PieceSubtree = 1;
+    private const byte PieceCell = 2;
+
+    /// <summary>
+    /// <see cref="TopoInto"/> 와 같은 순서를 병렬로 만듭니다. 그 순서는 출구를 번호 순서대로 모두 적은 뒤, 출구마다 기여 셀 나무를
+    /// 깊이 우선으로(번호가 작은 기여 셀 먼저) 적은 것입니다. 나무의 앞뒤 순서는 구조로 정해지므로, 순서를 토막(출구 묶음의 나무들,
+    /// 부분 나무 하나, 칸 하나)으로 잘라 토막마다 따로 적은 뒤 토막 순서대로 이어 붙이면 한 줄로 적은 것과 같습니다.
+    /// weightHint(칸마다 부분 나무 크기의 짐작, 예: 지난 반복의 집수 면적)가 splitWeight 보다 큰 나무는 줄기를 따라 더 잘게 잘라
+    /// 큰 나무 하나도 나눠 돕니다. 짐작은 일을 어떻게 나눌지에만 쓰고 결과에는 영향이 없습니다. 병렬 실행 수가 1 이면
+    /// <see cref="TopoInto"/> 를 그대로 부릅니다.
+    /// </summary>
+    internal static int TopoIntoParallel(
+        int[] rcv, int[] start, int[] donors, int[] stack, int[] order, TopoScratch scratch,
+        double[]? weightHint, double splitWeight, out int nRoot)
+    {
+        int n = rcv.Length;
+        int workers = Parallelism.MaxDegreeOfParallelism ?? Environment.ProcessorCount;
+        if (workers <= 1 || n <= RootChunkCells)
+        {
+            return TopoInto(rcv, start, donors, stack, order, out nRoot);
+        }
+        int nChunks = (n + RootChunkCells - 1) / RootChunkCells;
+        int[] rootStart = new int[nChunks + 1];
+        Parallelism.ForChunks(0, n, RootChunkCells, (lo, hi) =>
+        {
+            int count = 0;
+            for (int c = lo; c < hi; c++)
+            {
+                count += rcv[c] == c ? 1 : 0;
+            }
+            rootStart[(lo / RootChunkCells) + 1] = count;
+        });
+        for (int j = 0; j < nChunks; j++)
+        {
+            rootStart[j + 1] += rootStart[j];
+        }
+        nRoot = rootStart[nChunks];
+        Parallelism.ForChunks(0, n, RootChunkCells, (lo, hi) =>
+        {
+            int m = rootStart[lo / RootChunkCells];
+            for (int c = lo; c < hi; c++)
+            {
+                if (rcv[c] == c)
+                {
+                    order[m] = c;
+                    m++;
+                }
+            }
+        });
+        int roots = nRoot;
+        bool split = weightHint is not null && splitWeight > 0.0;
+
+        // 토막 만들기 (한 줄로, 큰 나무의 줄기 길이만큼만 돎).
+        var pieces = scratch.Pieces;
+        pieces.Clear();
+        int rangeSize = Math.Max(1, roots / (workers * 8));
+        void AddRoots(int lo, int hi)
+        {
+            for (int q = lo; q < hi; q += rangeSize)
+            {
+                pieces.Add((PieceRoots, q, Math.Min(hi, q + rangeSize)));
+            }
+        }
+        int cursor = 0;
+        if (split)
+        {
+            double[] hint = weightHint!;
+            // 큰 출구(짐작한 나무가 splitWeight 보다 큼)를 출구 번호 순서대로 찾습니다. 덩어리마다 찾아 덩어리 순서대로 잇습니다.
+            int nRootChunks = (roots + RootChunkCells - 1) / RootChunkCells;
+            var bigByChunk = new System.Collections.Generic.List<int>?[nRootChunks];
+            Parallelism.ForChunks(0, roots, RootChunkCells, (lo, hi) =>
+            {
+                System.Collections.Generic.List<int>? found = null;
+                for (int q = lo; q < hi; q++)
+                {
+                    int r = order[q];
+                    if (hint[r] > splitWeight && start[r + 1] > start[r])
+                    {
+                        (found ??= []).Add(q);
+                    }
+                }
+                bigByChunk[lo / RootChunkCells] = found;
+            });
+            int[] cut = stack;
+            foreach (int q in EnumerateBig(bigByChunk))
+            {
+                int r = order[q];
+                AddRoots(cursor, q);
+                cursor = q + 1;
+                // 큰 출구: 기여 셀 부분 나무를 차례로 토막으로 두되, 큰 부분 나무는 칸 하나 + 그 기여 셀 부분 나무들로 풉니다.
+                int sp = 0;
+                PushDonors(r, start, donors, ref cut, ref sp);
+                while (sp > 0)
+                {
+                    sp--;
+                    int c = cut[sp];
+                    if (hint[c] > splitWeight && start[c + 1] > start[c])
+                    {
+                        pieces.Add((PieceCell, c, 0));
+                        PushDonors(c, start, donors, ref cut, ref sp);
+                    }
+                    else
+                    {
+                        pieces.Add((PieceSubtree, c, 0));
+                    }
+                }
+            }
+        }
+        AddRoots(cursor, roots);
+
+        // 토막을 작업으로 묶습니다: 짐작한 크기가 splitWeight 의 절반쯤 모이면 작업 하나. 출구 묶음은 따로 작업 하나.
+        var taskStart = scratch.TaskStart;
+        taskStart.Clear();
+        double acc = 0.0;
+        byte prevKind = PieceRoots;
+        for (int i = 0; i < pieces.Count; i++)
+        {
+            (byte kind, int pa, _) = pieces[i];
+            bool newTask = i == 0 || kind == PieceRoots || prevKind == PieceRoots || acc >= 0.5 * splitWeight;
+            if (newTask && taskStart.Count < TopoScratch.MaxTasks)
+            {
+                taskStart.Add(i);
+                acc = 0.0;
+            }
+            if (kind == PieceSubtree)
+            {
+                acc += weightHint![pa];
+            }
+            prevKind = kind;
+        }
+        int nTasks = taskStart.Count;
+        taskStart.Add(pieces.Count);
+        var next = new TopoWriter.Counter();
+        Parallelism.ForTasks(nTasks, t =>
+        {
+            System.Collections.Generic.List<int> blocks = scratch.Blocks[t] ??= [];
+            blocks.Clear();
+            var w = new TopoWriter(scratch.Pool, blocks, next);
+            int[] st = scratch.Stacks[t] ?? new int[64];
+            for (int i = taskStart[t]; i < taskStart[t + 1]; i++)
+            {
+                (byte kind, int pa, int pb) = pieces[i];
+                if (kind == PieceRoots)
+                {
+                    for (int q = pa; q < pb; q++)
+                    {
+                        Walk(order[q], start, donors, ref st, w);
+                    }
+                }
+                else
+                {
+                    w.Write(pa);
+                    if (kind == PieceSubtree)
+                    {
+                        Walk(pa, start, donors, ref st, w);
+                    }
+                }
+            }
+            scratch.Stacks[t] = st;
+            scratch.LastFill[t] = w.LastFill;
+        });
+        int[] offset = new int[nTasks + 1];
+        offset[0] = roots;
+        for (int t = 0; t < nTasks; t++)
+        {
+            int nb = scratch.Blocks[t]!.Count;
+            offset[t + 1] = offset[t] + (nb == 0 ? 0 : ((nb - 1) * TopoScratch.BlockSize) + scratch.LastFill[t]);
+        }
+        Parallelism.ForTasks(nTasks, t =>
+        {
+            int dst = offset[t];
+            int left = offset[t + 1] - offset[t];
+            foreach (int b in scratch.Blocks[t]!)
+            {
+                int len = Math.Min(left, TopoScratch.BlockSize);
+                Array.Copy(scratch.Pool, b * TopoScratch.BlockSize, order, dst, len);
+                dst += len;
+                left -= len;
+            }
+        });
+        return offset[nTasks];
+    }
+
+    private static System.Collections.Generic.IEnumerable<int> EnumerateBig(System.Collections.Generic.List<int>?[] byChunk)
+    {
+        foreach (System.Collections.Generic.List<int>? list in byChunk)
+        {
+            if (list is not null)
+            {
+                foreach (int q in list)
+                {
+                    yield return q;
+                }
+            }
+        }
+    }
+
+    // top 의 기여 셀 나무를 깊이 우선으로 적습니다 (top 자신은 적지 않음, TopoInto 의 출구 하나와 같은 순서).
+    private static void Walk(int top, int[] start, int[] donors, ref int[] st, TopoWriter w)
+    {
+        int sp = 0;
+        PushDonors(top, start, donors, ref st, ref sp);
+        while (sp > 0)
+        {
+            sp--;
+            int c = st[sp];
+            w.Write(c);
+            PushDonors(c, start, donors, ref st, ref sp);
+        }
+    }
+
+    // 작업 하나가 순서를 공용 버퍼의 조각에 차례로 적습니다. 조각이 차면 다음 빈 조각을 받습니다.
+    private sealed class TopoWriter(int[] pool, System.Collections.Generic.List<int> blocks, TopoWriter.Counter next)
+    {
+        private int _at;
+        private int _fill = TopoScratch.BlockSize;
+
+        internal sealed class Counter
+        {
+            internal int Next;
+        }
+
+        internal int LastFill => blocks.Count == 0 ? 0 : _fill;
+
+        internal void Write(int c)
+        {
+            if (_fill == TopoScratch.BlockSize)
+            {
+                int b = System.Threading.Interlocked.Increment(ref next.Next) - 1;
+                blocks.Add(b);
+                _at = b * TopoScratch.BlockSize;
+                _fill = 0;
+            }
+            pool[_at + _fill] = c;
+            _fill++;
+        }
+    }
+
+    // c 의 기여 셀을 번호가 작은 것이 먼저 꺼내지도록 거꾸로 쌓습니다 (TopoInto 와 같은 순서). 스택이 모자라면 늘립니다.
+    private static void PushDonors(int c, int[] start, int[] donors, ref int[] st, ref int sp)
+    {
+        int lo = start[c];
+        int hi = start[c + 1];
+        if (sp + (hi - lo) > st.Length)
+        {
+            Array.Resize(ref st, Math.Max(st.Length * 2, sp + (hi - lo)));
+        }
+        for (int t = hi - 1; t > lo - 1; t--)
+        {
+            st[sp] = donors[t];
+            sp++;
+        }
     }
 
     /// <summary>기여 셀 CSR (_donor_csr_kernel, long 입출력). 셀 번호는 <see cref="CheckRcv"/> 를 통과해야 합니다.</summary>

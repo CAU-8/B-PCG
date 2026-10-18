@@ -369,7 +369,7 @@ public static class Corridor
         HeroVolume vol, (double XMin, double XMax, double YMin, double YMax) rect, double voxel, EngineFrame frame, string outDir,
         OrderedDictionary<string, object?> files)
     {
-        (double[] verts, long[] faces, OrderedDictionary<string, object?> cdiag) = Mesh.CaveSurface(vol, rect, voxel);
+        (double[] verts, int[] faces, OrderedDictionary<string, object?> cdiag) = Mesh.CaveSurface(vol, rect, voxel);
         string? cavesNote = null;
         if (faces.Length > 0)
         {
@@ -411,26 +411,25 @@ public static class Corridor
         for (int s = 0; s < cx.Length; s += step)
         {
             int e = Math.Min(s + step, cx.Length);
+            // 아래 반복은 모두 칸(또는 점)마다 제 자리만 쓰므로 나눠 돌려도 결과가 같습니다.
             double[] up = new double[(e - s) * nz];
-            for (int c = s; c < e; c++)
+            int s0 = s;
+            Parallelism.For(s, e, c =>
             {
                 for (int k = 0; k < nz; k++)
                 {
-                    up[((c - s) * nz) + k] = top[c] - offs[k];
+                    up[((c - s0) * nz) + k] = top[c] - offs[k];
                 }
-            }
+            });
             Dictionary<string, Array> ev = volume.EvaluateGrid(cx[s..e], cy[s..e], up, nz, double.PositiveInfinity, "material", "water");
             byte[] m = (byte[])ev["material"];
             bool[] w = (bool[])ev["water"];
-            for (int q = 0; q < m.Length; q++)
-            {
-                mat[(s * nz) + q] = w[q] ? StrataWater : m[q];
-            }
+            Parallelism.For(0, m.Length, q => mat[(s0 * nz) + q] = w[q] ? StrataWater : m[q]);
         }
         int nrow = ys.Length;
         int ncol = xs.Length;
         byte[] vol = new byte[mat.Length];
-        for (int r = 0; r < nrow; r++)
+        Parallelism.For(0, nrow, r =>
         {
             for (int c = 0; c < ncol; c++)
             {
@@ -439,16 +438,31 @@ public static class Corridor
                     vol[(((r * nz) + k) * ncol) + c] = mat[(((r * ncol) + c) * nz) + k];
                 }
             }
-        }
+        });
         double[] originTop = [xs[0] - frame.Cx, -frame.YOffset, -(ys[0] - frame.Cy)];
         OrderedDictionary<string, object?> topMeta = Heightmap.WriteHeightmap(Path.Combine(outDir, "strata_top"), top, nrow, ncol, StrataDxM, originTop);
         string tmp = Path.Combine(outDir, "strata.u8.part");
         File.WriteAllBytes(tmp, vol);
         File.Move(tmp, Path.Combine(outDir, "strata.u8"), true);
-        long[] counts = new long[256];
-        foreach (byte v in vol)
+        // 덩어리마다 센 뒤 더합니다 (정수라 더하는 순서와 상관없이 같음).
+        const int countChunk = 1 << 20;
+        long[][] partCounts = new long[(vol.Length + countChunk - 1) / countChunk][];
+        Parallelism.ForChunks(0, vol.Length, countChunk, (lo, hi) =>
         {
-            counts[v]++;
+            long[] part = new long[256];
+            for (int q = lo; q < hi; q++)
+            {
+                part[vol[q]]++;
+            }
+            partCounts[lo / countChunk] = part;
+        });
+        long[] counts = new long[256];
+        foreach (long[] part in partCounts)
+        {
+            for (int i = 0; i < 256; i++)
+            {
+                counts[i] += part[i];
+            }
         }
         var legend = new List<object?>();
         for (int r = 0; r < Rocks.NRocks; r++)

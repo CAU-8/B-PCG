@@ -195,7 +195,8 @@ public static class Cubesphere
         double[] a = new double[m];
         double[] b = new double[m];
         double fourOverPi = 4.0 / Math.PI;
-        for (int k = 0; k < m; k++)
+        // 점마다 제 자리만 쓰므로 나눠 돌려도 결과가 같습니다.
+        Parallelism.For(0, m, k =>
         {
             ReadOnlySpan<double> q = p.AsSpan(k * 3, 3);
             int f = ArgMaxFace(q);
@@ -205,7 +206,7 @@ public static class Cubesphere
             fs[k] = f;
             a[k] = fourOverPi * Math.Atan(pu / pn);
             b[k] = fourOverPi * Math.Atan(pv / pn);
-        }
+        });
         return (fs, a, b);
     }
 
@@ -242,12 +243,12 @@ public static class Cubesphere
     {
         (long[] f, double[] a, double[] b) = ToFace(p);
         long[] cells = new long[f.Length];
-        for (int k = 0; k < f.Length; k++)
+        Parallelism.For(0, f.Length, k =>
         {
             long i = Math.Clamp((long)Math.Floor(n * (a[k] + 1.0) / 2.0), 0, n - 1);
             long j = Math.Clamp((long)Math.Floor(n * (b[k] + 1.0) / 2.0), 0, n - 1);
             cells[k] = (f[k] * n * n) + (j * n) + i;
-        }
+        });
         return cells;
     }
 

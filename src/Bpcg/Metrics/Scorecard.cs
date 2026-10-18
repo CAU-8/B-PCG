@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
+using System.Threading;
 using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.Hydro;
@@ -187,6 +189,8 @@ public static class Scorecard
     private sealed class Level(string name, FieldSet fields, CellGraph? graph, IReadOnlyDictionary<string, object?> diag, Config? cfg, OrderedDictionary<string, double> th)
     {
         private long[]? _order;
+        private bool _orderReady;
+        private object? _orderLock;
 
         public string Name { get; } = name;
 
@@ -226,7 +230,8 @@ public static class Scorecard
 
         public long[] Rcv() => Long("receiver");
 
-        public long[] Order() => _order ??= Routing.TopoOrder(Rcv());
+        // 항목들이 나눠 돌며 함께 부르므로 한 번만 만듭니다.
+        public long[] Order() => LazyInitializer.EnsureInitialized(ref _order, ref _orderReady, ref _orderLock, () => Routing.TopoOrder(Rcv()))!;
 
         public bool[] Root()
         {
@@ -246,40 +251,74 @@ public static class Scorecard
         public int Columns(string name) => F.Columns.TryGetValue(name, out int c) ? c : 1;
     }
 
+    // 점수표 항목 하나: 이름, 종류, 단위, 없는 입력, 값을 구하는 계산.
+    private sealed record Job(
+        string Key, string Kind, string Unit, List<string> Missing, Func<(object? Value, bool? Passed, string Note)> Fn);
+
     private static void Run(
-        OrderedDictionary<string, object?> output, string key, string kind, string unit, List<string> missing,
-        Func<(object? Value, bool? Passed, string Note)> fn)
+        List<Job> jobs, string key, string kind, string unit, List<string> missing,
+        Func<(object? Value, bool? Passed, string Note)> fn) => jobs.Add(new Job(key, kind, unit, missing, fn));
+
+    // 항목 계산은 서로 독립이라(입력 필드를 읽기만 함) 나눠 돌리고, 표는 항목 순서대로 채웁니다.
+    // 한 줄로 돌 때처럼 계산 실패(ArgumentException)는 그 항목의 표 줄이 되고, 다른 오류는 앞 항목의 것이 먼저 나갑니다.
+    private static OrderedDictionary<string, object?> RunJobs(List<Job> jobs)
     {
-        if (missing.Count > 0)
+        var results = new (object? Value, bool? Passed, string Note)[jobs.Count];
+        var errors = new Exception?[jobs.Count];
+        Parallelism.ForTasks(jobs.Count, i =>
         {
-            output[key] = Entry(null, unit, kind, null, "건너뜀: 없는 입력 " + string.Join(", ", missing));
-            return;
-        }
-        try
+            if (jobs[i].Missing.Count > 0)
+            {
+                return;
+            }
+            try
+            {
+                results[i] = jobs[i].Fn();
+            }
+            catch (Exception e)
+            {
+                errors[i] = e;
+            }
+        });
+        var output = new OrderedDictionary<string, object?>();
+        for (int i = 0; i < jobs.Count; i++)
         {
-            (object? value, bool? passed, string note) = fn();
-            output[key] = Entry(value, unit, kind, passed, note);
+            (string key, string kind, string unit, List<string> missing, _) = jobs[i];
+            if (missing.Count > 0)
+            {
+                output[key] = Entry(null, unit, kind, null, "건너뜀: 없는 입력 " + string.Join(", ", missing));
+            }
+            else if (errors[i] is ArgumentException e)
+            {
+                output[key] = Entry(null, unit, kind, kind == "check" ? false : null, $"계산 실패: {e.Message}");
+            }
+            else if (errors[i] is Exception x)
+            {
+                ExceptionDispatchInfo.Capture(x).Throw();
+            }
+            else
+            {
+                (object? value, bool? passed, string note) = results[i];
+                output[key] = Entry(value, unit, kind, passed, note);
+            }
         }
-        catch (ArgumentException e)
-        {
-            output[key] = Entry(null, unit, kind, kind == "check" ? false : null, $"계산 실패: {e.Message}");
-        }
+        return output;
     }
 
     private static object? FiniteOrNull(double x) => double.IsFinite(x) ? x : null;
 
     private static string G(double x) => PyFormat.General(x);
 
-    private static void AddPlanetOnly(OrderedDictionary<string, object?> output, Level l)
+    private static void AddPlanetOnly(List<Job> jobs, Level l)
     {
         OrderedDictionary<string, double> th = l.Th;
         string p = l.Name;
-        Run(output, $"{p}.ocean_fraction", "emergent", "", l.Missing(["is_ocean"], graph: true), () =>
+        Run(jobs, $"{p}.ocean_fraction", "emergent", "", l.Missing(["is_ocean"], graph: true), () =>
         {
             double v = Hypsometry.OceanFraction(l.Bool("is_ocean"), l.Graph!.Area);
             return (v, null, $"물 부피 보존 해수면으로 나온 값. 지구 {PyFormat.Repr(th["earth_ocean_fraction"])}");
         });
-        Run(output, $"{p}.shelf_area", "emergent", "km2", l.Missing(["z_m", "crust_type", "is_ocean"], graph: true), () =>
+        Run(jobs, $"{p}.shelf_area", "emergent", "km2", l.Missing(["z_m", "crust_type", "is_ocean"], graph: true), () =>
         {
             (double a, double frac) = Hypsometry.ShelfArea(
                 l.D("z_m"), l.Graph!.Area, l.Long("crust_type"), l.Bool("is_ocean"), th["shelf_depth_m"]);
@@ -288,7 +327,7 @@ public static class Scorecard
             return (a / 1.0e6, null, note);
         });
         string zname = l.F.Contains("z_mean_m") ? "z_mean_m" : "z_m";
-        Run(output, $"{p}.hypsometry_bimodal", "forced", "m", l.Missing([zname], graph: true), () =>
+        Run(jobs, $"{p}.hypsometry_bimodal", "forced", "m", l.Missing([zname], graph: true), () =>
         {
             OrderedDictionary<string, object?> r = Hypsometry.Bimodality(
                 l.D(zname), l.Graph!.Area, minSeparationM: th["bimodal_min_separation_m"]);
@@ -299,12 +338,12 @@ public static class Scorecard
         });
     }
 
-    private static void AddCommon(OrderedDictionary<string, object?> output, Level l)
+    private static void AddCommon(List<Job> jobs, Level l)
     {
         OrderedDictionary<string, double> th = l.Th;
         string p = l.Name;
 
-        Run(output, $"{p}.hack_exponent", "emergent", "", l.Missing(["receiver", "drainage_area_m2"], graph: true), () =>
+        Run(jobs, $"{p}.hack_exponent", "emergent", "", l.Missing(["receiver", "drainage_area_m2"], graph: true), () =>
         {
             int n = l.N;
             (double c, double h) = Drainage.HackFit(
@@ -313,7 +352,7 @@ public static class Scorecard
                 $"본류 L = {PyFormat.General(c, 3)}·A^h (km, km²). 지구 약 {PyFormat.Repr(EarthHackRange.Lo)}~{PyFormat.Repr(EarthHackRange.Hi)}");
         });
 
-        Run(output, $"{p}.gw_surface_fraction", "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
+        Run(jobs, $"{p}.gw_surface_fraction", "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
         {
             double[] z = l.D("z_m");
             double v = Hypsometry.GwSurfaceFraction(z, l.D("water_table_m"), l.Land(z.Length), th["gw_surface_tol_m"], l.Graph?.Area);
@@ -322,7 +361,7 @@ public static class Scorecard
             return (FiniteOrNull(v), null, note);
         });
 
-        Run(output, $"{p}.river_reach_fraction", "check", "", l.Missing(["receiver", "is_river"]), () =>
+        Run(jobs, $"{p}.river_reach_fraction", "check", "", l.Missing(["receiver", "is_river"]), () =>
         {
             int n = l.N;
             bool[] ocean = l.Flag("is_ocean", n);
@@ -342,7 +381,7 @@ public static class Scorecard
             return (v, v == 1.0, $"하천 {riv.Count(b => b)}칸, 기준 100%");
         });
 
-        Run(output, $"{p}.river_backflow", "check", "cells", l.Missing(["receiver", "is_river", "water_level_m"]), () =>
+        Run(jobs, $"{p}.river_backflow", "check", "cells", l.Missing(["receiver", "is_river", "water_level_m"]), () =>
         {
             long v = Drainage.RiverBackflowCount(l.Rcv(), l.D("water_level_m"), l.Bool("is_river"));
             return (v, v == 0, "수신 셀 수면이 더 높은 하천 칸 수, 기준 0");
@@ -354,7 +393,7 @@ public static class Scorecard
         {
             lawNeed.AddRange(["discharge_m3_per_yr", "drainage_area_m2", "sediment_flux_m3_per_yr", "uplift_m_per_yr", "k_s"]);
         }
-        Run(output, $"{p}.law_consistency", "check", "", l.Missing(lawNeed, graph: !lawGiven, cfg: !lawGiven), () =>
+        Run(jobs, $"{p}.law_consistency", "check", "", l.Missing(lawNeed, graph: !lawGiven, cfg: !lawGiven), () =>
         {
             int n = l.N;
             double[] lawS = lawGiven
@@ -392,7 +431,7 @@ public static class Scorecard
             return (median, median < th["law_median_max"], note);
         });
 
-        Run(output, $"{p}.water_budget", "check", "", l.Missing(["receiver", "discharge_m3_per_yr", "runoff_eff_m_per_yr"], graph: true), () =>
+        Run(jobs, $"{p}.water_budget", "check", "", l.Missing(["receiver", "discharge_m3_per_yr", "runoff_eff_m_per_yr"], graph: true), () =>
         {
             double[] reff = l.D("runoff_eff_m_per_yr");
             double[] src = new double[reff.Length];
@@ -414,7 +453,7 @@ public static class Scorecard
             return (v, v <= th["budget_max"], note);
         });
 
-        Run(output, $"{p}.sediment_budget", "check", "", l.Missing(["receiver", "sediment_flux_m3_per_yr", "uplift_m_per_yr"], graph: true), () =>
+        Run(jobs, $"{p}.sediment_budget", "check", "", l.Missing(["receiver", "sediment_flux_m3_per_yr", "uplift_m_per_yr"], graph: true), () =>
         {
             double[] u = l.D("uplift_m_per_yr");
             double[] src = new double[u.Length];
@@ -428,7 +467,7 @@ public static class Scorecard
 
         bool rockGiven = l.Diag.ContainsKey("rock_samples");
         List<string> rockNeed = rockGiven ? [] : ["z_m", "surface_rock", "strata_bottom_m", "strata_rock"];
-        Run(output, $"{p}.rock_consistency", "check", "", l.Missing(rockNeed), () =>
+        Run(jobs, $"{p}.rock_consistency", "check", "", l.Missing(rockNeed), () =>
         {
             double v;
             string src;
@@ -488,7 +527,7 @@ public static class Scorecard
             caveMissing.Add("cave_level_0_m");
         }
         caveMissing.AddRange(l.Missing(["strata_bottom_m", "strata_rock"]));
-        Run(output, $"{p}.cave_in_soluble", "check", "", caveMissing, () =>
+        Run(jobs, $"{p}.cave_in_soluble", "check", "", caveMissing, () =>
         {
             (double v, long cnt) = CaveSolubleFraction(
                 caveNames.Select(l.D), l.D("strata_bottom_m"), l.U8("strata_rock"), l.Columns("strata_bottom_m"));
@@ -499,7 +538,7 @@ public static class Scorecard
             return (v, v == 1.0, $"동굴 (칸, 층) {cnt}개, 기준 100%");
         });
 
-        Run(output, $"{p}.water_rule_violations", "check", "cells", l.Missing(["z_m", "water_table_m", "water_level_m"]), () =>
+        Run(jobs, $"{p}.water_rule_violations", "check", "cells", l.Missing(["z_m", "water_table_m", "water_level_m"]), () =>
         {
             double? maxDepth = null;
             if (l.Cfg is not null && l.Cfg.Contains("groundwater") && l.Cfg.Sec("groundwater").Contains("max_depth_m"))
@@ -517,7 +556,7 @@ public static class Scorecard
         foreach (string band in bands)
         {
             string key = $"{p}.grid_alignment" + (band == "all" ? "" : $"_{band}");
-            Run(output, key, "check", "", l.Missing(["receiver", "is_river"], graph: true), () =>
+            Run(jobs, key, "check", "", l.Missing(["receiver", "is_river"], graph: true), () =>
             {
                 double v = Drainage.GridAlignment(l.Graph!, l.Rcv(), l.Bool("is_river"), band);
                 if (!double.IsFinite(v))
@@ -529,7 +568,7 @@ public static class Scorecard
             });
         }
 
-        Run(output, $"{p}.solver_converged", "check", "", l.Diag.ContainsKey("converged") ? [] : ["diag.converged"], () =>
+        Run(jobs, $"{p}.solver_converged", "check", "", l.Diag.ContainsKey("converged") ? [] : ["diag.converged"], () =>
         {
             bool c = (bool)l.Diag["converged"]!;
             l.Diag.TryGetValue("iterations", out object? it);
@@ -537,10 +576,10 @@ public static class Scorecard
         });
     }
 
-    private static void AddHeroOnly(OrderedDictionary<string, object?> output, Level l)
+    private static void AddHeroOnly(List<Job> jobs, Level l)
     {
         string p = l.Name;
-        Run(output, $"{p}.flat_fraction", "emergent", "", l.Missing(["slope"]), () =>
+        Run(jobs, $"{p}.flat_fraction", "emergent", "", l.Missing(["slope"]), () =>
         {
             double[] s = l.D("slope");
             double v = Hypsometry.FlatFraction(s, l.Land(s.Length), l.Th["flat_slope"], l.Graph?.Area);
@@ -557,7 +596,7 @@ public static class Scorecard
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? diag = null, Config? cfg = null)
     {
         OrderedDictionary<string, double> th = Thresholds(cfg);
-        var output = new OrderedDictionary<string, object?>();
+        var jobs = new List<Job>();
         foreach ((string name, FieldSet? fields, CellGraph? graph) in new[] { ("planet", planetFields, planetGraph), ("hero", heroFields, heroGraph) })
         {
             IReadOnlyDictionary<string, object?> levelDiag =
@@ -578,15 +617,15 @@ public static class Scorecard
             }
             if (name == "planet")
             {
-                AddPlanetOnly(output, l);
+                AddPlanetOnly(jobs, l);
             }
-            AddCommon(output, l);
+            AddCommon(jobs, l);
             if (name == "hero")
             {
-                AddHeroOnly(output, l);
+                AddHeroOnly(jobs, l);
             }
         }
-        return output;
+        return RunJobs(jobs);
     }
 
     /// <summary>점수표에서 pass 가 False 인 항목 이름 (failed_checks).</summary>

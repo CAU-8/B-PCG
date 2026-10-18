@@ -398,18 +398,17 @@ public static class Pipeline
 
         // --- 4단계: 물
         t = Stopwatch.GetTimestamp();
-        FieldSet wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg);
+        double[]? zr = null;
         if (sphere)
         {
             // L0 칸은 골짜기 창보다 커서 칸 안의 능선 높이 z + 기복을 '골짜기 가장자리'로 씁니다.
-            double[] zr = new double[n];
+            zr = new double[n];
             for (int c = 0; c < n; c++)
             {
                 zr[c] = z[c] + reliefArr![c];
             }
-            wb["valley_depth_m"] = Water.ValleyDepth(
-                graph, zr, wb.Get<double>("water_level_m"), wb.Get<bool>("is_river"), cfg.F("caves.valley_window_m"));
         }
+        FieldSet wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr);
         sec["water"] = Seconds(t);
 
         // --- 지표 암석

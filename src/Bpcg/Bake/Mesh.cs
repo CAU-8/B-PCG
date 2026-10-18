@@ -56,7 +56,7 @@ public sealed class CaveMesh
 {
     public required double[] Vertices { get; init; }
 
-    public required long[] Faces { get; init; }
+    public required int[] Faces { get; init; }
 
     public required double[] Normals { get; init; }
 
@@ -168,22 +168,22 @@ public static class Mesh
     /// 격자 f (nx, ny, nz) [i, j, k] 행 우선의 0 등위면 (marching tetrahedra). 삼각형 앞면은 값이 커지는 쪽(skimage 와 같은 약속).
     /// 반환 꼭짓점은 (i·v, j·v, k·v).
     /// </summary>
-    internal static (List<double> Verts, List<long> Faces) IsoSurface(double[] f, int nx, int ny, int nz, double v)
+    internal static (List<double> Verts, List<int> Faces) IsoSurface(double[] f, int nx, int ny, int nz, double v)
     {
         var verts = new List<double>();
-        var faces = new List<long>();
+        var faces = new List<int>();
         // 모서리마다 처음 만든 꼭짓점 번호. Kuhn 분할의 모서리는 낮은 꼭짓점에서 높은 꼭짓점으로 가는 방향이 모두
         // 성분 0·1 의 7가지라, (낮은 꼭짓점 번호·8 + 방향) 하나로 (min, max) 꼭짓점 쌍을 대신합니다.
-        var edgeVert = new Dictionary<long, long>();
+        var edgeVert = new Dictionary<long, int>();
         long Id(int i, int j, int k) => (((long)i * ny) + j) * nz + k;
-        long Vert(int ia, int ja, int ka, int ib, int jb, int kb)
+        int Vert(int ia, int ja, int ka, int ib, int jb, int kb)
         {
             long a = Id(ia, ja, ka);
             long b = Id(ib, jb, kb);
             long key = a < b
                 ? (a * 8) + (((ib - ia) << 2) | ((jb - ja) << 1) | (kb - ka))
                 : (b * 8) + (((ia - ib) << 2) | ((ja - jb) << 1) | (ka - kb));
-            if (edgeVert.TryGetValue(key, out long idx))
+            if (edgeVert.TryGetValue(key, out int idx))
             {
                 return idx;
             }
@@ -197,11 +197,11 @@ public static class Mesh
             edgeVert[key] = idx;
             return idx;
         }
-        void AddTri(long p, long q, long r, (double X, double Y, double Z) outside)
+        void AddTri(int p, int q, int r, (double X, double Y, double Z) outside)
         {
-            int pi = (int)p * 3;
-            int qi = (int)q * 3;
-            int ri = (int)r * 3;
+            int pi = p * 3;
+            int qi = q * 3;
+            int ri = r * 3;
             double ux = verts[qi] - verts[pi];
             double uy = verts[qi + 1] - verts[pi + 1];
             double uz = verts[qi + 2] - verts[pi + 2];
@@ -300,7 +300,7 @@ public static class Mesh
                             oz += ck[q] * v;
                         }
                         (double, double, double) outside = (ox / nOut, oy / nOut, oz / nOut);
-                        long E(int qa, int qb) => Vert(ci[qa], cj[qa], ck[qa], ci[qb], cj[qb], ck[qb]);
+                        int E(int qa, int qb) => Vert(ci[qa], cj[qa], ck[qa], ci[qb], cj[qb], ck[qb]);
                         if (nIn == 1 || nIn == 3)
                         {
                             int lone = nIn == 1 ? ins[0] : outs[0];
@@ -309,10 +309,10 @@ public static class Mesh
                         }
                         else
                         {
-                            long p0 = E(ins[0], outs[0]);
-                            long p1 = E(ins[0], outs[1]);
-                            long p2 = E(ins[1], outs[1]);
-                            long p3 = E(ins[1], outs[0]);
+                            int p0 = E(ins[0], outs[0]);
+                            int p1 = E(ins[0], outs[1]);
+                            int p2 = E(ins[1], outs[1]);
+                            int p3 = E(ins[1], outs[0]);
                             AddTri(p0, p1, p2, outside);
                             AddTri(p0, p2, p3, outside);
                         }
@@ -327,7 +327,7 @@ public static class Mesh
     {
         public bool HasBands;
         public long Voxels;
-        public List<(double Ox, double Oy, double Oz, List<double> Verts, List<long> Faces)> Bands = [];
+        public List<(double Ox, double Oy, double Oz, List<double> Verts, List<int> Faces)> Bands = [];
         public ExceptionDispatchInfo? Error;
     }
 
@@ -386,7 +386,7 @@ public static class Mesh
             {
                 continue;
             }
-            (List<double> vt, List<long> fc) = IsoSurface(dc, ntx, nty, nz, v);
+            (List<double> vt, List<int> fc) = IsoSurface(dc, ntx, nty, nz, v);
             if (fc.Count == 0)
             {
                 continue;
@@ -397,11 +397,11 @@ public static class Mesh
     }
 
     // 삼각형이 쓰는 꼭짓점 번호를 오름차순·중복 없이 (Distinct().OrderBy() 와 같은 결과를 표시 배열 한 번으로).
-    private static long[] SortedUnique(IReadOnlyList<long> ids, long nVerts)
+    private static int[] SortedUnique(int[] ids, int nVerts)
     {
         bool[] seen = new bool[nVerts];
-        long count = 0;
-        for (int q = 0; q < ids.Count; q++)
+        int count = 0;
+        for (int q = 0; q < ids.Length; q++)
         {
             if (!seen[ids[q]])
             {
@@ -409,9 +409,9 @@ public static class Mesh
                 count++;
             }
         }
-        long[] used = new long[count];
-        long m = 0;
-        for (long c = 0; c < nVerts; c++)
+        int[] used = new int[count];
+        int m = 0;
+        for (int c = 0; c < nVerts; c++)
         {
             if (seen[c])
             {
@@ -424,7 +424,7 @@ public static class Mesh
     /// <summary>
     /// 회랑 rect 안 동굴 벽 삼각형 (cave_surface, 국소 좌표). 반환: (verts (V, 3), faces (F, 3), diag).
     /// </summary>
-    public static (double[] Verts, long[] Faces, OrderedDictionary<string, object?> Diag) CaveSurface(
+    public static (double[] Verts, int[] Faces, OrderedDictionary<string, object?> Diag) CaveSurface(
         HeroVolume volume, (double XMin, double XMax, double YMin, double YMax) rect, double voxelM, Action<string>? log = null)
     {
         long tAll = Stopwatch.GetTimestamp();
@@ -472,15 +472,17 @@ public static class Mesh
         foreach (TileMesh r in results)
         {
             r.Error?.Throw();
-            foreach ((double _, double _, double _, List<double> vt, List<long> fc) in r.Bands)
+            foreach ((double _, double _, double _, List<double> vt, List<int> fc) in r.Bands)
             {
                 totalVerts += vt.Count / 3;
                 totalFaces += fc.Count / 3;
             }
         }
         double[] verts = new double[totalVerts * 3];
-        long[] faces = new long[totalFaces * 3];
-        long nVert = 0;
+        // 꼭짓점 번호는 int 로 둡니다. 꼭짓점 배열(꼭짓점 수 × 3 실수)이 .NET 배열 길이 한계(약 21억) 안에 들어야 하므로
+        // 번호는 늘 int 범위 안입니다.
+        int[] faces = new int[totalFaces * 3];
+        int nVert = 0;
         long vAt = 0;
         long fAt = 0;
         for (int t = 0; t < results.Length; t++)
@@ -491,7 +493,7 @@ public static class Mesh
             voxels += r.Voxels;
             if (r.HasBands)
             {
-                foreach ((double ox, double oy, double oz, List<double> vt, List<long> fc) in r.Bands)
+                foreach ((double ox, double oy, double oz, List<double> vt, List<int> fc) in r.Bands)
                 {
                     for (int q = 0; q < vt.Count; q += 3)
                     {
@@ -546,9 +548,9 @@ public static class Mesh
                 for (int ax = 0; ax < 3; ax++)
                 {
                     // verts[faces].mean(axis=1): 꼭짓점 세 개의 np.mean
-                    double a = verts[(faces[t * 3] * 3) + ax];
-                    double b = verts[(faces[(t * 3) + 1] * 3) + ax];
-                    double c = verts[(faces[(t * 3) + 2] * 3) + ax];
+                    double a = verts[((long)faces[t * 3] * 3) + ax];
+                    double b = verts[((long)faces[(t * 3) + 1] * 3) + ax];
+                    double c = verts[((long)faces[(t * 3) + 2] * 3) + ax];
                     chunk[(i * 3) + ax] = (0.0 + a + b + c) / 3.0;
                 }
             }
@@ -564,9 +566,9 @@ public static class Mesh
         }
         diag["faces_kept"] = (long)nKept;
         // 남긴 삼각형이 쓰는 꼭짓점을 번호 순서대로 새 번호로 (SortedUnique 와 같은 결과)
-        long nv = verts.Length / 3;
-        long[] remap = new long[nv];
-        Array.Fill(remap, -1L);
+        int nv = verts.Length / 3;
+        int[] remap = new int[nv];
+        Array.Fill(remap, -1);
         for (int t = 0; t < nf; t++)
         {
             if (keepFace[t])
@@ -576,24 +578,24 @@ public static class Mesh
                 remap[faces[(t * 3) + 2]] = 0;
             }
         }
-        long nUsed = 0;
-        for (long q = 0; q < nv; q++)
+        int nUsed = 0;
+        for (int q = 0; q < nv; q++)
         {
             if (remap[q] == 0)
             {
                 remap[q] = nUsed++;
             }
         }
-        double[] vOut = new double[nUsed * 3];
-        for (long q = 0; q < nv; q++)
+        double[] vOut = new double[(long)nUsed * 3];
+        for (int q = 0; q < nv; q++)
         {
             if (remap[q] >= 0)
             {
-                Array.Copy(verts, q * 3, vOut, remap[q] * 3, 3);
+                Array.Copy(verts, (long)q * 3, vOut, (long)remap[q] * 3, 3);
             }
         }
-        long[] fOut = new long[nKept * 3];
-        long o = 0;
+        int[] fOut = new int[nKept * 3];
+        int o = 0;
         for (int t = 0; t < nf; t++)
         {
             if (keepFace[t])
@@ -611,20 +613,20 @@ public static class Mesh
     /// 국소 꼭짓점·삼각형 → 엔진 좌표 메시 (build_mesh): 같은 자리 꼭짓점을 붙이고(소수 8자리), 각도 가중 꼭짓점 법선,
     /// 색은 법선 반대(암석) 쪽 0.5 칸 점의 재질.
     /// </summary>
-    public static CaveMesh BuildMesh(double[] vertsLocal, long[] faces, HeroVolume volume, EngineFrame frame, double voxelM)
+    public static CaveMesh BuildMesh(double[] vertsLocal, int[] faces, HeroVolume volume, EngineFrame frame, double voxelM)
     {
         double[]? ve = frame.ToEngine(vertsLocal);
         // merge_vertices: 소수 8자리로 반올림한 자리가 같으면 한 꼭짓점 (처음 나온 순서로 번호)
         int nv = ve.Length / 3;
-        var key = new Dictionary<(long, long, long), long>(nv);
-        long[]? map = new long[nv];
+        var key = new Dictionary<(long, long, long), int>(nv);
+        int[]? map = new int[nv];
         double[] merged = new double[ve.Length];
         int mergedCount = 0;
         for (int i = 0; i < nv; i++)
         {
             (long, long, long) k = (
                 (long)Math.Round(ve[i * 3] * 1e8), (long)Math.Round(ve[(i * 3) + 1] * 1e8), (long)Math.Round(ve[(i * 3) + 2] * 1e8));
-            if (!key.TryGetValue(k, out long idx))
+            if (!key.TryGetValue(k, out int idx))
             {
                 idx = mergedCount / 3;
                 key[k] = idx;
@@ -637,26 +639,26 @@ public static class Mesh
         // 다 쓴 큰 배열은 바로 놓습니다 (한 번만 도는 메서드라 지역 변수가 끝까지 살아 있을 수 있음).
         ve = null;
         key = null;
-        long[] f2 = new long[faces.Length];
+        int[] f2 = new int[faces.Length];
         for (int q = 0; q < faces.Length; q++)
         {
             f2[q] = map[faces[q]];
         }
         map = null;
         // remove_unreferenced_vertices
-        long[] used = SortedUnique(f2, mergedCount / 3);
-        long[] remap = new long[mergedCount / 3];
-        Array.Fill(remap, -1L);
+        int[] used = SortedUnique(f2, mergedCount / 3);
+        int[] remap = new int[mergedCount / 3];
+        Array.Fill(remap, -1);
         double[] verts = new double[used.Length * 3];
-        for (long q = 0; q < used.Length; q++)
+        for (int q = 0; q < used.Length; q++)
         {
             remap[used[q]] = q;
-            verts[q * 3] = merged[(int)(used[q] * 3)];
-            verts[(q * 3) + 1] = merged[(int)(used[q] * 3) + 1];
-            verts[(q * 3) + 2] = merged[(int)(used[q] * 3) + 2];
+            verts[q * 3] = merged[used[q] * 3];
+            verts[(q * 3) + 1] = merged[(used[q] * 3) + 1];
+            verts[(q * 3) + 2] = merged[(used[q] * 3) + 2];
         }
         merged = null!;
-        long[] fFinal = new long[f2.Length];
+        int[] fFinal = new int[f2.Length];
         for (int q = 0; q < f2.Length; q++)
         {
             fFinal[q] = remap[f2[q]];
@@ -686,7 +688,7 @@ public static class Mesh
     // 더하는 순서가 예전과 같아 값이 비트까지 같습니다.
     private const int NormalChunkFaces = 1 << 18;
 
-    private static double[] VertexNormals(double[] v, long[] f)
+    private static double[] VertexNormals(double[] v, int[] f)
     {
         double[] acc = new double[v.Length];
         int nf = f.Length / 3;
@@ -755,7 +757,7 @@ public static class Mesh
                 int t = t0 + k;
                 for (int q = 0; q < 3; q++)
                 {
-                    long vi = f[(t * 3) + q] * 3;
+                    long vi = (long)f[(t * 3) + q] * 3;
                     acc[vi] += contrib[(k * 9) + (q * 3)];
                     acc[vi + 1] += contrib[(k * 9) + (q * 3) + 1];
                     acc[vi + 2] += contrib[(k * 9) + (q * 3) + 2];

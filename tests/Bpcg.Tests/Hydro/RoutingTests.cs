@@ -1,4 +1,5 @@
 using System;
+using Bpcg.Core;
 using Bpcg.Hydro;
 using Xunit;
 
@@ -37,6 +38,63 @@ public sealed class RoutingTests
     {
         Assert.Throws<DivideByZeroException>(() =>
             Routing.D8Receivers([1.0, 0.0], [1, 0], [0.0, 0.0], [false, true]));
+    }
+
+    // 출구가 드문 숲(큰 나무 하나)과 흔한 숲에서, 병렬 순서가 한 줄 순서와 같은지 봅니다. 부모는 늘 번호가 더 작은 칸이라
+    // 순환이 없고, 절반쯤은 바로 앞 칸을 부모로 삼아 긴 줄기가 생깁니다. 끝 두 칸은 출구에 닿지 않는 고리입니다.
+    // 나눌 자리 짐작은 없음·정확한 나무 크기·모두 큼(가장 잘게 나눔)·모두 0 네 가지로 바꿔 봅니다.
+    [Theory]
+    [InlineData(1, 0.0005)]
+    [InlineData(3, 0.0005)]
+    [InlineData(8, 0.0005)]
+    [InlineData(8, 0.05)]
+    public void TopoIntoParallelMatchesSerial(int threads, double rootRate)
+    {
+        const int n = 60_000;
+        int[] rcv = new int[n];
+        for (int c = 0; c < n; c++)
+        {
+            bool root = c == 0 || Hashing.HashUnit(31, c, 0) < rootRate;
+            int parent = Hashing.HashUnit(31, c, 1) < 0.6 ? c - 1 : (int)(Hashing.HashUnit(31, c, 2) * c);
+            rcv[c] = root ? c : parent;
+        }
+        rcv[n - 2] = n - 1;
+        rcv[n - 1] = n - 2;
+        int[] start = new int[n + 1];
+        int[] donors = new int[n];
+        Routing.DonorCsrInto(rcv, start, donors, new int[n]);
+        int[] expected = new int[n];
+        int mExpected = Routing.TopoInto(rcv, start, donors, new int[n], expected, out int rootsExpected);
+        Assert.Equal(n - 2, mExpected);
+        double[] size = new double[n];
+        for (int k = mExpected - 1; k >= 0; k--)
+        {
+            int c = expected[k];
+            size[c] += 1.0;
+            if (rcv[c] != c)
+            {
+                size[rcv[c]] += size[c];
+            }
+        }
+        double[] huge = new double[n];
+        Array.Fill(huge, 1e9);
+        Parallelism.Configure(threads);
+        try
+        {
+            foreach (double[]? hint in new[] { null, size, huge, new double[n] })
+            {
+                int[] actual = new int[n];
+                int m = Routing.TopoIntoParallel(
+                    rcv, start, donors, new int[n], actual, new Routing.TopoScratch(n), hint, n / 64.0, out int roots);
+                Assert.Equal(mExpected, m);
+                Assert.Equal(rootsExpected, roots);
+                Compare.Equal(expected[..m], actual[..m], "order");
+            }
+        }
+        finally
+        {
+            Parallelism.Configure(null);
+        }
     }
 
     [Fact]

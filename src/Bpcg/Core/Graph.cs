@@ -88,14 +88,16 @@ public sealed class CellGraph
         {
             throw new InvalidOperationException("unit() 은 구면 그래프에서만 씁니다");
         }
-        double[] u = new double[Pos.Length];
-        for (int c = 0; c < NCells; c++)
+        double[] pos = Pos;
+        double[] u = new double[pos.Length];
+        // 칸마다 제 줄만 쓰므로 나눠 돌려도 결과가 같습니다.
+        Parallelism.For(0, NCells, c =>
         {
-            double norm = LinAlg.Norm3(Pos.AsSpan(c * 3, 3));
-            u[c * 3] = Pos[c * 3] / norm;
-            u[(c * 3) + 1] = Pos[(c * 3) + 1] / norm;
-            u[(c * 3) + 2] = Pos[(c * 3) + 2] / norm;
-        }
+            double norm = LinAlg.Norm3(pos.AsSpan(c * 3, 3));
+            u[c * 3] = pos[c * 3] / norm;
+            u[(c * 3) + 1] = pos[(c * 3) + 1] / norm;
+            u[(c * 3) + 2] = pos[(c * 3) + 2] / norm;
+        });
         return u;
     }
 
@@ -210,16 +212,21 @@ public static class Graph
         Grid grid = Cubesphere.CubesphereGrid(n, R);
         int nCells = grid.NCells;
         double[] area = grid.AreaFull();
+        // 아래 반복은 모두 칸마다 제 줄만 쓰므로 나눠 돌려도 결과가 같습니다.
+        double[] gridPos = grid.Pos;
         double[] unit = new double[nCells * 3];
-        for (int k = 0; k < unit.Length; k++)
+        Parallelism.For(0, nCells, c =>
         {
-            unit[k] = grid.Pos[k] / R;
-        }
+            for (int k = c * 3; k < (c * 3) + 3; k++)
+            {
+                unit[k] = gridPos[k] / R;
+            }
+        });
         if (jitter > 0)
         {
             (double[] ja, double[] jb) = JitterOffsets(nCells, jitter, seed);
             int nn = n * n;
-            for (int c = 0; c < nCells; c++)
+            Parallelism.For(0, nCells, c =>
             {
                 int f = c / nn;
                 double h = Math.Sqrt(area[c]) / R;
@@ -230,20 +237,20 @@ public static class Graph
                     unit[(c * 3) + k] = unit[(c * 3) + k] + (ah * Cubesphere.FaceU[(f * 3) + k])
                         + (bh * Cubesphere.FaceV[(f * 3) + k]);
                 }
-            }
-            for (int c = 0; c < nCells; c++)
-            {
                 double norm = LinAlg.Norm3(unit.AsSpan(c * 3, 3));
                 unit[c * 3] /= norm;
                 unit[(c * 3) + 1] /= norm;
                 unit[(c * 3) + 2] /= norm;
-            }
+            });
         }
         double[] pos = new double[nCells * 3];
-        for (int k = 0; k < pos.Length; k++)
+        Parallelism.For(0, nCells, c =>
         {
-            pos[k] = unit[k] * R;
-        }
+            for (int k = c * 3; k < (c * 3) + 3; k++)
+            {
+                pos[k] = unit[k] * R;
+            }
+        });
         int[] nbr = Cubesphere.NeighborTable(n);
         double[] dist = Distances(pos, nbr, R);
         double spacing = Math.Sqrt(NpReduce.Mean(area));
@@ -256,10 +263,11 @@ public static class Graph
         int nCells = pos.Length / 3;
         double[] dist = new double[nbr.Length];
         Array.Fill(dist, double.PositiveInfinity);
-        Span<double> a = stackalloc double[3];
-        Span<double> b = stackalloc double[3];
-        for (int c = 0; c < nCells; c++)
+        // 칸마다 제 이웃 슬롯만 쓰므로 나눠 돌려도 결과가 같습니다.
+        Parallelism.For(0, nCells, c =>
         {
+            Span<double> a = stackalloc double[3];
+            Span<double> b = stackalloc double[3];
             for (int s = 0; s < CellGraph.NSlots; s++)
             {
                 int v = nbr[(c * CellGraph.NSlots) + s];
@@ -285,7 +293,7 @@ public static class Graph
                     dist[(c * CellGraph.NSlots) + s] = LinAlg.Norm3(a);
                 }
             }
-        }
+        });
         return dist;
     }
 }

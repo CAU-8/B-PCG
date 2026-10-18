@@ -241,9 +241,11 @@ public static class Water
     /// <summary>
     /// 호수·강·수면·골짜기 깊이 (water_bodies). 반환: water_level_m, is_lake, is_river, river_width_m, river_depth_m, valley_depth_m.
     /// receiver·order·discharge 는 솔버 결과 또는 reroute 결과(order 없으면 null).
+    /// valleyZ: 골짜기 깊이를 잴 때 '골짜기 가장자리' 높이로 쓸 고도 [m] (N,). null 이면 z 를 씁니다.
     /// </summary>
     public static FieldSet WaterBodies(
-        CellGraph graph, double[] z, long[] receiver, long[]? order, double[] discharge, bool[] isOcean, Config cfg)
+        CellGraph graph, double[] z, long[] receiver, long[]? order, double[] discharge, bool[] isOcean, Config cfg,
+        double[]? valleyZ = null)
     {
         int n = graph.NCells;
         double[] zz = AsVector(z, n, "z");
@@ -302,7 +304,7 @@ public static class Water
             }
         }
         WaterLevelKernel(ord, rcv, kind, h);
-        double[] vd = ValleyDepth(graph, zz, h, isRiver, window);
+        double[] vd = ValleyDepth(graph, valleyZ ?? zz, h, isRiver, window);
         return new FieldSet
         {
             ["water_level_m"] = h,
