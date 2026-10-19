@@ -430,13 +430,13 @@ public static class Pipeline
         {
             isWater[c] = ocean[c] || isLake[c] || isRiver[c];
         }
-        (double[] zGw, double[] baseLevel, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
+        (double[] zGw, double[] zGwLower, double[] baseLevel, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
             graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean);
         sec["groundwater"] = Seconds(t);
 
-        // --- 동굴 층
+        // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
         t = Stopwatch.GetTimestamp();
-        FieldSet caves = Caves.CaveLevels(graph, z, zGw, baseLevel, wb.Get<double>("valley_depth_m"), columns, cfg);
+        FieldSet caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, wb.Get<double>("valley_depth_m"), columns, cfg);
         sec["caves"] = Seconds(t);
 
         t = Stopwatch.GetTimestamp();
@@ -459,6 +459,7 @@ public static class Pipeline
         output["surface_rock"] = rock;
         output.Update(soil);
         output["water_table_m"] = zGw;
+        output["water_table_lower_m"] = zGwLower;
         output.Update(caves);
         output.Set2D("strata_bottom_m", columns.Bottom, columns.NLayers);
         output.Set2D("strata_rock", columns.Rock, columns.NLayers + 1);

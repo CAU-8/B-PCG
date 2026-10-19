@@ -59,9 +59,15 @@ def test_water_table(bundle, cfg):
     lake = f["is_lake"]
     dry = land & ~lake
     assert (wt[dry] <= z[dry] + 1e-3).all()  # 지표에서 자름
-    assert (wt[land] >= z[land] - float(cfg["groundwater"]["max_depth_m"]) - 1e-3).all()
+    assert np.isfinite(wt).all()  # 깊이로는 자르지 않지만 값은 늘 있음
     assert (wt[~land] == 0).all()
     assert np.allclose(wt[lake], f["water_level_m"][lake], atol=1e-3)  # 호수에서는 수면
+    # 아래 지하수면(막는 층 아래 녹는 암석의 물 높이)은 맨 위 지하수면보다 높지 않고,
+    # 물 칸에서는 같음
+    lower = f["water_table_lower_m"].astype(np.float64)
+    assert np.isfinite(lower).all() and (lower <= wt + 1e-3).all()
+    wet = lake | f["is_river"] | ~land
+    assert np.allclose(lower[wet], wt[wet], atol=1e-3)
 
 
 def test_soil(bundle, cfg):
@@ -86,8 +92,8 @@ def test_caves_only_in_soluble_rock_at_water_table(cave_hero):
     assert has0.any(), "강 문턱을 낮춘 평면 히어로에는 동굴이 있어야 합니다"
     rock = rock_at(cave_hero, np.where(has0, c0, z) - 0.01)
     assert set(np.unique(rock[has0])) <= SOLUBLE
-    # 아래층 동굴 = 지금 지하수면 (잠긴 층)
-    assert np.allclose(c0[has0], f["water_table_m"][has0], atol=1e-3)
+    # 아래층 동굴 = 녹는 암석 안의 지금 물 높이 (아래 지하수면, 잠긴 층)
+    assert np.allclose(c0[has0], f["water_table_lower_m"][has0], atol=1e-3)
     c1 = f["cave_level_1_m"].astype(np.float64)
     has1 = np.isfinite(c1)
     rock1 = rock_at(cave_hero, np.where(has1, c1, z) - 0.01)

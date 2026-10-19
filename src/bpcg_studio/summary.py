@@ -102,8 +102,7 @@ SCORE_TEXT: dict[str, dict[str, str]] = {
     "water_rule_violations": {
         "label": "물 규칙 위반 칸",
         "meaning": "물 규칙을 어긴 칸 수의 합입니다: 지하수면이 땅 위로 솟음, 물 칸의 지하수면이 "
-        "수면과 다름, 지하수면이 땅 겉에서 최대 깊이(groundwater.max_depth_m, 기본 300 m)보다 "
-        "깊음, 값이 비어 있음(NaN).",
+        "수면과 다름, 아래 지하수면이 지하수면보다 높음, 값이 비어 있음(NaN).",
         "earth": "기준 0",
     },
     "grid_alignment": {

@@ -80,6 +80,12 @@ FIELDS: dict[str, FieldInfo] = {
     "alluvium_m": _f("subsurface", "m", "float32", "충적층(퇴적층) 두께"),
     "bare_rock": _f("subsurface", "", "bool", "맨 암반"),
     "water_table_m": _f("subsurface", "m", "float32", "지하수면 z_gw"),
+    "water_table_lower_m": _f(
+        "subsurface",
+        "m",
+        "float32",
+        "아래 지하수면 (막는 층 아래 녹는 암석의 물 높이, 없으면 지하수면과 같음)",
+    ),
     "valley_depth_m": _f("subsurface", "m", "float32", "가장 가까운 강의 골짜기 깊이"),
     "cave_level_0_m": _f(
         "subsurface", "m", "float32", "동굴 아래층 (지금 지하수면, 잠김). 없으면 NaN"

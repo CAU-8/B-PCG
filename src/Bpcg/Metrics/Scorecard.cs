@@ -141,38 +141,43 @@ public static class Scorecard
         return (total > 0 ? (double)hit / total : double.NaN, total);
     }
 
-    /// <summary>지하수면 규칙 위반 칸 수 (water_rule_violations): above, water, deep, nan, total.</summary>
+    /// <summary>
+    /// 지하수면 규칙 위반 칸 수 (water_rule_violations): above(물 없는 칸의 지하수면이 지표 위), water(물 칸의 지하수면 ≠
+    /// 수면), lower(아래 지하수면이 지하수면보다 높음, zGwLower 를 줄 때만), nan, total. 지하수면은 깊이로 자르지 않으므로
+    /// 깊이는 보지 않습니다.
+    /// </summary>
     public static OrderedDictionary<string, object?> WaterRuleViolations(
-        double[] z, double[] zGw, double[] waterLevel, double? maxDepth = null, double tol = 1.0e-3)
+        double[] z, double[] zGw, double[] waterLevel, double[]? zGwLower = null, double tol = 1.0e-3)
     {
         int n = z.Length;
-        if (zGw.Length != n || waterLevel.Length != n)
+        if (zGw.Length != n || waterLevel.Length != n || (zGwLower is not null && zGwLower.Length != n))
         {
-            throw new ArgumentException("z, z_gw, water_level 은 같은 (N,) 모양이어야 합니다");
+            throw new ArgumentException(
+                $"z, z_gw, water_level, z_gw_lower 는 같은 (N,) 모양이어야 합니다: {n}, {zGw.Length}, {waterLevel.Length}, {zGwLower?.Length}");
         }
         long above = 0;
         long water = 0;
-        long deep = 0;
+        long lower = 0;
         long nan = 0;
         long total = 0;
         for (int c = 0; c < n; c++)
         {
             bool wet = double.IsFinite(waterLevel[c]);
-            bool bNan = !double.IsFinite(zGw[c]);
+            bool bNan = !double.IsFinite(zGw[c]) || (zGwLower is not null && !double.IsFinite(zGwLower[c]));
             bool bAbove = !wet && zGw[c] > z[c] + tol;
             bool bWater = wet && Math.Abs(zGw[c] - waterLevel[c]) > tol;
-            bool bDeep = maxDepth is double md && zGw[c] < z[c] - md - tol;
+            bool bLower = zGwLower is not null && zGwLower[c] > zGw[c] + tol;
             above += bAbove ? 1 : 0;
             water += bWater ? 1 : 0;
-            deep += bDeep ? 1 : 0;
+            lower += bLower ? 1 : 0;
             nan += bNan ? 1 : 0;
-            total += bNan || bAbove || bWater || bDeep ? 1 : 0;
+            total += bNan || bAbove || bWater || bLower ? 1 : 0;
         }
         return new OrderedDictionary<string, object?>
         {
             ["above"] = above,
             ["water"] = water,
-            ["deep"] = deep,
+            ["lower"] = lower,
             ["nan"] = nan,
             ["total"] = total,
         };
@@ -549,14 +554,10 @@ public static class Scorecard
 
         Run(jobs, $"{p}.water_rule_violations", "check", "cells", l.Missing(["z_m", "water_table_m", "water_level_m"]), () =>
         {
-            double? maxDepth = null;
-            if (l.Cfg is not null && l.Cfg.Contains("groundwater") && l.Cfg.Sec("groundwater").Contains("max_depth_m"))
-            {
-                maxDepth = l.Cfg.F("groundwater.max_depth_m");
-            }
+            double[]? lower = l.F.Contains("water_table_lower_m") ? l.D("water_table_lower_m") : null;
             OrderedDictionary<string, object?> r = WaterRuleViolations(
-                l.D("z_m"), l.D("water_table_m"), l.D("water_level_m"), maxDepth, th["water_rule_tol_m"]);
-            string note = $"땅 위로 솟음 {r["above"]}, 물 칸 수면 불일치 {r["water"]}, 최대 깊이 넘음 {r["deep"]}, NaN {r["nan"]}. 기준 0";
+                l.D("z_m"), l.D("water_table_m"), l.D("water_level_m"), lower, th["water_rule_tol_m"]);
+            string note = $"땅 위로 솟음 {r["above"]}, 물 칸 수면 불일치 {r["water"]}, 아래 지하수면이 더 높음 {r["lower"]}, NaN {r["nan"]}. 기준 0";
             long total = (long)r["total"]!;
             return (total, total == 0, note);
         });

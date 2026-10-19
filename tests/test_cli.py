@@ -16,6 +16,7 @@ CORRIDOR_FILES = (
     "surround25.bin",
     "water.bin",
     "water_table.bin",
+    "water_table_lower.bin",
     "strata.u8",
     "strata.json",
     "manifest.json",
