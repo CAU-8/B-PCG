@@ -1,7 +1,8 @@
 """3D 샘플(HeroVolume)을 구운 재질 부피 검사 (docs/pipeline.md 10장): 회랑 strata.u8.
 
-재질 부피는 HeroVolume 을 회랑 복셀마다 표본한 결과입니다. 동굴 빈 곳은 지하수면 아래면 물(254),
-위면 공기(255)이고, 녹는 암석 둘레에만 있으며, 윗면은 회랑 지표를 따릅니다.
+재질 부피는 HeroVolume 을 회랑 복셀마다 표본한 결과입니다. 동굴 빈 곳은 아래 지하수면
+(녹는 암석 안의 물 높이, water_table_lower) 아래면 물(254), 위면 공기(255)입니다.
+녹는 암석 둘레에만 있고, 윗면은 회랑 지표를 따릅니다.
 """
 
 import numpy as np
@@ -22,8 +23,8 @@ def volume(request):
     vol = np.fromfile(corridor / "strata.u8", dtype=np.uint8).reshape(rows, layers, cols)
     top_meta = read_json(corridor / "strata_top.json")
     top = np.fromfile(corridor / "strata_top.bin", dtype="<f4").reshape(rows, cols)
-    wt_meta = read_json(corridor / "water_table.json")
-    wt = np.fromfile(corridor / "water_table.bin", dtype="<f4").reshape(
+    wt_meta = read_json(corridor / "water_table_lower.json")
+    wt = np.fromfile(corridor / "water_table_lower.bin", dtype="<f4").reshape(
         wt_meta["height"], wt_meta["width"]
     )
     return meta, vol, top_meta, top.astype(np.float64), wt_meta, wt.astype(np.float64)
@@ -48,7 +49,7 @@ def test_values_are_rocks_water_or_air(volume):
 
 
 def test_cave_void_is_flooded_below_water_table(volume):
-    """빈 곳은 지하수면 아래 물, 위 공기.
+    """빈 곳은 아래 지하수면 아래 물, 위 공기.
 
     재질 부피와 회랑 지하수면은 각자 히어로 격자(수십~100 m)에서 따로 표본하므로 경계에서 조금
     어긋납니다. 모든 복셀이 세 층(3·dy) 안, 98 % 이상이 한 층(dy) 안이어야 합니다.

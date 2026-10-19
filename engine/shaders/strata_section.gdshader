@@ -1,7 +1,8 @@
 // 단면 판 셰이더. 자르는 면 위에 재질 부피를 칠합니다.
 //
 // 지표 위는 버리고, 동굴(공기)도 버려 뒤의 동굴 메시가 보이게 합니다.
-// 지하수면 아래는 파랗게 물들이고, 지하수면과 지표는 선으로 긋습니다.
+// 아래 지하수면 아래는 파랗게 물들이고, 두 지하수면과 지표는 선으로 긋습니다.
+// 막는 층(셰일 등) 위에 얹힌 물이 있으면 위 지하수면(water_table)과 아래 지하수면(water_table_lower)이 다릅니다.
 // 구운 깊이(strata_size.y · dy)보다 깊은 곳은 회색 빗금입니다.
 // 지표에서 10 m 마다 가는 선, 50 m 마다 굵은 선을 그어 깊이를 읽게 합니다.
 shader_type spatial;
@@ -13,6 +14,7 @@ render_mode unshaded, cull_disabled;
 // 회랑 지표와 지하수면 높이맵 (값 + surface_origin.y = 엔진 Y, 같은 격자)
 uniform sampler2D surface_height : filter_linear, repeat_disable;
 uniform sampler2D water_table : filter_linear, repeat_disable;
+uniform sampler2D water_table_lower : filter_linear, repeat_disable;
 uniform vec3 surface_origin = vec3(0.0);
 uniform float surface_spacing_m = 2.0;
 // (열 수, 행 수)
@@ -58,10 +60,11 @@ void fragment() {
 	}
 	float line_m = max(fwidth(p.y) * 1.5, 0.15);
 	float wt = grid_y(water_table, p.xz);
-	if (p.y < wt) {
+	float wt_lower = min(grid_y(water_table_lower, p.xz), wt);
+	if (p.y < wt_lower) {
 		c = mix(c, SATURATED_TINT, 0.22);
 	}
-	if (abs(p.y - wt) < line_m) {
+	if (abs(p.y - wt) < line_m || abs(p.y - wt_lower) < line_m) {
 		c = WATER_TABLE_LINE;
 	}
 	float depth = surface - p.y;

@@ -89,7 +89,7 @@ $GODOT --path engine -- --baked-dir="$(pwd)/out/earth/corridor"
 | 3 | 호수·강 수면 | `water` | 반투명한 물 |
 | 4 | 지하수면 | `water_table` | 땅속에서 물이 차 있는 높이를 반투명 하늘색 면으로. 처음 켤 때 만듭니다 |
 | 5 | 동굴 | `caves.glb` | 동굴 벽. 벽의 앞면이 동굴 안쪽을 보고 있어, 밖(땅속, 단면)에서는 동굴 속이 들여다보입니다. 벽 색은 벽 뒤 암석 색 |
-| 6 | 지층 단면 | `strata.u8`, `strata_top` | 단면 칼이 자른 면에 그린 땅속 암석. 지하수면 아래는 파랗게, 지하수면은 하늘색 선, 10 m마다 가는 선·50 m마다 굵은 선, 구운 깊이보다 깊은 곳은 회색 빗금 |
+| 6 | 지층 단면 | `strata.u8`, `strata_top`, `water_table_lower` | 단면 칼이 자른 면에 그린 땅속 암석. 아래 지하수면 아래는 파랗게, 두 지하수면은 하늘색 선(셰일 같은 막는 층 위에 물이 얹힌 곳은 선이 둘), 10 m마다 가는 선·50 m마다 굵은 선, 구운 깊이보다 깊은 곳은 회색 빗금. 구운 깊이(약 300 m)보다 깊은 지하수면은 보이지 않습니다 |
 | 7 | 동굴 입구 구멍 | `cave_mouth` | 땅 표면이 동굴 빈 곳과 겹치는 곳을 뚫어 입구를 보입니다('만 보기' 대상 아님) |
 | 8 | 프랙탈 디테일 | `heightmap_detail`, `cave_mouth_detail` | 회랑 지형에 50 m보다 짧은 잔 거칠기를 더한 보기용 지형. 파일이 있을 때만 있고 처음에 켜져 있습니다 |
 
@@ -230,7 +230,8 @@ C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.Lo
 | `heightmap`, `surround25` | 지형 메시·충돌 (`HeightmapTerrain`) |
 | `heightmap_detail`, `cave_mouth_detail` | (있으면) 프랙탈 디테일 레이어. `heightmap`·`cave_mouth` 와 같은 격자 |
 | `water` | 물이 있는 표본(−10,000보다 큼)이 닿는 칸만 사각형으로 |
-| `water_table` | 지하수면 메시(처음 켤 때)와 단면의 지하수면 선 |
+| `water_table` | 지하수면 메시(처음 켤 때)와 단면의 지하수면 선. 땅을 파면 처음 만나는 물의 높이 |
+| `water_table_lower` | (있으면) 아래 지하수면: 막는 층 아래 녹는 암석의 물 높이. 단면은 이 아래를 젖은 땅으로 칠합니다. 없는 옛 굽기는 `water_table` 과 같다고 봅니다 |
 | `strata.u8` + `strata.json` + `strata_top` | `R8` 3D 텍스처(가로 = 열, 세로 = 층, 깊이 = 행)와 윗면 `RF` 텍스처. 한 변이 2,048을 넘으면 쓰지 않습니다 |
 | `cave_mouth` | `RF` 텍스처. 음수인 곳의 지형을 뚫음 |
 | `caves.glb` | 편집기가 가져왔으면 `GD.Load()`, 아니면 실행 중 `GltfDocument` |

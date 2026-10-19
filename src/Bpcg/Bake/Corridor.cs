@@ -560,6 +560,10 @@ public static class Corridor
         files["water"] = wmeta;
         double[] zgw = vol.WaterTable(gx, gy);
         files["water_table"] = Heightmap.WriteHeightmap(Path.Combine(outDir, "water_table"), zgw, nrow, ncol, voxel, origin);
+        // 아래 지하수면: 막는 층 아래 녹는 암석의 물 높이. 단면은 이 아래를 젖은 땅으로 칠하고, 동굴 안 물도 이 높이입니다.
+        double[] zgwLower = vol.WaterTableLower(gx, gy);
+        files["water_table_lower"] = Heightmap.WriteHeightmap(
+            Path.Combine(outDir, "water_table_lower"), zgwLower, nrow, ncol, voxel, origin);
         sec["water"] = Seconds(t);
 
         // --- 동굴 입구 구멍
@@ -673,7 +677,7 @@ public static class Corridor
         var fileNames = new List<string>
         {
             "heightmap.bin", "heightmap.json", "surround25.bin", "surround25.json",
-            "water.bin", "water.json", "water_table.bin", "water_table.json",
+            "water.bin", "water.json", "water_table.bin", "water_table.json", "water_table_lower.bin", "water_table_lower.json",
             "strata.u8", "strata.json", "strata_top.bin", "strata_top.json", "entrances.json",
             "cave_mouth.bin", "cave_mouth.json",
         };

@@ -52,7 +52,9 @@ public partial class BakedLayers : Node3D
             + "벽 색은 벽 뒤 암석의 색입니다."),
         new("section", "지층 단면", true,
             "단면 칼(X)이 자른 면에 땅속 암석을 칠합니다.\n"
-            + "지하수면 아래는 파랗고, 지하수면은 하늘색 선입니다. 깊이 10 m마다 가는 선, 50 m마다 굵은 선을 긋습니다."),
+            + "물에 찬 땅은 파랗고, 지하수면은 하늘색 선입니다. 셰일 같은 막는 층 위에 물이 얹혀 있으면\n"
+            + "선이 두 개입니다(위: 얹힌 물, 아래: 녹는 암석 안의 물). 단면 부피(약 300 m)보다 깊은 지하수면은 보이지 않습니다.\n"
+            + "깊이 10 m마다 가는 선, 50 m마다 굵은 선을 긋습니다."),
         new("entrance_holes", "동굴 입구 구멍", false,
             "땅 표면이 동굴의 빈 곳과 겹치는 자리에 구멍을 뚫어 동굴 입구를 보여 줍니다."),
         new("fractal_detail", "프랙탈 디테일", false,
@@ -99,6 +101,9 @@ public partial class BakedLayers : Node3D
 
     /// <summary>지하수면 높이맵 (없으면 null).</summary>
     public HeightmapLoader? WaterTable { get; private set; }
+
+    /// <summary>아래 지하수면 높이맵: 막는 층 아래 녹는 암석의 물 높이 (옛 굽기에는 없어 null).</summary>
+    public HeightmapLoader? WaterTableLower { get; private set; }
 
     /// <summary>동굴 입구: 통로 한가운데 끝과 산비탈 밖 끝 (엔진 좌표).</summary>
     public List<Vector3> EntrancesInside { get; } = [];
@@ -210,6 +215,11 @@ public partial class BakedLayers : Node3D
         {
             WaterTable = wt;
             _visible["water_table"] = false;
+        }
+        if (FileAccess.FileExists(BakedDir.PathJoin("water_table_lower.json")))
+        {
+            HeightmapLoader wtl = HeightmapLoader.LoadStem(BakedDir.PathJoin("water_table_lower"));
+            WaterTableLower = wtl.IsValid() ? wtl : null;
         }
         Lap("water", t);
         t = Time.GetTicksMsec();
@@ -705,16 +715,14 @@ public partial class BakedLayers : Node3D
         }
         var m = new ShaderMaterial { Shader = GD.Load<Shader>(SectionShaderPath) };
         Strata.ApplyTo(m);
-        if (WaterTable is not null && WaterTable.Width == surface.Width && WaterTable.Height == surface.Height)
-        {
-            m.SetShaderParameter("water_table", HeightTexture(WaterTable));
-        }
-        else
-        {
-            // 지하수면이 없으면 아주 깊게 두어 선과 물들이기가 생기지 않게 합니다.
-            var deep = new HeightmapLoader { Width = 1, Height = 1, Heights = [-1.0e6f] };
-            m.SetShaderParameter("water_table", HeightTexture(deep));
-        }
+        // 지하수면이 없으면 아주 깊게 두어 선과 물들이기가 생기지 않게 합니다.
+        var deep = new HeightmapLoader { Width = 1, Height = 1, Heights = [-1.0e6f] };
+        bool hasTable = WaterTable is not null && WaterTable.Width == surface.Width && WaterTable.Height == surface.Height;
+        m.SetShaderParameter("water_table", HeightTexture(hasTable ? WaterTable! : deep));
+        // 아래 지하수면이 없는 옛 굽기는 지하수면과 같다고 봅니다.
+        bool hasLower = WaterTableLower is not null && WaterTableLower.Width == surface.Width
+            && WaterTableLower.Height == surface.Height;
+        m.SetShaderParameter("water_table_lower", HeightTexture(hasLower ? WaterTableLower! : (hasTable ? WaterTable! : deep)));
         _section = new MeshInstance3D
         {
             Name = "Section",

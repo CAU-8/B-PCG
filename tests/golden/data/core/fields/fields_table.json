@@ -333,6 +333,13 @@
         "지하수면 z_gw"
       ],
       [
+        "water_table_lower_m",
+        "subsurface",
+        "m",
+        "float32",
+        "아래 지하수면 (막는 층 아래 녹는 암석의 물 높이, 없으면 지하수면과 같음)"
+      ],
+      [
         "valley_depth_m",
         "subsurface",
         "m",

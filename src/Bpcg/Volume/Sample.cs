@@ -23,6 +23,9 @@ public sealed class ColumnValues
 
     public required double[] ZGw { get; init; }
 
+    /// <summary>아래 지하수면 (막는 층 아래 녹는 암석의 물 높이) [m]. 동굴 안 물은 이 높이 아래입니다.</summary>
+    public required double[] ZGwLower { get; init; }
+
     public required double[] LakeLevel { get; init; }
 
     public required double[] LakeDist { get; init; }
@@ -214,6 +217,9 @@ public sealed class HeroVolume
 
     public double[] ZGwMap { get; }
 
+    /// <summary>아래 지하수면 지도 (ny·nx). 필드가 없는 옛 묶음은 지하수면과 같습니다.</summary>
+    public double[] ZGwLowerMap { get; }
+
     public double[] LakeLevel { get; private set; } = [];
 
     public double[] LakeDist { get; private set; } = [];
@@ -322,6 +328,15 @@ public sealed class HeroVolume
             }
         }
         ZGwMap = zgw;
+        double[] zgwLower = fields.Contains("water_table_lower_m") ? Img("water_table_lower_m") : (double[])zgw.Clone();
+        for (int c = 0; c < n; c++)
+        {
+            if (!double.IsFinite(zgwLower[c]))
+            {
+                zgwLower[c] = zgw[c];
+            }
+        }
+        ZGwLowerMap = zgwLower;
         double[] level = Img("water_level_m");
         bool[] isLake = ImgB("is_lake");
         bool[] isOcean = fields.Contains("is_ocean") ? ImgB("is_ocean") : new bool[n];
@@ -964,6 +979,7 @@ public sealed class HeroVolume
         double[] soil = new double[cN];
         double[] alluv = new double[cN];
         double[] zgw = new double[cN];
+        double[] zgwLower = new double[cN];
         double[] lake = new double[cN];
         double[] lakeDist = new double[cN];
         double[] caveZ = new double[cN * kN];
@@ -995,6 +1011,7 @@ public sealed class HeroVolume
             soil[c] = Bl(Soil);
             alluv[c] = Bl(Alluvium);
             zgw[c] = Bl(ZGwMap);
+            zgwLower[c] = Bl(ZGwLowerMap);
             lakeDist[c] = Bl(LakeDist);
             Span<int> corner = [c00, c10, c01, c11];
             Span<double> wq = [w00, w10, w01, w11];
@@ -1111,6 +1128,7 @@ public sealed class HeroVolume
             Soil = soil,
             Alluvium = alluv,
             ZGw = zgw,
+            ZGwLower = zgwLower,
             LakeLevel = lake,
             LakeDist = lakeDist,
             RiverDist = l,
@@ -1327,7 +1345,8 @@ public sealed class HeroVolume
             {
                 hW = NpMath.PyMax(hW, cols.RiverLevel[c]);
             }
-            double lvl = d1 < 0.0 ? cols.ZGw[c] : hW;
+            // 땅 아래 빈 곳(동굴)은 녹는 암석 안의 물 높이(아래 지하수면) 아래가 물입니다. 땅 위는 수면 아래가 물입니다.
+            double lvl = d1 < 0.0 ? cols.ZGwLower[c] : hW;
             if (wD0)
             {
                 oD0[p] = d0;
@@ -1697,7 +1716,13 @@ public sealed class HeroVolume
     }, x, y);
 
     /// <summary>지하수면 z_gw (water_table, 쌍선형 보간).</summary>
-    public double[] WaterTable(double[] x, double[] y)
+    public double[] WaterTable(double[] x, double[] y) => MapBilinear(ZGwMap, x, y);
+
+    /// <summary>아래 지하수면 (water_table_lower, 쌍선형 보간). 동굴 안 물 높이입니다.</summary>
+    public double[] WaterTableLower(double[] x, double[] y) => MapBilinear(ZGwLowerMap, x, y);
+
+    // 칸 지도 map 을 (x, y) 에서 쌍선형으로 읽습니다 (Columns 의 zgw 와 같은 식).
+    private double[] MapBilinear(double[] map, double[] x, double[] y)
     {
         if (x.Length != y.Length)
         {
@@ -1710,7 +1735,7 @@ public sealed class HeroVolume
                 throw new ArgumentException("x, y 에 NaN 이나 inf 가 있습니다");
             }
         }
-        // Columns 의 zgw 와 같은 쌍선형 식입니다. 강·동굴·층 값은 필요 없어 계산하지 않습니다.
+        // 강·동굴·층 값은 필요 없어 계산하지 않습니다.
         int nx = Nx;
         int ny = Ny;
         double[] o = new double[x.Length];
@@ -1732,7 +1757,7 @@ public sealed class HeroVolume
             int c10 = (j0 * nx) + i0 + 1;
             int c01 = ((j0 + 1) * nx) + i0;
             int c11 = ((j0 + 1) * nx) + i0 + 1;
-            o[c] = (w00 * ZGwMap[c00]) + (w10 * ZGwMap[c10]) + (w01 * ZGwMap[c01]) + (w11 * ZGwMap[c11]);
+            o[c] = (w00 * map[c00]) + (w10 * map[c10]) + (w01 * map[c01]) + (w11 * map[c11]);
         });
         return o;
     }

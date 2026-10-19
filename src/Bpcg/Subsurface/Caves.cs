@@ -10,8 +10,9 @@ namespace Bpcg.Subsurface;
 /// 동굴 층과 입구 (docs/pipeline.md 8.4).
 /// </summary>
 /// <remarks>
-/// 0층은 지금 지하수면, 위층은 가까운 강 수면 + k·f_k·골짜기 깊이(옛 강 높이)입니다. 위층은 지하수면보다
-/// 통로 반지름 넘게 높아야(마른 층) 남깁니다. 입구 칸은 entrance_spacing_m 안에 하나만 남깁니다.
+/// 0층은 녹는 암석 안의 지금 물 높이(아래 지하수면), 위층은 가까운 강 수면 + k·f_k·골짜기 깊이(옛 강 높이)입니다.
+/// 위층은 그 물 높이보다 통로 반지름 넘게 높아야(마른 층) 남깁니다. 두 층 모두 지표 아래 groundwater.max_depth_m
+/// 안에만 둡니다(회랑 재질 부피를 굽는 깊이). 입구 칸은 entrance_spacing_m 안에 하나만 남깁니다.
 /// </remarks>
 public static class Caves
 {
@@ -247,12 +248,12 @@ public static class Caves
         }
         Fields.CheckFields(names);
 
-        // 0층: 지금 지하수면. 지하수면을 최대 깊이에서 자른 칸은 실제 수면이 아니라서 동굴을 두지 않습니다.
-        // 위층: 옛 강 높이 = 가까운 강 수면 + k·f_k·골짜기 깊이. 지하수면보다 r 넘게 높고(마른 층) 최대 깊이 안일 때만.
+        // 0층: 녹는 암석 안의 지금 물 높이(zGw 로 받는 아래 지하수면). 지표 아래 최대 깊이 안일 때만.
+        // 위층: 옛 강 높이 = 가까운 강 수면 + k·f_k·골짜기 깊이. 0층 물 높이보다 r 넘게 높고(마른 층) 최대 깊이 안일 때만.
         double[] zk = new double[n * levels];
         for (int c = 0; c < n; c++)
         {
-            zk[c * levels] = zz[c] - gw[c] >= maxDepth - 1e-6 ? NpMath.NaN : gw[c];
+            zk[c * levels] = zz[c] - gw[c] <= maxDepth ? gw[c] : NpMath.NaN;
             for (int k = 1; k < levels; k++)
             {
                 double v = baseLevel[c] + (k * fK * valleyDepth[c]);
