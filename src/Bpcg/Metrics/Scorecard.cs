@@ -33,7 +33,9 @@ public static class Scorecard
     };
 
     public static readonly (double Lo, double Hi) EarthHackRange = (0.49, 0.6);
-    public static readonly (double Lo, double Hi) EarthGwSurfaceRange = (0.22, 0.32);
+    // 지하수면이 지표 0.5 m 안인 전 지구 육지 비율 (Fan 2013 보충자료 6절: 0.25 m 안 16.3%, 1 m 안 21.6%, 사막 포함 평균).
+    // 본문의 22~32% 는 1~3 m 문턱이라 0.5 m 문턱과 견주지 않습니다.
+    public static readonly (double Lo, double Hi) EarthGwSurfaceRange = (0.16, 0.22);
 
     /// <summary>합격선 dict. cfg 에 [metrics] 절이 있으면 같은 키를 덮어씁니다.</summary>
     public static OrderedDictionary<string, double> Thresholds(Config? cfg = null)
@@ -352,12 +354,19 @@ public static class Scorecard
                 $"본류 L = {PyFormat.General(c, 3)}·A^h (km, km²). 지구 약 {PyFormat.Repr(EarthHackRange.Lo)}~{PyFormat.Repr(EarthHackRange.Hi)}");
         });
 
-        Run(jobs, $"{p}.gw_surface_fraction", "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
+        // 행성 지도(L0) 칸은 한 변 약 19.5 km 라 거의 모든 육지 칸이 물길(지하수가 빠지는 곳)이고, 그 칸의 지하수면은
+        // 수면이나 지표와 같습니다. 그래서 행성 값은 칸 크기가 정하는 값이라 forced 로 두고 지구와 견주지 않습니다.
+        bool sphereLevel = l.Graph is not null && l.Graph.Kind == "sphere";
+        Run(jobs, $"{p}.gw_surface_fraction", sphereLevel ? "forced" : "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
         {
             double[] z = l.D("z_m");
             double v = Hypsometry.GwSurfaceFraction(z, l.D("water_table_m"), l.Land(z.Length), th["gw_surface_tol_m"], l.Graph?.Area);
             string note = $"z − z_gw ≤ {G(th["gw_surface_tol_m"])} m 인 육지 면적 비율. 지구 "
-                + $"{PyFormat.Repr(EarthGwSurfaceRange.Lo)}~{PyFormat.Repr(EarthGwSurfaceRange.Hi)}";
+                + $"{PyFormat.Repr(EarthGwSurfaceRange.Lo)}~{PyFormat.Repr(EarthGwSurfaceRange.Hi)} (Fan 2013, 0.5 m 문턱, 전 지구 평균)";
+            if (sphereLevel)
+            {
+                note += ". 행성 칸은 거의 모두 물길 칸이라 칸 크기가 정하는 값이고, 지구와 견주지 않습니다";
+            }
             return (FiniteOrNull(v), null, note);
         });
 

@@ -7,11 +7,18 @@ using Bpcg.Numerics;
 namespace Bpcg.Subsurface;
 
 /// <summary>
-/// 동굴 층과 입구 (src/bpcg/subsurface/caves.py, docs/pipeline.md 8.4).
+/// 동굴 층과 입구 (docs/pipeline.md 8.4).
 /// </summary>
+/// <remarks>
+/// 0층은 지금 지하수면, 위층은 가까운 강 수면 + k·f_k·골짜기 깊이(옛 강 높이)입니다. 위층은 지하수면보다
+/// 통로 반지름 넘게 높아야(마른 층) 남깁니다. 입구 칸은 entrance_spacing_m 안에 하나만 남깁니다.
+/// </remarks>
 public static class Caves
 {
     public const int MaxLevels = 8;
+
+    // 입구를 솎을 때 칸마다 매기는 우선순위의 해시 용도 번호.
+    private const long StreamEntrance = 7251;
 
     /// <summary>층 k 의 FIELDS 이름 (cave_level_0_m, ...).</summary>
     public static string LevelFieldName(int k) => $"cave_level_{k}_m";
@@ -87,16 +94,124 @@ public static class Caves
     }
 
     /// <summary>
+    /// 층마다 입구 칸 사이를 spacing 넘게 띄웁니다. 칸마다 시드로 정한 우선순위를 매기고, spacing 안에 더 높은
+    /// 우선순위의 입구가 있으면 그 칸의 입구를 지웁니다(같으면 번호가 작은 칸이 이김). 지운 칸이 땅속에 덮이지
+    /// 않은 칸이면 그 층 높이도 NaN 으로 두어 동굴이 그 칸에서 지표로 나오지 않게 합니다.
+    /// 칸마다 판정이 다른 칸의 판정과 상관없어 같은 시드면 같은 결과입니다.
+    /// </summary>
+    private static void ThinEntrances(
+        CellGraph graph, double[] z, double[] zk, int m, double twoR, double spacing, long seed, double[] levelOut,
+        byte[] entrance)
+    {
+        if (!(spacing > 0.0))
+        {
+            return;
+        }
+        double[] pos = graph.Pos;
+        double s2 = spacing * spacing;
+        for (int k = 0; k < m; k++)
+        {
+            var cand = new List<int>();
+            for (int c = 0; c < z.Length; c++)
+            {
+                if (((entrance[c] >> k) & 1) != 0)
+                {
+                    cand.Add(c);
+                }
+            }
+            if (cand.Count < 2)
+            {
+                continue;
+            }
+            var bucket = new Dictionary<(long, long, long), List<int>>();
+            (long, long, long) Key(int c) => (
+                (long)Math.Floor(pos[c * 3] / spacing), (long)Math.Floor(pos[(c * 3) + 1] / spacing),
+                (long)Math.Floor(pos[(c * 3) + 2] / spacing));
+            foreach (int c in cand)
+            {
+                (long, long, long) key = Key(c);
+                if (!bucket.TryGetValue(key, out List<int>? list))
+                {
+                    list = [];
+                    bucket[key] = list;
+                }
+                list.Add(c);
+            }
+            ulong Priority(int c) => Hashing.Hash3(seed, StreamEntrance, ((long)c * m) + k);
+            bool[] drop = new bool[cand.Count];
+            int kk = k;
+            Parallelism.For(0, cand.Count, i =>
+            {
+                int c = cand[i];
+                ulong pc = Priority(c);
+                (long bx, long by, long bz) = Key(c);
+                for (long dx = -1; dx <= 1; dx++)
+                {
+                    for (long dy = -1; dy <= 1; dy++)
+                    {
+                        for (long dz = -1; dz <= 1; dz++)
+                        {
+                            if (!bucket.TryGetValue((bx + dx, by + dy, bz + dz), out List<int>? list))
+                            {
+                                continue;
+                            }
+                            foreach (int v in list)
+                            {
+                                if (v == c)
+                                {
+                                    continue;
+                                }
+                                double ex = pos[v * 3] - pos[c * 3];
+                                double ey = pos[(v * 3) + 1] - pos[(c * 3) + 1];
+                                double ez = pos[(v * 3) + 2] - pos[(c * 3) + 2];
+                                if ((ex * ex) + (ey * ey) + (ez * ez) > s2)
+                                {
+                                    continue;
+                                }
+                                ulong pv = Priority(v);
+                                if (pv > pc || (pv == pc && v < c))
+                                {
+                                    drop[i] = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            for (int i = 0; i < cand.Count; i++)
+            {
+                if (!drop[i])
+                {
+                    continue;
+                }
+                int c = cand[i];
+                int ck = (c * m) + kk;
+                entrance[c] = (byte)(entrance[c] & ~(1 << kk));
+                if (!(z[c] - zk[ck] > twoR))
+                {
+                    levelOut[ck] = NpMath.NaN;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// 동굴 층 높이와 입구 비트 (cave_levels). 반환: cave_level_&lt;k&gt;_m (동굴 없으면 NaN), cave_entrance.
     /// </summary>
-    public static FieldSet CaveLevels(CellGraph graph, double[] z, double[] zGw, double[] valleyDepth, LayerColumns columns, Config cfg)
+    public static FieldSet CaveLevels(
+        CellGraph graph, double[] z, double[] zGw, double[] baseLevel, double[] valleyDepth, LayerColumns columns, Config cfg)
     {
         int n = graph.NCells;
         double[] zz = Water.AsVector(z, n, "z");
         double[] gw = Water.AsVector(zGw, n, "z_gw");
         if (valleyDepth.Length != n)
         {
-            throw new ArgumentException($"valley_depth 는 ({n},) 배열이어야 합니다");
+            throw new ArgumentException($"valley_depth 는 ({n},) 배열이어야 합니다 (받은 길이: {valleyDepth.Length})");
+        }
+        if (baseLevel.Length != n)
+        {
+            throw new ArgumentException($"base_level 은 ({n},) 배열이어야 합니다 (받은 길이: {baseLevel.Length})");
         }
         foreach (double v in valleyDepth)
         {
@@ -113,14 +228,17 @@ public static class Caves
         double fK = cfg.F("caves.incision_fraction");
         double r = cfg.F("caves.passage_radius_m");
         double tol = cfg.F("caves.entrance_tolerance_m");
+        double spacing = cfg.F("caves.entrance_spacing_m");
+        double maxDepth = cfg.F("groundwater.max_depth_m");
         if (!(levels >= 1 && levels <= MaxLevels))
         {
             throw new ArgumentException($"caves.levels 는 1..{MaxLevels} 이어야 합니다: {levels}");
         }
-        if (!(fK >= 0.0 && r > 0.0 && tol >= 0.0))
+        if (!(fK >= 0.0 && r > 0.0 && tol >= 0.0 && spacing >= 0.0))
         {
             throw new ArgumentException(
-                $"caves 설정은 incision_fraction ≥ 0, passage_radius_m > 0, entrance_tolerance_m ≥ 0 이어야 합니다: {fK}, {r}, {tol}");
+                "caves 설정은 incision_fraction ≥ 0, passage_radius_m > 0, entrance_tolerance_m ≥ 0, entrance_spacing_m ≥ 0 "
+                + $"이어야 합니다. 받은 값: {fK}, {r}, {tol}, {spacing}");
         }
         var names = new List<string>();
         for (int k = 0; k < levels; k++)
@@ -129,13 +247,16 @@ public static class Caves
         }
         Fields.CheckFields(names);
 
+        // 0층: 지금 지하수면. 지하수면을 최대 깊이에서 자른 칸은 실제 수면이 아니라서 동굴을 두지 않습니다.
+        // 위층: 옛 강 높이 = 가까운 강 수면 + k·f_k·골짜기 깊이. 지하수면보다 r 넘게 높고(마른 층) 최대 깊이 안일 때만.
         double[] zk = new double[n * levels];
         for (int c = 0; c < n; c++)
         {
-            zk[c * levels] = gw[c];
+            zk[c * levels] = zz[c] - gw[c] >= maxDepth - 1e-6 ? NpMath.NaN : gw[c];
             for (int k = 1; k < levels; k++)
             {
-                zk[(c * levels) + k] = gw[c] + (k * fK * valleyDepth[c]);
+                double v = baseLevel[c] + (k * fK * valleyDepth[c]);
+                zk[(c * levels) + k] = v > gw[c] + r && zz[c] - v <= maxDepth ? v : NpMath.NaN;
             }
         }
         byte[] rock = Model.RockAt(columns.Bottom, columns.Rock, columns.NLayers, zk);
@@ -147,6 +268,7 @@ public static class Caves
         double[] levelOut = new double[n * levels];
         byte[] entrance = new byte[n];
         EntranceKernel(graph.Nbr, zz, zk, soluble, levels, 2.0 * r, tol + r, levelOut, entrance);
+        ThinEntrances(graph, zz, zk, levels, 2.0 * r, spacing, cfg.I("planet.seed"), levelOut, entrance);
         var o = new FieldSet();
         for (int k = 0; k < levels; k++)
         {

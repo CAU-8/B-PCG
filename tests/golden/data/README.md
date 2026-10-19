@@ -5,3 +5,4 @@ golden 자료는 "이 입력이면 이 출력이 나와야 한다"를 적어 둔
 - 출처: 포팅 당시 `src/bpcg` 함수 출력 (스크립트는 git 기록의 `csharp/golden/export_golden.py`). 만든 환경(Python·numpy·numba·scipy 판, 운영체제)은 `manifest.json` 에 있습니다.
 - 사례 파일: `<모듈>/<사례>.npz`(배열 이름 `in.<이름>`·`out.<이름>`) + 같은 이름의 `.json`(배열이 아닌 값).
 - 초월 함수(tan·atan·sin 등)를 거친 값은 만든 운영체제의 libm 을 따릅니다. 지금 자료는 macOS arm64 에서 만들었습니다.
+- 예외: 설정 사례(`core/config` 의 `load_earth_*`, `overrides`)는 `configs/planets/earth.toml` 의 글자를 정답으로 담습니다. 그래서 읽는 규칙이 그대로여도 `earth.toml` 에 키를 더하거나 값을 바꾸면 정답이 달라집니다. 그때만 `uv run python tests/golden/refresh_config.py` 로 다시 씁니다. 이 스크립트는 Python 판 `load_config` 와 같은 규칙으로 읽고, 2026-10-19 에 포팅 때 자료(바꾸기 전 `earth.toml`)를 글자 하나 다르지 않게 다시 만드는 것을 확인했습니다. 덮어쓰기의 형 검사(`checked`)와 오류 사례는 설정 내용과 상관없어 그대로 둡니다.

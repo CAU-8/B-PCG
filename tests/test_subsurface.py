@@ -95,6 +95,45 @@ def test_caves_only_in_soluble_rock_at_water_table(cave_hero):
     assert (c1[has1 & has0] > c0[has1 & has0]).all()  # 위층(옛 지하수면)은 아래층보다 높음
 
 
+def _neighbor_gradients(b, values: np.ndarray) -> np.ndarray:
+    """값이 있는 이웃 칸 쌍마다 |Δ값| / 거리 [m/m]."""
+    nbr, dist = b.graph.nbr, b.graph.dist
+    has = np.isfinite(values)
+    out = []
+    for s in range(nbr.shape[1]):
+        k = nbr[:, s]
+        ok = (k >= 0) & has
+        ok &= has[np.where(k >= 0, k, 0)]
+        out.append(np.abs(values[ok] - values[k[ok]]) / dist[ok, s])
+    return np.concatenate(out)
+
+
+def test_lower_caves_lie_flat_in_platform_karst(hero, cfg):
+    # 탄산염 탁상지(층이 수평)에서는 석회암 지하수면이 강 높이에 거의 평평하고,
+    # 아래층 동굴도 그렇습니다.
+    # 지구 카르스트의 지하수면 기울기는 0.001~0.005 입니다(설정 groundwater.karst_gradient).
+    c0 = hero["cave_level_0_m"].astype(np.float64)
+    assert np.isfinite(c0).any(), "tiny 히어로에는 아래층 동굴이 있어야 합니다"
+    g = _neighbor_gradients(hero, c0)
+    grad = float(cfg["groundwater"]["karst_gradient"])
+    assert np.percentile(g, 90) <= 5 * grad, np.percentile(g, [50, 90, 99])
+
+
+@pytest.mark.parametrize("level", ["hero", "cave_hero"])
+def test_cave_entrances_are_spaced(request, level, cfg):
+    b = request.getfixturevalue(level)
+    pos = b.graph.pos
+    ent = b["cave_entrance"].astype(np.int64)
+    spacing = float(cfg["caves"]["entrance_spacing_m"])
+    for k in (0, 1):
+        idx = np.flatnonzero((ent >> k) & 1)
+        if idx.size < 2:
+            continue
+        d = np.sqrt(((pos[idx, None, :] - pos[None, idx, :]) ** 2).sum(axis=2))
+        np.fill_diagonal(d, np.inf)
+        assert d.min() > spacing - 1e-6, (k, d.min())
+
+
 @pytest.mark.parametrize("level", ["hero", "cave_hero"])
 def test_cave_entrances(request, level):
     f = request.getfixturevalue(level).fields
