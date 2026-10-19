@@ -1272,7 +1272,7 @@ public sealed class HeroVolume
             double dcave = double.PositiveInfinity;
             if (needCave)
             {
-                double dmin = double.PositiveInfinity;
+                double dLevel = double.PositiveInfinity;
                 for (int k = 0; k < nLv; k++)
                 {
                     double w = cols.CaveW[(c * nLv) + k];
@@ -1281,9 +1281,10 @@ public sealed class HeroVolume
                         double tK = NpMath.PyMax(
                             NpMath.PyMax(cols.NuDist[(c * nLv) + k] - rPass, Math.Abs(z - cols.CaveZ[(c * nLv) + k]) - rPass),
                             (0.5 - w) * dx);
-                        dmin = NpMath.PyMin(dmin, tK);
+                        dLevel = NpMath.PyMin(dLevel, tK);
                     }
                 }
+                double dCapsule = double.PositiveInfinity;
                 if (_bItems.Length > 0)
                 {
                     int ib = Math.Clamp((int)Math.Floor((px[p] - bx0) / bsize), 0, nbx - 1);
@@ -1292,10 +1293,10 @@ public sealed class HeroVolume
                     for (long q = _bStart[bb]; q < _bStart[bb + 1]; q++)
                     {
                         long e = _bItems[q];
-                        dmin = NpMath.PyMin(dmin, CapsuleDist(px[p], py[p], z, capA, capB, e) - rPass);
+                        dCapsule = NpMath.PyMin(dCapsule, CapsuleDist(px[p], py[p], z, capA, capB, e) - rPass);
                     }
                 }
-                if (dmin < double.PositiveInfinity)
+                if (NpMath.PyMin(dLevel, dCapsule) < double.PositiveInfinity)
                 {
                     double dSol = double.PositiveInfinity;
                     for (int i = 0; i <= nL; i++)
@@ -1307,9 +1308,13 @@ public sealed class HeroVolume
                             dSol = NpMath.PyMin(dSol, NpMath.PyMax(z - top, bot - z));
                         }
                     }
+                    // 입구 통로(캡슐)만 흙을 지나 지표로 열립니다. 층 통로는 흙·충적층 아래로 통로 반지름만큼 덮인
+                    // 곳에만 두어, 입구가 아닌 곳에서 동굴이 지표를 뚫지 않습니다.
                     double blend = NpMath.PyMin(cols.Alluvium[c] / AlluviumClipBlendM, 1.0);
                     double plane = surf - cols.Alluvium[c] - cols.Soil[c] + ((cols.Soil[c] + (2.0 * rPass)) * (1.0 - blend));
-                    dcave = NpMath.PyMax(NpMath.PyMax(dmin, dSol), z - plane);
+                    double planeLevel = surf - cols.Alluvium[c] - cols.Soil[c] - rPass;
+                    double dOpen = NpMath.PyMin(NpMath.PyMax(dLevel, z - planeLevel), NpMath.PyMax(dCapsule, z - plane));
+                    dcave = NpMath.PyMax(dOpen, dSol);
                 }
             }
             double dFinal = NpMath.PyMax(d1, -dcave);

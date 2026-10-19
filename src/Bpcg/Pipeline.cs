@@ -430,13 +430,13 @@ public static class Pipeline
         {
             isWater[c] = ocean[c] || isLake[c] || isRiver[c];
         }
-        (double[] zGw, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
-            graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, cfg, isOcean: ocean);
+        (double[] zGw, double[] baseLevel, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
+            graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean);
         sec["groundwater"] = Seconds(t);
 
         // --- 동굴 층
         t = Stopwatch.GetTimestamp();
-        FieldSet caves = Caves.CaveLevels(graph, z, zGw, wb.Get<double>("valley_depth_m"), columns, cfg);
+        FieldSet caves = Caves.CaveLevels(graph, z, zGw, baseLevel, wb.Get<double>("valley_depth_m"), columns, cfg);
         sec["caves"] = Seconds(t);
 
         t = Stopwatch.GetTimestamp();
