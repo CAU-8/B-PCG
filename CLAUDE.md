@@ -18,7 +18,8 @@
 |---|---|
 | C# 코드(`src/Bpcg`, `src/Bpcg.Cli`, `engine/`, `tests/Bpcg.Tests`) 작업 | 지시 원문 [docs/csharp_port_prompt.md](docs/csharp_port_prompt.md), 진행 기록 [docs/csharp_port.md](docs/csharp_port.md) 0장 |
 | 폴더, 코드 규칙, git | [docs/conventions.md](docs/conventions.md) |
-| 글을 쓰거나 고칠 때 | 이 파일 2~5장, [docs/writing.md](docs/writing.md), [docs/glossary.md](docs/glossary.md) |
+| 글을 쓰거나 고칠 때 | [Humanize.md](Humanize.md)(사용자가 정한 말투 규칙, 이 파일과 다르면 이쪽을 따름), 이 파일 2~5장, [docs/writing.md](docs/writing.md), [docs/glossary.md](docs/glossary.md) |
+| 지난 사정(지운 코드, 다시 올린 PR, 결정 대기)을 찾거나 적을 때 | [docs/history.md](docs/history.md) |
 | 공식과 함수의 약속 | [docs/pipeline.md](docs/pipeline.md) |
 
 여러 문서가 서로 다르게 말하면 이 순서로 따릅니다: 사용자의 말 > [docs/design/blueprint.md](docs/design/blueprint.md)(설계도) > [docs/pipeline.md](docs/pipeline.md) > [docs/guide/planet_guide.md](docs/guide/planet_guide.md). 2026-10-08부터 설계도의 원본은 저장소의 `blueprint.md`입니다. Claude 문서의 설계도 탭은 그 전까지의 보관본이고 더 고치지 않습니다.
