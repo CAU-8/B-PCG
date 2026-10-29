@@ -1,6 +1,6 @@
 # analysis/
 
-> 설계도에 적힌 숫자 가운데 "지구 반지름으로 정했다", "레이더 자료로는 θ를 잴 수 없었다" 같은 결정은 한 번씩 돌려 본 계산에서 나왔습니다. 이 폴더는 그 **일회성 연구 스크립트**를 모읍니다. 나중에 누가 "그 숫자는 어디서 나왔나"를 물으면, 아래 표의 '뒷받침하는 주장' 열로 스크립트를 찾아 다시 돌려 볼 수 있습니다. 생성기 본체가 아니라서 여기 코드는 생성기에서 쓰지 않습니다.
+> 설계도에 적힌 숫자 가운데 "지구 반지름으로 정했다", "레이더 자료로는 강이 하류로 완만해지는 정도를 잴 수 없었다" 같은 결정은 한 번씩 돌려 본 계산에서 나왔습니다. 이 폴더는 그 **일회성 연구 스크립트**를 모읍니다. 나중에 누가 "그 숫자는 어디서 나왔나"를 물으면, 아래 표의 '뒷받침하는 주장' 열로 스크립트를 찾아 다시 돌려 볼 수 있습니다. 생성기 본체가 아니라서 여기 코드는 생성기에서 쓰지 않습니다.
 
 ## 직접 돌려 보기
 
@@ -15,11 +15,11 @@ uv run python analysis/scale/scale_ladder_calcs.py
 
 나머지 스크립트는 대부분 가봉 AfriSAR 자료(약 15 GB, NASA 계정 필요)가 있어야 돕니다. 아래 '필요한 자료'를 봅니다.
 
-## 지킬 것
+## 지킬 규칙
 
 - **결과는 설계 문서로.** 결과 숫자는 설계도(`docs/design/blueprint.md`)와 조사 기록(`docs/design/research/`)에 옮겨 적습니다. 아래 표의 '뒷받침하는 주장' 열이 그 연결입니다.
-- **GPL 도구는 여기서만.** fastscapelib, topotoolbox, pysheds, richdem은 GPL 라이선스라, 쓰면 그 코드도 GPL로 공개해야 할 수 있습니다. 그래서 이 폴더에서만 씁니다. ruff의 GPL import 검사(TID251)도 여기서는 꺼 둡니다.
-- **생성기와 스튜디오는 여기를 쓰지 않습니다.** `src/Bpcg`(C# 생성기)와 `src/bpcg_studio` 는 이 폴더를 부르지 않습니다. 여기서 쓸 만한 계산이 나오면 C#으로 다시 짜서 `src/Bpcg` 로 옮깁니다.
+- **GPL 도구는 여기서만.** fastscapelib(지형 침식을 시간 순서로 푸는 프로그램), topotoolbox(높이 지도에서 물길과 강 경사를 구하는 프로그램), pysheds와 richdem(높이 지도에서 유역과 물길을 뽑는 프로그램)은 GPL 라이선스라, 쓰면 그 코드도 GPL로 공개해야 할 수 있습니다. 그래서 이 폴더에서만 씁니다. ruff의 GPL import 검사(TID251)도 여기서는 꺼 둡니다.
+- **생성기와 스튜디오는 여기를 쓰지 않습니다.** `src/Bpcg`(C# 생성기)와 `src/bpcg_studio`(스튜디오, 매개변수를 바꿔 행성을 다시 만들고 결과를 지도로 보는 브라우저 도구)는 이 폴더를 부르지 않습니다. 여기서 쓸 만한 계산이 나오면 C#으로 다시 짜서 `src/Bpcg` 로 옮깁니다.
 - **경로는 `bpcg_studio.paths` 로.** `EXTERNAL`, `CACHE`, `DERIVED` 를 쓰고 절대 경로를 쓰지 않습니다.
 - **저장소 맨 위에서 파일로 실행합니다**: `uv run python analysis/<폴더>/<파일>.py …`. 같은 폴더의 모듈은 `from hydro import d8` 처럼 가져옵니다. `analysis/veg` 는 `afrisar_link.py` 를 거쳐 `analysis/afrisar` 의 `hydro`, `extract` 를 씁니다(옆 폴더 경로를 더하는 곳은 그 파일 하나뿐).
 
@@ -35,7 +35,7 @@ uv run python analysis/scale/scale_ladder_calcs.py
 | χ (카이) 분석 | 강을 따라 상류 면적으로 가중한 길이(χ)와 강 높이를 견주어, 둘이 곧은 선이 되는 θ(강이 완만해지는 정도)를 찾는 방법 |
 | TWI | 땅이 얼마나 젖기 쉬운지 나타내는 값(상류 면적과 경사로 계산) |
 | RH95 | 땅에서부터 레이더 반사의 95%가 모이는 높이. 숲 지붕 높이 대신 씁니다 |
-| k-means | 비슷한 것끼리 K개 무리로 나누는 방법 |
+| k-means | 비슷한 값끼리 K개 무리로 나누는 방법 |
 | S3 버킷 | 아마존 클라우드의 파일 저장소. 공개 DEM 타일들이 여기 있습니다 |
 
 ## 폴더
@@ -65,9 +65,9 @@ zip 에서 꺼낸 HDF5 는 `data/cache/afrisar/` 에 두며 지워도 됩니다.
 | `geocode.py` | 레이더 격자의 TerrainHeight(SRTM)를 30 m 정규 격자로 지오코딩 | `C/<site>-tomo-fourier-hv.h5` | `D/afrisar/<site>_dem_30m.npz` | `geocode.py lope rabi` | 부록 A-2 '30 m 격자로 옮겨' (띠 면적 로페 924, 라비 930 km² 를 출력) |
 | `profile_stats.py` | 프로파일 문턱값으로 지면·수관 꼭대기 대용 높이 | `C/*.h5` 하나 | `D/afrisar/<h5>_profile_stats.npz` | `profile_stats.py lope-tomo-fourier-hv.h5 0.3` | 6장 표 'Fourier 높이 칸 8 m' (Fourier 상단은 8 m 로 양자화돼 높이 통계에 못 씀) |
 | `ground_canopy.py` | Capon HH 로 지면, HV 누적 95% 로 수관 꼭대기, 차이로 수관 높이 | `C/lope-tomo-capon-hh.h5`, `capon-hv.h5` (2.8 GB) | `D/afrisar/lope_ground_canopy.npz` | `ground_canopy.py` | 부록 A-2 '정정'(SRTM 대비 지면 위치), 그림 (f) '±15 m 흔들림' |
-| `hydro.py` | 채움(priority-flood+ε), D8, 유량, 경사-면적 θ 맞춤. `fill_eps`·`d8`·`accumulate` 는 다른 스크립트가 재사용 | `D/afrisar/<이름>_dem_30m.npz` | `D/afrisar/<이름>_hydro.npz` | `hydro.py lope rabi lope_tomo_dtm` | 부록 A-2 'θ 가 0.07~0.13', '단층 보정 DTM 으로도 0.07~0.08' |
-| `chi.py` | 잘리지 않은 유역만 골라 300 m 평활 경사-면적과 χ 분석 | `D/afrisar/<이름>_dem_30m.npz` | 화면 | `chi.py lope rabi lope_tomo_dtm` | 부록 A-2 'χ 분석도 구분력이 없었다' (로페는 20 km² 넘는 완전 유역이 0개라 R² 가 NaN) |
-| `ch4_reference.py` | 4장 비교용 기준값: 경사 히스토그램, 고도 백분위, 완전 유역 HI | `D/afrisar/<site>_dem_30m.npz` | `D/afrisar/<site>_ch4_reference.npz` (사본: `results/`) | `ch4_reference.py lope rabi` | 부록 A-2 (6) '경사 상위 5%(0.373)와 고도 적분(0.29)' — 로페 **띠 전체** 값임(아래 '알려진 문제') |
+| `hydro.py` | 채움(priority-flood+ε), D8, 유량(상류에서 모여 한 칸을 지나가는 물의 양), 경사-면적 θ 맞춤. `fill_eps`·`d8`·`accumulate` 는 다른 스크립트가 재사용 | `D/afrisar/<이름>_dem_30m.npz` | `D/afrisar/<이름>_hydro.npz` | `hydro.py lope rabi lope_tomo_dtm` | 부록 A-2 'θ 가 0.07~0.13', '단층 보정 DTM 으로도 0.07~0.08' |
+| `chi.py` | 잘리지 않은 유역(빗물이 모여 한 출구로 흘러 나가는 땅)만 골라 300 m 평활 경사-면적과 χ 분석 | `D/afrisar/<이름>_dem_30m.npz` | 화면 | `chi.py lope rabi lope_tomo_dtm` | 부록 A-2 'χ 분석도 구분력이 없었다' (로페는 20 km² 넘는 완전 유역이 0개라 R² 가 NaN) |
+| `ch4_reference.py` | 4장 비교용 기준값: 경사 히스토그램, 고도 백분위, 완전 유역 HI | `D/afrisar/<site>_dem_30m.npz` | `D/afrisar/<site>_ch4_reference.npz` (사본: `results/`) | `ch4_reference.py lope rabi` | 부록 A-2 (6) '경사 상위 5%(0.373)와 고도 적분(0.29)' — 로페 **띠 전체** 값임(아래 '아직 해결하지 못한 문제') |
 | `eco.py` | 수관 높이를 30 m 격자로 보간해 HAND·경사·고도별로 봄 | `D/afrisar/lope_ground_canopy.npz`, `lope_dem_30m.npz`, `C/lope-tomo-fourier-hv.h5` | `D/afrisar/lope_eco_30m.npz` | `eco.py` | 그림 (e) 'ρ = +0.30' |
 | `fig_overview.py` | 위 결과를 2×3 그림 한 장으로 | `D/afrisar/` 의 dem·eco·hydro·ground_canopy, `C/lope-tomo-capon-hv.h5` | `D/afrisar/afrisar_overview.png` (`--out` 으로 바꿈) | `fig_overview.py --out docs/figures/afrisar_overview.png` | `docs/figures/afrisar_overview.png`, 부록 A-2 (3) '경고 사례 그림' |
 
@@ -94,7 +94,7 @@ zip 에서 꺼낸 HDF5 는 `data/cache/afrisar/` 에 두며 지워도 됩니다.
 | `opentopo_sum.py` | OpenTopography S3 접두어별 GeoTIFF 수·용량, 누락 지역(N40 E045) 존재 확인 | 접두어 | 화면 | `opentopo_sum.py COP30 COP90` | 6장 'AWS 판에 없는 25개 타일은 OpenTopography 판(776.9 GB)에서' |
 | `cmr_granules.py` | NASA CMR 로 NASADEM·SRTMGL1·ASTGTM 그래뉼 수·용량 | 없음 | 화면 | `cmr_granules.py` | `global_dem_catalog.json` 의 NASA DEM 용량 |
 | `bench_flow.py` | 합성 3600×3600(GLO-30 타일 하나) DEM 에 채움→D8→유량→χ→경사-면적 시간 측정 | 없음 | 화면 | `bench_flow.py [3600]` | `global_dem_catalog.json` '타일당 약 3.3 s, 전 지구 약 24시간', 6장 계산량 |
-| `results/glo90_summary.txt` | GLO-90 버킷 전체 목록 요약 (2026-10-01) | | | | 6장 GLO-90 숫자. 세션 중 `s3_list.py` 의 변형(옮기지 않음)으로 만든 출력이며, 타일 수·DEM 용량은 위 두 스크립트로 다시 셀 수 있음 |
+| `results/glo90_summary.txt` | GLO-90 버킷 전체 목록 요약 | | | | 6장 GLO-90 숫자. 타일 수·DEM 용량은 위 두 스크립트로 다시 셀 수 있음 |
 | `results/glo30_aws_missing_vs_glo90_tiles.txt` | GLO-90 에는 있고 AWS GLO-30 에는 없는 타일 25개 | | | | 6장 'AWS 판 GLO-30 에는 아르메니아·아제르바이잔 쪽 타일 25개가 없음' |
 
 ### scale/, legacy/
@@ -102,7 +102,7 @@ zip 에서 꺼낸 HDF5 는 `data/cache/afrisar/` 에 두며 지워도 됩니다.
 | 파일 | 하는 일 | 입력 | 출력 | 실행 | 뒷받침하는 주장 |
 | --- | --- | --- | --- | --- | --- |
 | `scale/scale_ladder_calcs.py` | 반지름별 g·탈출속도·칸 크기·float32 정밀도, 칸 안 기복, 메모리 | 없음 | 화면 | `scale_ladder_calcs.py` | 3장 '지구 반지름 6,371 km', 'L0 19.5 km'(n=512), `docs/figures/scale_ladder.png` 의 숫자 (그림을 그린 코드는 남아 있지 않음) |
-| `scale/process_checks.py` | Q* 사면 길이, Roering R*, Heimsath 토양 두께, ELA, 선상지 경사비, 산지 전면 종단면, 삼각주 면적 | 없음 | 화면 | `process_checks.py` | 4·5장 과정 규칙 기본값의 크기 점검 |
+| `scale/process_checks.py` | Q* 사면 길이, Roering R*, Heimsath 토양 두께, ELA, 선상지(산골짜기 입구에 흙이 부채 모양으로 쌓인 지형) 경사비, 산지 전면 종단면, 삼각주 면적 | 없음 | 화면 | `process_checks.py` | 4·5장 과정 규칙 기본값의 크기 점검 |
 | `legacy/make_figures.py` | 옛 설계 가이드(`docs/guide/planet_guide.md`)의 그림 22장 생성 | 없음 | `docs/guide/figures/*.png` | `uv run python analysis/legacy/make_figures.py` | 가이드 1~8장 그림 |
 
 ## 실행 순서
@@ -153,7 +153,7 @@ uv run python tools/make_tile512_fixture.py lope rabi
 자료 출처: Hawkins, B.P., N. Pinto, M. Lavalle, and S. Hensley. 2018. AfriSAR: Polarimetric Height Profiles by TomoSAR,
 Lope and Rabi Forests, Gabon, 2016. ORNL DAAC. https://doi.org/10.3334/ORNLDAAC/1577
 
-## 다시 돌려 확인한 것 (2026-10-02)
+## 돌린 명령과 결과
 
 임시 폴더에서 저장소로 옮긴 뒤, 같은 입력으로 다시 돌려 예전 결과와 **비트 단위로 같음**을 확인했습니다:
 `geocode.py lope rabi`, `hydro.py lope rabi lope_tomo_dtm`, `ch4_reference.py lope rabi`(`results/` 와 파일까지 같음),
@@ -164,11 +164,11 @@ Lope and Rabi Forests, Gabon, 2016. ORNL DAAC. https://doi.org/10.3334/ORNLDAAC/
 Capon 파일(2.8 GB)이 필요한 `ground_canopy.py`, `fig_overview.py`, `pilot_lope.py`, `pilot2_detrended.py`, `exemplars.py` 는
 import 만 확인했고 다시 돌리지 않았습니다. 이들의 예전 결과는 `data/derived/` 에 그대로 복사해 두었습니다.
 
-## 알려진 문제
+## 아직 해결하지 못한 문제
 
 - 설계도 부록 A-2 (6)은 '같은 조각(512 × 512)의 경사 상위 5% 0.373, 고도 적분 0.29' 라고 적었지만, 이 값은
   `ch4_reference.py` 가 잰 로페 **띠 전체** 값입니다. `tests/fixtures/lope_tile512_30m.npz` 조각 자체는 경사 p95 0.387, HI 0.207 입니다.
 - `legacy/make_figures.py` 는 한글 글꼴로 숨은 시스템 글꼴(`.Apple SD Gothic NeoI`)을 고를 수 있고, 그러면 수식 안 마이너스(U+2212)가
   네모로 나옵니다. 그래서 `docs/guide/figures/` 에는 볼트에서 옮긴 원본 그림을 그대로 두었습니다.
-- `profile_stats.py` 의 기본 문턱값은 0.2 인데, 2026-10-01 에 남긴 Fourier 결과는 0.3 으로 만든 것입니다
+- `profile_stats.py` 의 기본 문턱값은 0.2 인데, 저장해 둔 Fourier 결과는 0.3 으로 만든 결과입니다
   (`lope_tomo_capon_hv_profile_stats.npz` 의 문턱값은 기록이 없습니다).

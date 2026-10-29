@@ -1,6 +1,6 @@
 # data 폴더
 
-> 생성기 규칙 속 숫자(강이 하류로 완만해지는 정도, 강 가파름, 산비탈이 버티는 경사)는 지금 논문 값입니다. 이 숫자를 진짜 지구에 맞추고, 만든 행성을 진짜 지구와 같은 잣대로 견주려면 진짜 지구 자료가 필요합니다. 이 폴더는 그 자료를 두는 곳입니다. 대부분은 시험용으로 고른 유역 40개 둘레의 자료(파일럿 자료, 약 4.5 GB)입니다. 자료를 맞추거나 견주는 일을 맡지 않았다면 받지 않아도 됩니다.
+> 생성기 규칙 속 숫자(강이 하류로 완만해지는 정도, 강 가파름, 산비탈이 버티는 경사)는 지금 논문 값입니다. 이 숫자를 진짜 지구에 맞추고, 만든 행성을 진짜 지구와 같은 잣대로 견주려면 진짜 지구 자료가 필요합니다. 이 폴더는 그 자료를 두는 곳입니다. 대부분은 시험용으로 고른 유역(빗물이 모여 한 출구로 흘러 나가는 땅) 40개 둘레의 자료(파일럿 자료, 약 4.5 GB)입니다. 자료를 맞추거나 견주는 일을 맡지 않았다면 받지 않아도 됩니다.
 
 **원자료는 git에 올리지 않습니다.** 공개 저장소이고, 자료마다 다시 나눠 줄 수 있는 조건(라이선스)이 다르기 때문입니다. 이 폴더에서 저장소에 올라가는 파일은 `README.md` 와 `manifest.json` 둘뿐입니다(`.gitignore` 의 `data/*`). `git add -f` 로 억지로 넣지 않습니다. 자료는 각자 받고, 같은 자료인지는 `manifest.json` 의 크기와 sha256(파일 내용으로 만든 지문)으로 확인합니다.
 
@@ -28,7 +28,7 @@ uv run python tools/download_pilot.py --verify-only
 
 ## 폴더 역할
 
-| 폴더 | 담는 것 | 없어지면 |
+| 폴더 | 담는 파일 | 없어지면 |
 |---|---|---|
 | `pilot/` | 스크립트로 다시 받을 수 있는 파일럿 자료 (약 4.5 GB) | `tools/download_pilot.py` 로 다시 받습니다 |
 | `external/` | 계정이 필요하거나 손으로 받은 자료 (지금은 AfriSAR) | 사이트에서 손으로 받습니다 |
@@ -42,10 +42,10 @@ uv run python tools/download_pilot.py --verify-only
 
 크기는 10진 단위입니다 (1 MB = 10^6 B). 장 번호는 설계 문서(구현 가이드)의 장입니다.
 
-| 경로 (`data/` 아래) | 무엇 | 크기 | 출처 | 라이선스 | 얻는 법 | 쓰는 곳 |
+| 경로 (`data/` 아래) | 담는 자료 | 크기 | 출처 | 라이선스 | 얻는 법 | 쓰는 곳 |
 |---|---|---|---|---|---|---|
 | `pilot/etopo/ETOPO_2022_v1_60s_N90W180_surface.nc` | 지구 전체 고도, 육지+해저, 60초(약 1.8 km) | 478.3 MB | NOAA NCEI | 퍼블릭 도메인 | 스크립트 | 5장 (지구 고도 분포와 비교) |
-| `pilot/chelsa/CHELSA_bio12_1981-2010_V.2.1.tif` | 연강수 1981-2010, 30초 | 349.3 MB | CHELSA V2.1 | CC0 (확인 안 됨) | 스크립트 | 3장 (유량 Q = P·A 로 바꿀 때) |
+| `pilot/chelsa/CHELSA_bio12_1981-2010_V.2.1.tif` | 연강수 1981-2010, 30초 | 349.3 MB | CHELSA V2.1 | CC0 (확인 안 됨) | 스크립트 | 3장 (유량(상류에서 모여 한 칸을 지나가는 물의 양) Q = P·A 로 바꿀 때) |
 | `pilot/aridity/Global-AI_ET0__annual_v3_1.zip` | 건조 지수(AI)와 잠재 증발산(ET0), 연간 | 645.8 MB | figshare (Zomer 외) | CC BY 4.0 / 비상업 (아래 참고) | 스크립트 | 3장 (기후 구분), 5장 (기후 규칙) |
 | `pilot/riveratlas/RiverATLAS_Data_v10.gdb.zip` | 전 세계 하천 구간과 속성 | 2,506.5 MB | HydroSHEDS RiverATLAS v1.0 | CC BY 4.0, 일부 열 ODbL | 스크립트 | 3장 (하천 차수·경사 비교) |
 | `pilot/octopus/crn_int_basins.geojson`, `crn_aus_basins.geojson` | 10Be 유역 평균 침식률 5,673개 유역 | 281.6 MB | OCTOPUS v2 (WFS) | CC BY-NC-SA 4.0 으로 취급 (미해결) | 스크립트 | 3장 (침식률 정답값) |
@@ -57,7 +57,7 @@ uv run python tools/download_pilot.py --verify-only
 
 ## 자료별 주의할 점
 
-2026-10-02 자료 점검에서 확인한 내용입니다. 코드는 SI 단위(m, m/yr, yr)로 바꿔서 씁니다.
+코드는 SI 단위(m, m/yr, yr)로 바꿔서 씁니다.
 
 **ETOPO 2022**
 - 위도가 남에서 북으로 갑니다. 0번 행이 남쪽(-89.99°)이므로 북쪽이 위인 그림을 그리려면 뒤집습니다.
@@ -78,7 +78,7 @@ uv run python tools/download_pilot.py --verify-only
 **CHELSA bio12**
 - 값이 **이미 mm/yr** 입니다 (태그 `kg m-2 year-1`, 배율 없음). 3장 문서의 "WorldClim 월 강수를 합산" 단계는 필요 없습니다. m/yr 로 바꾸려면 1000 으로 나눕니다.
 - 북위 84° 까지만 있습니다. nodata 는 65535 이고, 바다도 값이 채워져 있습니다.
-- 라이선스 CC0 는 예전 스크립트에 적힌 것이고 온라인으로 다시 확인하지 못했습니다.
+- 라이선스 CC0 는 예전 스크립트에 적힌 내용이고 온라인으로 다시 확인하지 못했습니다.
 
 **OCTOPUS v2**
 - 결측값이 숫자로 들어 있습니다. `EBE_MMKYR`, `AREA`, `SLP_AVE`, `ELEV_AVE` 의 -9999.99, `GLA_PCNT` 의 -99.99 를 먼저 걸러냅니다.
@@ -138,7 +138,7 @@ uv run python tools/download_pilot.py --verify-only --verify-hash   # sha256 까
 ```
 
 - 없거나 크기가 다른 파일이 있으면 목록을 보여주고 1 로 끝납니다.
-- AfriSAR 처럼 손으로 받는 자료가 없는 것은 "선택 자료"로만 알려 주고 실패로 치지 않습니다.
+- AfriSAR 처럼 손으로 받는 자료가 없는 상태는 "선택 자료"로만 알려 주고 실패로 치지 않습니다.
 - OCTOPUS GeoJSON 은 WFS 원본이 바뀔 수 있어서 크기가 달라도 경고만 합니다.
 
 ## 다시 받기
@@ -150,7 +150,7 @@ uv run python tools/download_pilot.py
 - 없는 파일만 받습니다. 이미 있고 크기가 `manifest.json` 과 같으면 건너뜁니다. 처음부터 받으면 약 4.5 GB 입니다.
 - curl 이 필요합니다 (macOS, Windows 10 이상, 대부분의 Linux 에 들어 있습니다). 표준 라이브러리만 쓰므로 패키지를 설치하기 전에도 Python 3.11 이상이면 `python tools/download_pilot.py` 로 돌릴 수 있습니다.
 - 받는 중에는 `<이름>.part` 로 쓰고, 다 받은 뒤에 원래 이름으로 바꿉니다. 중간에 끊기면 다시 실행하세요. `.part` 부터 이어받습니다.
-- GLO-90 타일이 HTTP 404 이면 바다만 있는 칸이라 타일이 없는 것으로 보고 넘어갑니다. 다른 실패(연결 끊김, 403 등)는 모아서 마지막에 보여주고 1 로 끝납니다.
+- GLO-90 타일이 HTTP 404 이면 바다만 있는 칸이라 타일이 없다고 보고 넘어갑니다. 다른 실패(연결 끊김, 403 등)는 모아서 마지막에 보여주고 1 로 끝납니다.
 - 파일럿 유역은 `configs/pilot_basins.csv` 를 그대로 씁니다. 그래서 OCTOPUS WFS 내용이 바뀌어도 모두 같은 타일을 받습니다.
 - AfriSAR 는 [ORNL DAAC 안내 페이지](https://daac.ornl.gov/AFRISAR/guides/Polarimetric_height_profile.html)에서 NASA Earthdata 계정으로 받아 `external/afrisar/` 에 zip 그대로 둡니다.
 

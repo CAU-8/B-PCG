@@ -328,6 +328,7 @@ Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → H
 | 알고 싶은 내용 | 파일 |
 |---|---|
 | 말의 뜻 | [glossary.md](glossary.md) |
+| 코드베이스 전체 구조와 작동 원리 | [architecture.md](architecture.md) |
 | 글 쓰는 법 | [Humanize.md](../Humanize.md), [writing.md](writing.md) |
 | 확정 설계(사슬, 배율, 일정, 선행 연구) | [design/blueprint.md](design/blueprint.md) (필요한 장만) |
 | 단계마다 공식과 함수의 약속, 아직 해결하지 못한 문제 | [pipeline.md](pipeline.md) (해결하지 못한 문제는 14장) |
