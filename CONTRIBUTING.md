@@ -1,6 +1,6 @@
 # 함께 일하는 방법
 
-> 세 사람이 같은 저장소를 고치면, 남의 작업을 덮어쓰거나 깨진 코드를 `main`에 올리기 쉽습니다. 그래서 일은 모두 자기 브랜치에서 하고, 시험을 통과한 뒤 다른 팀원 한 명이 읽어 본 것만 `main`에 합칩니다. 이 파일은 그 하루 순서를 적습니다. 규칙의 전체 목록은 [docs/conventions.md](docs/conventions.md)에 있습니다.
+> 세 사람이 같은 저장소를 고치면, 남의 작업을 덮어쓰거나 깨진 코드를 `main`에 올리기 쉽습니다. 그래서 일은 모두 자기 브랜치에서 하고, 시험을 통과한 뒤 다른 팀원 한 명이 읽어 본 코드만 `main`에 합칩니다. 이 파일은 그 하루 순서를 적습니다. 규칙의 전체 목록은 [docs/conventions.md](docs/conventions.md)에 있습니다.
 
 ## 처음 한 번
 
@@ -17,7 +17,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
 - 생성기와 엔진은 C#이라 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)가 먼저 있어야 합니다(맥은 `brew install --cask dotnet-sdk`).
-- 스크립트가 파이썬 쪽(uv, 파이썬 3.13, 패키지)을 설치하고 `tools/doctor.py`로 점검합니다. 마지막 줄이 `필수 실패 0개` 면 됩니다.
+- 스크립트가 파이썬 쪽(uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구), 파이썬 3.13, 패키지)을 설치하고 `tools/doctor.py`로 점검합니다. 마지막 줄이 `필수 실패 0개` 면 됩니다.
 - 진짜 지구 자료(약 4.5 GB)가 필요하면 `--data`(윈도우는 `-Data`)를 붙입니다.
 
 ## 매번 하는 순서
@@ -29,7 +29,7 @@ git switch main && git pull
 git switch -c feat/priority-flood
 ```
 
-- 왜: 남이 어제 합친 것을 받은 뒤 시작해야, 나중에 합칠 때 부딪히는 곳이 줄어듭니다.
+- 왜: 남이 어제 합친 코드를 받은 뒤 시작해야, 나중에 합칠 때 부딪히는 곳이 줄어듭니다.
 - 브랜치 이름은 `종류/짧은-설명` 입니다. 종류는 아래 '커밋 종류' 표와 같습니다.
 
 ### 2. 고치고 검사하기
@@ -43,12 +43,12 @@ uv run ruff format . && uv run ruff check .
 
 | 명령 | 무엇을 보나 | 걸리는 시간 (맥북 에어 M3) |
 |---|---|---|
-| `dotnet build` + `dotnet test` | C#이 경고 없이 빌드되는지, C# 시험(Python 판과 비트까지 같은지 포함) | 빌드가 끝난 뒤 시험 약 6초 |
+| `dotnet build` + `dotnet test` | C#이 경고 없이 빌드되는지, C# 시험(옛 Python 판과 비트까지 같은지 포함) | 빌드가 끝난 뒤 시험 약 6초 |
 | `dotnet format … --verify-no-changes` | C# 코드 모양(띄어쓰기, 중괄호)이 규칙대로인지 | 약 12초 |
-| `uv run pytest -m "not slow"` | C# 명령줄이 쓴 결과 파일, 스튜디오 | 약 40초 |
+| `uv run pytest -m "not slow"` | C# 명령줄이 쓴 결과 파일, 스튜디오(매개변수를 바꿔 행성을 다시 만들고 결과를 지도로 보는 브라우저 도구) | 약 40초 |
 | `ruff` | 파이썬 코드 모양과 흔한 실수 | 몇 초 |
 
-엔진을 고쳤으면 `uv run pytest -m godot tests/test_engine.py`도 돌립니다(Godot .NET 판이 있어야 함).
+엔진을 고쳤으면 `uv run pytest -m godot tests/test_engine.py`도 돌립니다(Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) .NET 판이 있어야 함).
 
 ### 3. 커밋하기
 
@@ -69,13 +69,13 @@ PR 양식의 확인 목록을 채웁니다. 리뷰어가 무엇을 왜 바꿨는
 
 ### 5. 합치기
 
-- 리뷰어 1명이 승인하고 CI(GitHub이 PR마다 자동으로 돌리는 검사)가 통과하면 합칩니다.
+- 리뷰어 1명이 승인하고 CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험)가 통과하면 합칩니다.
 - 합칠 때는 squash를 씁니다. 브랜치의 커밋 여러 개를 하나로 묶어 `main`의 기록을 기능 하나에 한 줄로 남기는 방식입니다.
 - 합친 브랜치는 지웁니다.
 
 ## 막혔을 때
 
-| 보이는 것 | 까닭 | 고치는 법 |
+| 보이는 현상 | 까닭 | 고치는 법 |
 |---|---|---|
 | `dotnet format … --verify-no-changes` 실패 | C# 코드 모양이 규칙과 다름 | `dotnet format Bpcg.slnx` 를 돌리면 고쳐 줍니다 |
 | `ruff format --check` 또는 `ruff check` 실패 | 파이썬 코드 모양이나 import 순서 | `uv run ruff format .` 와 `uv run ruff check --fix .` |
@@ -97,12 +97,12 @@ PR 양식의 확인 목록을 채웁니다. 리뷰어가 무엇을 왜 바꿨는
 | `data` | 자료 받기, 목록 파일, 시험 자료 |
 | `exp` | `analysis/` 의 실험 |
 
-## 리뷰할 때 보는 것
+## 리뷰할 때 확인하는 항목
 
 - 시험이 있는가. 허용 오차(얼마나 틀려도 통과로 볼지)에 근거가 적혀 있는가
 - 함수 설명 주석(C# `///`, 파이썬 docstring)에 단위가 있는가(m, yr, m/yr …)
 - 절대 경로, `System.Random`·전역 난수, GPL 라이선스 패키지 import가 없는가
-- 문서와 화면 글이 [CLAUDE.md](CLAUDE.md)의 친절함 기준을 따르는가
+- 문서와 화면 글이 [CLAUDE.md](CLAUDE.md)와 [Humanize.md](Humanize.md)의 기준을 따르는가
 - [설계도](docs/design/blueprint.md)와 어긋나지 않는가. 어긋나면 설계도를 먼저 고칠지 이야기합니다
 
 ## 패키지를 더할 때

@@ -156,6 +156,7 @@ flowchart LR
 |---|---|
 | [용어집](docs/glossary.md) | 히어로, 회랑, 정상상태 같은 말의 뜻 |
 | [한 장 요약](docs/brief.md) | 프로젝트 전체를 한 번에 |
+| [코드베이스 구조와 작동 원리](docs/architecture.md) | 폴더·모듈 구조, 4단계 파이프라인과 수식, 검증·엔진 작동 원리 |
 | [스튜디오](docs/studio.md) | 매개변수를 바꿔 돌리고 지도·Godot로 보기 |
 | [함께 일하는 방법](CONTRIBUTING.md) | 브랜치, PR, 리뷰 |
 | [개발 규칙](docs/conventions.md) | 폴더, 코드 규칙, git |
