@@ -3,6 +3,7 @@
 tiny 프로필로 전체를 몇 초 안에 돌립니다.
 """
 
+import json
 import shutil
 
 import numpy as np
@@ -190,6 +191,24 @@ def test_bake_set_only_bake_keys(csharp_cli, cave_run, tmp_path):
     )  # fmt: skip
     assert proc.returncode != 0
     assert "bake 에서는 detail., profile.corridor. 로 시작하는 키만" in proc.stderr
+
+
+def test_bake_of_a_bundle_without_newer_keys_says_how_to_fix(csharp_cli, cave_run, tmp_path):
+    """굽기가 읽는 설정 키가 없는 히어로 묶음은 고치는 법을 알려 주고 멈춥니다.
+
+    그 키가 생기기 전의 코드로 만든 묶음이 여기에 들어갑니다.
+    """
+    old_hero = tmp_path / "hero"
+    shutil.copytree(cave_run / "hero", old_hero)
+    manifest = json.loads((old_hero / "manifest.json").read_text(encoding="utf-8"))
+    del manifest["config"]["caves"]["rarity_wavelength_m"]
+    (old_hero / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+    proc = run_cli("bake", "--hero", old_hero, "--out", tmp_path / "out", "--no-globe", check=False)
+    assert proc.returncode == 1
+    assert "caves.rarity_wavelength_m" in proc.stderr
+    assert "다시 돌려" in proc.stderr and "Unhandled exception" not in proc.stderr
 
 
 def test_python_entry_forwards_to_csharp(csharp_cli, tmp_path, capfd):

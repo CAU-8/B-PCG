@@ -16,11 +16,20 @@ N_TEMPLATES = 3  # Geology/Model.cs: carbonate_platform, fold_thrust, basement_a
 def test_rock_table_in_legend_matches_studio_table(tiny_run):
     """회랑 재질 부피의 범례(C# 암석 표)가 스튜디오의 암석 이름·색과 같고, 색이 서로 다릅니다."""
     legend = read_json(tiny_run / "corridor" / "strata.json")["legend"]
-    rocks = [e for e in legend if e["id"] < 254]
+    rocks = [e for e in legend if e["id"] < len(ROCK_NAMES)]
     assert [e["name"] for e in rocks] == list(ROCK_NAMES)
     assert [tuple(e["rgb"]) for e in rocks] == [tuple(c) for c in ROCK_COLOR_RGB]
     assert len({tuple(e["rgb"]) for e in legend}) == len(legend)
     assert {e["id"]: e["name"] for e in legend if e["id"] >= 254} == {254: "water", 255: "air"}
+    # 층리의 어두운 띠: 번호 = 암석 번호 + 16, 이름 = 암석 이름 + _dark_bed, 색 = 암석 색 × 0.82.
+    # 쌓여서 생긴 암석과 줄무늬 변성암(1..10)만 있고, 덩어리 암석인 화강암은 없습니다
+    # (Bake/Corridor.cs 의 HasBeds).
+    beds = {e["id"]: e for e in legend if len(ROCK_NAMES) <= e["id"] < 254}
+    layered = [r for r in range(1, 11) if ROCK_NAMES[r] != "granite"]
+    assert sorted(beds) == [r + 16 for r in layered]
+    for r in layered:
+        assert beds[r + 16]["name"] == ROCK_NAMES[r] + "_dark_bed"
+        assert beds[r + 16]["rgb"] == [round(v * 0.82) for v in ROCK_COLOR_RGB[r]]
 
 
 @pytest.mark.parametrize("level", ["planet", "hero"])

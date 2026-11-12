@@ -215,11 +215,35 @@ public static class Runs
         return cfg.WithOverrides(checkedOv);
     }
 
+    // 굽기가 읽는 설정 키 가운데, 그 키가 생기기 전의 코드로 만든 히어로 묶음에는 없는 키.
+    private static readonly string[] BakeKeysMissingInOlderBundles = ["caves.rarity_wavelength_m", "caves.rarity_threshold"];
+
+    /// <summary>
+    /// 굽기는 히어로 묶음에 저장된 설정을 씁니다. 묶음을 만든 코드가 지금 코드보다 오래되어 굽기가 읽는 키가 없으면,
+    /// 어느 키가 없는지와 고치는 법을 알려 주고 멈춥니다.
+    /// </summary>
+    private static void RequireBakeKeys(Config cfg, string heroDir)
+    {
+        var missing = BakeKeysMissingInOlderBundles.Where(key =>
+        {
+            string[] parts = key.Split('.');
+            return !(cfg.Contains(parts[0]) && cfg.Sec(parts[0]).Contains(parts[1]));
+        }).ToList();
+        if (missing.Count > 0)
+        {
+            throw new RunError(
+                $"히어로 묶음 {heroDir} 의 설정에 굽기가 읽는 키가 없습니다: {string.Join(", ", missing)}. "
+                + "이 키가 생기기 전의 코드로 만든 묶음입니다. "
+                + "같은 설정과 시드로 `bpcg all` 이나 `bpcg hero` 를 다시 돌려 히어로 유역을 새로 만든 뒤 구우세요.");
+        }
+    }
+
     /// <summary>히어로 묶음에서 회랑을 outDir 에 굽습니다 (run_bake). engineDir 이 있으면 그곳에도 씁니다.</summary>
     public static OrderedDictionary<string, object?> RunBake(
         string heroDir, string outDir, string? engineDir, Action<string> log, long? seed = null, IEnumerable<string>? sets = null)
     {
         Config cfg = BakeConfig(heroDir, log, seed, sets);
+        RequireBakeKeys(cfg, heroDir);
         Pipeline.ApplyThreads(cfg);
         log($"[굽기] 히어로 묶음을 읽습니다: {heroDir}");
         HeroState hero = Bundle.LoadHeroState(heroDir);

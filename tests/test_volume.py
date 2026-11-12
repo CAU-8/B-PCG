@@ -13,6 +13,11 @@ ROCK_IDS = set(range(12))
 WATER_ID = 254
 AIR_ID = 255
 SOLUBLE = (3, 9)  # 석회암, 대리암
+# 층리의 어두운 띠: 같은 암석을 번호 + 16 으로 굽습니다.
+# 어두운 띠가 있는 암석은 쌓여서 생긴 암석과 줄무늬 변성암(1..10)에서 화강암(4)을 뺀 암석입니다
+# (Bake/Corridor.cs 의 BedIdOffset·HasBeds).
+BED_OFFSET = 16
+BED_IDS = {r + BED_OFFSET for r in range(1, 11) if r != 4}
 
 
 @pytest.fixture(params=["tiny_run", "cave_run"])
@@ -30,6 +35,12 @@ def volume(request):
     return meta, vol, top_meta, top.astype(np.float64), wt_meta, wt.astype(np.float64)
 
 
+def _rock_of(vol: np.ndarray) -> np.ndarray:
+    """어두운 띠 번호를 그 암석의 번호로 되돌립니다 (다른 값은 그대로)."""
+    bed = np.isin(vol, sorted(BED_IDS))
+    return np.where(bed, vol - BED_OFFSET, vol)
+
+
 def _bilinear_to(grid: np.ndarray, step: int, rows: int, cols: int) -> np.ndarray:
     """간격이 step 배 큰 격자를 같은 원점의 고운 격자 (rows, cols) 로 쌍선형 보간."""
     rr = np.arange(rows) / step
@@ -45,7 +56,10 @@ def _bilinear_to(grid: np.ndarray, step: int, rows: int, cols: int) -> np.ndarra
 
 def test_values_are_rocks_water_or_air(volume):
     _, vol, *_ = volume
-    assert set(np.unique(vol).tolist()) <= ROCK_IDS | {WATER_ID, AIR_ID}
+    assert set(np.unique(vol).tolist()) <= ROCK_IDS | BED_IDS | {WATER_ID, AIR_ID}
+    # 어두운 띠는 지표에서 16 m(8층) 아래에만 굽습니다.
+    # 엔진의 지표 셰이더가 지표 아래 10 m 의 번호로 땅 색을 정하기 때문입니다.
+    assert not np.isin(vol[:, :8, :], sorted(BED_IDS)).any()
 
 
 def test_cave_void_is_flooded_below_water_table(volume):
@@ -58,8 +72,13 @@ def test_cave_void_is_flooded_below_water_table(volume):
     rows, layers, cols = vol.shape
     dy = meta["spacing_m"]["y"]
     oy = top_meta["origin"][1]
-    step = round(wt_meta["spacing_m"] / top_meta["spacing_m"])
-    wt_fine = _bilinear_to(wt, step, rows, cols)
+    ratio = wt_meta["spacing_m"] / top_meta["spacing_m"]
+    if ratio >= 1:
+        wt_fine = _bilinear_to(wt, round(ratio), rows, cols)
+    else:
+        # 지하수면 격자가 재질 부피 격자보다 촘촘하면(2 m 굽기: 2 m 와 4 m) 겹치는 점만 고릅니다.
+        skip = round(1 / ratio)
+        wt_fine = wt[::skip, ::skip][:rows, :cols]
     yc = (top + oy)[:, None, :] - (np.arange(layers)[None, :, None] + 0.5) * dy
     wt_y = np.broadcast_to((wt_fine + oy)[:, None, :], vol.shape)
     over = (yc - wt_y)[vol == WATER_ID]  # 물인데 지하수면보다 높은 만큼
@@ -71,6 +90,7 @@ def test_cave_void_is_flooded_below_water_table(volume):
 
 def test_cave_void_touches_soluble_rock(volume):
     _, vol, *_ = volume
+    vol = _rock_of(vol)
     cave = (vol == WATER_ID) | (vol == AIR_ID)
     if not cave.any():
         pytest.skip("이 회랑에는 동굴 복셀이 없습니다")

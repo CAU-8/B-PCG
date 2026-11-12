@@ -1246,7 +1246,7 @@ function renderOverview() {
         h(
           "dl",
           { class: "facts" },
-          h("div", null, h("dt", null, "방향 · 시작점"), h("dd", null, `${cor.axis === "north" ? "남북" : "동서"} · ${cor.apex_kind === "fan" ? "선상지 꼭짓점" : cor.apex_kind === "river" ? "가장 큰 강" : cor.apex_kind || "—"}`)),
+          h("div", null, h("dt", null, "방향 · 본류 기준점"), h("dd", null, `${cor.axis === "north" ? "남북" : "동서"} · ${cor.apex_kind === "fan" ? "선상지 꼭짓점" : cor.apex_kind === "river" ? "가장 큰 강" : cor.apex_kind || "—"}`)),
           h("div", null, h("dt", null, "동굴 입구"), h("dd", null, fmtInt(cor.caves.n_entrances))),
           h("div", null, h("dt", null, "동굴 메시 삼각형"), h("dd", null, fmtInt(cor.caves.faces_kept))),
           h("div", null, h("dt", null, "엔진 높이 기준 (y_offset)"), h("dd", null, cor.frame ? `${fmt(cor.frame.y_offset_m)} m` : "—")),

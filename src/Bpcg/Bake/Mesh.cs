@@ -424,7 +424,11 @@ public static class Mesh
     /// <summary>
     /// 회랑 rect 안 동굴 벽 삼각형 (cave_surface, 국소 좌표). 반환: (verts (V, 3), faces (F, 3), diag).
     /// </summary>
-    public static (double[] Verts, int[] Faces, OrderedDictionary<string, object?> Diag) CaveSurface(
+    /// <remarks>
+    /// Anchor (V,) 는 꼭짓점이 바깥과 닿는지입니다: 동굴이 지표를 뚫고 나온 가장자리이거나 회랑 가장자리에 놓인 꼭짓점이면 참.
+    /// <see cref="BuildMesh"/> 가 이 표시로 어디로도 통하지 않는 조각(막힌 주머니)을 지웁니다.
+    /// </remarks>
+    public static (double[] Verts, int[] Faces, bool[] Anchor, OrderedDictionary<string, object?> Diag) CaveSurface(
         HeroVolume volume, (double XMin, double XMax, double YMin, double YMax) rect, double voxelM, Action<string>? log = null)
     {
         long tAll = Stopwatch.GetTimestamp();
@@ -529,7 +533,7 @@ public static class Mesh
             diag["faces_raw"] = 0L;
             diag["faces_kept"] = 0L;
             diag["seconds"] = Stopwatch.GetElapsedTime(tAll).TotalSeconds;
-            return ([], [], diag);
+            return ([], [], [], diag);
         }
         diag["faces_raw"] = (long)(faces.Length / 3);
         int nf = faces.Length / 3;
@@ -605,16 +609,112 @@ public static class Mesh
                 fOut[o++] = remap[faces[(t * 3) + 2]];
             }
         }
+        // 바깥과 닿는 꼭짓점: 지표 위라서 버린 삼각형과 꼭짓점을 나눠 쓰는 곳(동굴이 지표로 열린 가장자리)과 회랑 가장자리.
+        bool[] anchor = new bool[nUsed];
+        for (int t = 0; t < nf; t++)
+        {
+            if (!keepFace[t])
+            {
+                for (int e = 0; e < 3; e++)
+                {
+                    int q = remap[faces[(t * 3) + e]];
+                    if (q >= 0)
+                    {
+                        anchor[q] = true;
+                    }
+                }
+            }
+        }
+        double eps = 1e-6 * v;
+        for (int q = 0; q < nv; q++)
+        {
+            if (remap[q] >= 0)
+            {
+                double x = verts[(long)q * 3];
+                double y = verts[((long)q * 3) + 1];
+                if (x <= xs[0] + eps || x >= xs[^1] - eps || y <= ys[0] + eps || y >= ys[^1] - eps)
+                {
+                    anchor[remap[q]] = true;
+                }
+            }
+        }
         diag["seconds"] = Stopwatch.GetElapsedTime(tAll).TotalSeconds;
-        return (vOut, fOut, diag);
+        return (vOut, fOut, anchor, diag);
+    }
+
+    // 삼각형으로 이어진 조각마다, 바깥과 닿는 꼭짓점이 하나라도 있는 조각의 삼각형만 남깁니다 (순서는 그대로).
+    // faces: 합친 꼭짓점 번호 (F, 3). map: 원래 꼭짓점 → 합친 꼭짓점. anchor: 원래 꼭짓점마다 바깥과 닿는지.
+    internal static int[] KeepReachable(int[] faces, int[] map, bool[] anchor, int nMerged)
+    {
+        int[] parent = new int[nMerged];
+        for (int q = 0; q < nMerged; q++)
+        {
+            parent[q] = q;
+        }
+        int Find(int a)
+        {
+            while (parent[a] != a)
+            {
+                parent[a] = parent[parent[a]];
+                a = parent[a];
+            }
+            return a;
+        }
+        for (int t = 0; t < faces.Length; t += 3)
+        {
+            int a = Find(faces[t]);
+            int b = Find(faces[t + 1]);
+            int c = Find(faces[t + 2]);
+            // 번호가 작은 쪽을 뿌리로 삼아 결과가 삼각형 순서와 상관없이 같게 합니다.
+            int root = Math.Min(a, Math.Min(b, c));
+            parent[a] = root;
+            parent[b] = root;
+            parent[c] = root;
+        }
+        bool[] open = new bool[nMerged];
+        for (int i = 0; i < map.Length; i++)
+        {
+            if (anchor[i])
+            {
+                open[Find(map[i])] = true;
+            }
+        }
+        int kept = 0;
+        for (int t = 0; t < faces.Length; t += 3)
+        {
+            kept += open[Find(faces[t])] ? 3 : 0;
+        }
+        int[] output = new int[kept];
+        int o = 0;
+        for (int t = 0; t < faces.Length; t += 3)
+        {
+            if (open[Find(faces[t])])
+            {
+                output[o++] = faces[t];
+                output[o++] = faces[t + 1];
+                output[o++] = faces[t + 2];
+            }
+        }
+        return output;
     }
 
     /// <summary>
     /// 국소 꼭짓점·삼각형 → 엔진 좌표 메시 (build_mesh): 같은 자리 꼭짓점을 붙이고(소수 8자리), 각도 가중 꼭짓점 법선,
     /// 색은 법선 반대(암석) 쪽 0.5 칸 점의 재질.
     /// </summary>
-    public static CaveMesh BuildMesh(double[] vertsLocal, int[] faces, HeroVolume volume, EngineFrame frame, double voxelM)
+    /// <remarks>
+    /// anchor (V,) 를 주면, 붙어 있는 조각마다 바깥과 닿는 꼭짓점(<see cref="CaveSurface"/> 의 Anchor)이 하나도 없는 조각을 지웁니다.
+    /// 잡음으로 만든 통로에는 입구와도 회랑 가장자리와도 이어지지 않는 닫힌 고리와 주머니가 많습니다.
+    /// 들어갈 수도 볼 수도 없는 벽이라 엔진에 넘기지 않습니다. 모두 지워지면 삼각형이 0개인 메시를 돌려줍니다.
+    /// </remarks>
+    public static CaveMesh BuildMesh(double[] vertsLocal, int[] faces, HeroVolume volume, EngineFrame frame, double voxelM,
+        bool[]? anchor = null)
     {
+        if (anchor is not null && anchor.Length != vertsLocal.Length / 3)
+        {
+            throw new ArgumentException(
+                $"anchor 는 꼭짓점 수와 같은 길이여야 합니다. 받은 길이 {anchor.Length}, 꼭짓점 {vertsLocal.Length / 3}개");
+        }
         double[]? ve = frame.ToEngine(vertsLocal);
         // merge_vertices: 소수 8자리로 반올림한 자리가 같으면 한 꼭짓점 (처음 나온 순서로 번호)
         int nv = ve.Length / 3;
@@ -644,7 +744,15 @@ public static class Mesh
         {
             f2[q] = map[faces[q]];
         }
+        if (anchor is not null)
+        {
+            f2 = KeepReachable(f2, map, anchor, mergedCount / 3);
+        }
         map = null;
+        if (f2.Length == 0)
+        {
+            return new CaveMesh { Vertices = [], Faces = [], Normals = [], Colors = [] };
+        }
         // remove_unreferenced_vertices
         int[] used = SortedUnique(f2, mergedCount / 3);
         int[] remap = new int[mergedCount / 3];

@@ -164,8 +164,9 @@ UNIT_OVERRIDES: dict[str, str] = {
     "landscape.jitter": "칸 크기 대비",
     "fans.slope": "m/m",
     "fans.slope_drop_ratio": "배",
-    "soil.bare_slope": "m/m",
+    "soil.bare_slope_ratio": "배",
     "detail.slope_ref": "m/m",
+    "detail.hillslope_smooth_passes": "번",
     "plates.count": "개",
     "plates.warp_amplitude": "단위 구 길이",
     "caves.levels": "층",
@@ -242,10 +243,14 @@ HELP_FALLBACK: dict[str, str] = {
     "마름). 필드 표에 두 층만 있어 1 또는 2 를 씁니다",
     "caves.entrance_tolerance_m": "동굴 층이 지표와 이 거리(+ 통로 반지름) 안으로 가까우면 "
     "입구로 봅니다 (τ). 키우면 입구가 늘어납니다",
-    "caves.passage_radius_m": "동굴 통로의 반지름 r 입니다. 지표에서 지름(2r)보다 깊은 곳에만 "
-    "동굴이 생깁니다",
+    "caves.passage_radius_m": "동굴 통로(둥근 관)의 반지름 r 입니다. 지표에서 지름(2r)보다 깊은 "
+    "곳에만 동굴이 생깁니다. 동굴 구역 가장자리에서는 관이 이보다 가늘어집니다",
     "caves.noise_wavelength_m": "동굴 통로를 구불구불하게 하는 노이즈의 파장입니다. 통로는 "
     "노이즈가 0 인 선을 따라 나므로, 키우면 굽이가 커지고 통로 사이가 멀어집니다",
+    "caves.rarity_wavelength_m": "동굴이 모여 있는 구역의 크기를 정하는 큰 무늬 노이즈의 "
+    "파장입니다. 키우면 구역이 커지고 드물어집니다. 0 이면 녹는 암석 어디에나 통로를 둡니다",
+    "caves.rarity_threshold": "큰 무늬 노이즈가 이 값보다 큰 곳만 동굴 구역으로 둡니다. 키우면 "
+    "구역이 줄어듭니다 (노이즈 값은 대략 −0.5~0.5, 0 이면 절반쯤)",
 }
 
 # 프로필 키의 일반 설명 (파일 주석은 프로필마다 달라서 note 로 붙임)

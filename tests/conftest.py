@@ -74,7 +74,10 @@ def cave_run(csharp_cli, tmp_path_factory) -> Path:
     run = tmp_path_factory.mktemp("caves") / "run"
     sets = [a for kv in CAVE_OVERRIDES for a in ("--set", kv)]
     csharp_cli("hero", "--flat", "--profile", "tiny", "--out", run, *sets)
-    csharp_cli("bake", "--hero", run / "hero")
+    # tiny 프로필은 회랑을 8 m 간격으로 굽습니다.
+    # 동굴 통로는 지름 6 m 라 그 간격으로는 메시에 남지 않습니다.
+    # 동굴을 보는 시험이 쓰는 실행이므로 laptop 프로필과 같은 2 m 간격으로 굽습니다.
+    csharp_cli("bake", "--hero", run / "hero", "--set", "profile.corridor.voxel_m=2.0")
     return run
 
 

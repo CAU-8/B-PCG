@@ -418,7 +418,7 @@ public static class Pipeline
 
         // --- 흙과 충적층
         t = Stopwatch.GetTimestamp();
-        FieldSet soil = Soil.SoilAndAlluvium(z, slope, u, temp, p, q, qs, fanRaise, rock, cfg, ocean);
+        FieldSet soil = Soil.SoilAndAlluvium(z, slope, res.SCritSurface, u, temp, p, q, qs, fanRaise, rock, cfg, ocean, graph);
         sec["soil"] = Seconds(t);
 
         // --- 지하수면

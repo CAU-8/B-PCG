@@ -290,7 +290,7 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
 지표면 높이 $z$와 물길이 정해지면, 같은 인과 사슬을 땅속으로 이어 내려갑니다. 땅속 값은 땅 위 모양을 읽기만 하고 바꾸지 않으므로, 솔버가 끝난 뒤 한 번만 계산합니다.
 
 1. **호수와 강 수면(`Subsurface/Water.cs`)**: 웅덩이를 메운 높이가 원래 높이보다 1 mm 넘게 높은 육지 칸이 호수입니다. 유량이 $0.3\text{ m}^3/\text{s}$(`rivers.min_discharge_m3_per_s`, 1년에 약 947만 $\text{m}^3$) 이상인 육지 칸이 강입니다. 이 문턱은 행성 지도와 히어로 유역에서 같습니다. 수력 기하학 식($W = 4.0 \cdot Q^{0.5}$, $D = 0.35 \cdot Q^{0.4}$, $Q$는 $\text{m}^3/\text{s}$, 레오폴드·매독 지수)으로 강폭 $W$와 수심 $D$를 구합니다. 예를 들어 $100\text{ m}^3/\text{s}$인 강은 폭 40 m, 수심 약 2.2 m입니다. 수심은 필드 `river_depth_m`에, 수면 높이는 `water_level_m`에 기록합니다. 강의 수면은 칸 높이보다 수심의 0.2배만큼 낮게 둡니다.
-2. **토양과 충적층 두께(`Subsurface/Soil.cs`)**: 흙은 암석이 부서져 생기고, 땅이 깎이며 사라집니다. 흙이 생기는 최대 속도 $P_0$(기온과 강수량으로 정함, $\text{m/yr}$)가 땅이 깎이는 속도 $E$(여기서는 융기 속도)보다 빠를 때만 흙이 쌓입니다. 두께는 $h = h_0 \cdot \ln(P_0 / E)$이고 $h_0 = 0.5\text{ m}$(`soil.decay_depth_m`), 상한은 3 m(`soil.thickness_cap_m`)입니다. 예를 들어 $P_0 = 0.3\text{ mm/yr}$, $E = 0.01\text{ mm/yr}$이면 $0.5 \times \ln 30 \approx 1.7\text{ m}$입니다. 경사가 0.8(약 $39^\circ$, `soil.bare_slope`)보다 가파른 칸은 흙을 0으로 둡니다. 충적층(강이 쌓은 모래·자갈 층)은 경사가 0.02보다 완만한 큰 강 칸에 최대 30 m(`soil.alluvium_max_m`)까지 둡니다. 흙도 충적층도 없는 칸은 맨 암반(흙이 없어 암석이 그대로 드러난 땅, 필드 `bare_rock`)입니다.
+2. **토양과 충적층 두께(`Subsurface/Soil.cs`)**: 흙은 암석이 부서져 생기고, 땅이 깎이며 사라집니다. 흙이 생기는 최대 속도 $P_0$(기온과 강수량으로 정함, $\text{m/yr}$)가 땅이 깎이는 속도 $E$(여기서는 융기 속도)보다 빠를 때만 흙이 쌓입니다. 두께는 $h = h_0 \cdot \ln(P_0 / E)$이고 $h_0 = 0.5\text{ m}$(`soil.decay_depth_m`), 상한은 3 m(`soil.thickness_cap_m`)입니다. 예를 들어 $P_0 = 0.3\text{ mm/yr}$, $E = 0.01\text{ mm/yr}$이면 $0.5 \times \ln 30 \approx 1.7\text{ m}$입니다. 경사가 그 칸 지표 암석이 버티는 가장 가파른 경사의 0.9배(`soil.bare_slope_ratio`) 이상인 칸은 흙을 0으로 둡니다. 석회암·화강암은 경사 0.72(약 $36^\circ$)부터입니다. 충적층(강이 쌓은 모래·자갈 층)은 경사가 0.02보다 완만한 큰 강 칸에 최대 30 m(`soil.alluvium_max_m`)까지 둡니다. 흙도 충적층도 없는 칸은 맨 암반(흙이 없어 암석이 그대로 드러난 땅, 필드 `bare_rock`)입니다.
 3. **지하수면(`Subsurface/Groundwater.cs`)**: 칸끼리 물을 주고받는 지하수 방정식은 풀지 않습니다. 칸마다 가장 가까운 물 빠지는 곳(바다·호수·강, 그리고 지하수면이 바닥에 닿은 물길)까지의 거리로 높이를 따로 정하는 어림식입니다(`Groundwater.WaterTable`). 빗물 가운데 땅속으로 스미는 몫은 유출의 0.5배(`groundwater.recharge_fraction`)에 경사 등급 계수를 곱한 값이고, 가파를수록 작습니다. 이 물이 물가로 빠질 때 솟는 물 언덕의 높이를 Dupuit 어림식으로 풉니다. 강과 호수 칸에서는 지하수면이 수면 높이와 같고, 지표보다 높아지면 지표에서 자릅니다. 한 칸에 높이를 두 개 둡니다. 위 지하수면(`water_table_m`)은 땅을 파면 처음 만나는 물의 높이입니다. 아래 지하수면(`water_table_lower_m`)은 석회암처럼 물에 녹는 암석 안의 물 높이로, 가장 가까운 큰 물의 수면 + 0.002 × 거리(`groundwater.karst_gradient`)입니다. 예를 들어 수면이 140 m인 강에서 1 km 떨어진 칸이면 142 m입니다. 그 높이의 암석이 물에 녹는 암석이 아니거나 그 높이가 지표보다 높으면, 아래 지하수면은 위 지하수면과 같습니다.
 4. **석회암 2단 동굴(`Subsurface/Caves.cs`)**: 동굴은 아무 데나 뚫지 않습니다. 층 높이의 암석이 물에 녹는 암석(석회암·대리암, `Rocks.Soluble`)이고 지표 아래 300 m(`groundwater.max_depth_m`) 안인 자리에만 둡니다.
    - **아래층 동굴(`cave_level_0_m`)**: 아래 지하수면 높이에 둡니다. 그래서 물에 잠깁니다.
@@ -314,9 +314,9 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
 
 #### ② 회랑 선택과 3D 재질 부피 굽기 (`Bake/Corridor.cs`, `Volume/Sample.cs`)
 
-히어로 유역(`L2`)이 완성되면, 그 안에서 $6\text{ km} \times 1\text{ km}$ 직사각형 띠인 회랑을 고릅니다(`Corridor.ChooseCorridor`). 선상지 꼭짓점(없으면 유량이 가장 큰 강 칸)을 지나는 본류를 따라 시작점을 옮겨 보며, 동굴 입구 칸이 가장 많이 들어가는 직사각형을 고릅니다.
+히어로 유역(`L2`)이 완성되면, 그 안에서 $6\text{ km} \times 1\text{ km}$ 직사각형 띠인 회랑을 고릅니다(`Corridor.ChooseCorridor`). 선상지 꼭짓점(없으면 유량이 가장 큰 강 칸)을 지나는 본류를 따라 시작점을 옮겨 보며, 점수가 가장 높은 직사각형을 고릅니다. 점수는 지표 암석이 고루 섞인 정도, 경사가 고루 섞인 정도, 동굴, 강의 네 항(각 0~1)을 더한 값입니다([pipeline.md](pipeline.md) 11장).
 
-그다음 회랑 영역을 2 m 간격으로 읽어 지표면 높이맵(`heightmap.bin`, $501 \times 3001$ 표본)과 수면(`water.bin`), 지하수면(`water_table.bin`, `water_table_lower.bin`)을 굽습니다. 25 m 격자가 그리지 못하는 50 m보다 짧은 거칠기는 보기용 높이맵 `heightmap_detail.bin`에 따로 더합니다(`Detail.AddFractalDetail`). 물에서 6 m 안(`detail.water_margin_m`)에는 더하지 않고, `heightmap.bin`은 바꾸지 않습니다. 이 거칠기는 솔버 결과가 아닙니다. 동굴 벽은 메시 파일 `caves.glb`로 굽습니다.
+그다음 회랑 영역을 2 m 간격으로 읽어 지표면 높이맵(`heightmap.bin`, $501 \times 3001$ 표본)과 수면(`water.bin`), 지하수면(`water_table.bin`, `water_table_lower.bin`)을 굽습니다. 25 m 격자가 그리지 못하는 50 m보다 짧은 거칠기는 보기용 높이맵 `heightmap_detail.bin`에 따로 더합니다(`Detail.AddFractalDetail`). 물에서 6 m 안(`detail.water_margin_m`)에는 더하지 않고, `heightmap.bin`은 바꾸지 않습니다. 이 거칠기는 솔버 결과가 아닙니다. 동굴 벽은 메시 파일 `caves.glb`로 굽습니다. 지표로 열린 입구와도 회랑 가장자리와도 이어지지 않는 조각은 지웁니다.
 
 마지막으로 `Corridor.BakeStrata`가 `HeroVolume.EvaluateGrid`(`Volume/Sample.cs`)로 회랑의 땅속을 읽어, 상자마다 무엇이 있는지 바이트 번호로 기록합니다(`strata.u8`). 상자는 수평 4 m, 수직 2 m입니다. 지표를 따라 아래로 306 m(300 m + 동굴 통로 반지름 3 m의 2배)까지 153층을 굽습니다. `laptop` 프로필에서는 긴 쪽 1,501개($6000 / 4 + 1$) × 짧은 쪽 251개 × 153층입니다.
 
@@ -328,6 +328,8 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
   3. 땅속이고 지표 아래 깊이가 토양 두께보다 얕으면 → 흙 (코드 11)
   4. 그 아래 충적층 두께 안이면 → 충적층 (코드 0)
   5. 그보다 깊은 땅속이면 → 3D 지층 기둥에서 그 높이 z에 놓인 암석 종류 (코드 1~10)
+     지표에서 16 m 보다 깊은 층진 암석에는 층리(두꺼운 지층 안에 그린 보기용 얇은 층)를 굽습니다.
+     15 m 띠 열 개 가운데 네 개를 어두운 띠로 고르고, 어두운 띠의 코드는 암석 코드 + 16 입니다
 ```
 
 ---
