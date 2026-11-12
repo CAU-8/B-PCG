@@ -113,8 +113,11 @@
 | 대수층, 투수량 계수 | `rock_aquifer_m`, `fan_alpha_m` | 물이 흐르는 땅속 층과, 그 층이 물을 옆으로 흘려보내는 능력(m²/yr). 흙 가까운 층 + 기반암 층 두 겹 | [pipeline.md](pipeline.md) 8.3 |
 | 카르스트 | `groundwater.karst_gradient` | 석회암이 물에 녹아 생긴 동굴·우묵땅·사라지는 개울 같은 지형. 안의 지하수면은 가까운 강 높이에 거의 평평함 | [pipeline.md](pipeline.md) 8.3 |
 | 동굴 층 | `cave_level_0_m`, `cave_level_1_m` | 녹는 암석 안에 수평으로 뚫린 동굴 통로의 높이. 0층은 지금 지하수면 높이라 물에 잠김, 위층은 옛 강 높이라 마름 | Godot 동굴 레이어 |
-| 동굴 입구 | `cave_entrance` | 동굴 층이 강가(샘)나 골짜기 벽에서 지표와 만나는 칸. 같은 층 입구끼리 200 m 넘게 떨어짐. 3D 회랑에서는 이 칸 가운데 산 밖으로 열리고 통로에 닿는 칸에만 입구 굴을 팜 | Godot T 키 |
-| 동굴 구역 | `caves.rarity_wavelength_m`, `caves.rarity_threshold` | 녹는 암석 가운데 동굴 통로가 모여 있는 곳. 간격이 큰 잡음이 문턱보다 큰 곳만 구역으로 두고, 가장자리에서는 통로가 가늘어지다 끝남 | [pipeline.md](pipeline.md) 10장 |
+| 동굴 입구 | `cave_entrance` | 동굴 층이 강가(샘)나 골짜기 벽에서 지표와 만나는 칸. 같은 층 입구끼리 200 m 넘게 떨어짐. 3D 회랑에서는 이 칸 가운데 산 밖으로 열리고 싱크홀에서 온 물이 나오는 칸(샘)에만 입구 굴을 팜 | Godot T 키 |
+| 싱크홀 | `HeroVolume.SinkOpen`, `caves.sink_spacing_m`, `caves.sink_min_area_m2` | 석회암 지표에서 빗물이 모여 땅속으로 들어가는 구멍. 지표에서 동굴 층까지 수직굴이 뚫려 있음. 서로 300 m 넘게 떨어짐 | Godot 회랑 |
+| 샘 | `HeroVolume.EntranceOpen` | 땅속을 흐른 물이 지표로 나오는 자리. 동굴 입구 후보 가운데 산 밖으로 열리는 칸. 싱크홀에서 온 물이 나오는 샘에만 입구 굴을 팜 | Godot T 키 |
+| 수직굴 | `CaveNetwork.SegIsShaft` | 싱크홀에서 동굴 층까지 곧게 내려가는 굴 | Godot 회랑 |
+| 동굴 통로 그물 | `CaveNetwork`, `caves.full_size_area_m2` | 싱크홀에서 샘까지 물이 흐르는 길을 이은 통로들. 하류로 갈수록 합쳐져 나뭇가지 꼴이 되고 굵어짐(반지름 2~3 m) | Godot 회랑, `caves.glb` |
 
 ## 6. 굽기와 엔진
 
