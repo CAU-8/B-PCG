@@ -812,7 +812,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 
 | 파일 | 함수 | 약속 |
 |---|---|---|
-| `hero/Finder.cs` | `Finder.FindHero(planet, cfg) -> HeroSite` | L0 육지 칸에 점수를 매기고 가장 높은 칸을 고릅니다. 점수 = 0.3·융기 기울기(정규화) + 0.4·지표 탄산염 + 0.15·기복(정규화) + 0.15·200 km 안 건조 칸 비율. 동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다. 위도 55° 넘으면 0점. `HeroSite`: 중심 단위 벡터 `CenterUnit`, 동·북 단위 벡터 `East`·`North`, L0 칸 `L0Cell`, 점수 `Score`와 내역 `Parts`, 위경도 `LatDeg`·`LonDeg` |
+| `hero/Finder.cs` | `Finder.FindHero(planet, cfg) -> HeroSite` | L0 육지 칸에 점수를 매기고 가장 높은 칸을 고릅니다. 점수 = 0.3·융기 기울기(정규화) + 0.4·지표 탄산염 + 0.15·기복(정규화) + 0.15·200 km 안 건조 칸 비율. 동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다. 위도 55° 넘으면 0점. 행성 설정의 `hero.site_lat_lon_deg`에 [위도, 경도]를 넣으면 점수와 상관없이 그 자리에서 가장 가까운 L0 칸을 고릅니다. 그 칸이 바다이거나, 위도 55°를 넘거나, 해안에서 히어로 반대각선 + L0 칸 2개 안이면 `RunError`로 멈추고 가장 가까운 후보 칸의 위도·경도를 알려 줍니다(`Finder.RequestedSite`, `Finder.UnitFromLatLon`). `HeroSite`: 중심 단위 벡터 `CenterUnit`, 동·북 단위 벡터 `East`·`North`, L0 칸 `L0Cell`, 점수 `Score`와 내역 `Parts`, 위경도 `LatDeg`·`LonDeg` |
 | `hero/Domain.cs` | `Domain.HeroGraph(site, cfg) -> (Graph, UnitPoints)` | 접평면 평면 격자(한 변 `profile.hero.size_m`, 간격 `spacing_m`, 노드 흔들기). 국소 (동, 북)를 구면 점으로 바꿔 L0 값을 표본합니다. 영역은 이 두 값으로 늘리고 줄입니다(`--set profile.hero.size_m=40000.0`). 한 변은 간격의 가장 가까운 정수배로 맞추고(실제 값은 `diag['grid']`), 칸 수가 5000²를 넘으면 오류입니다. 영역이 클수록 바다에서 먼 후보 칸이 필요하고, 회랑은 영역 안으로 줄여 맞춥니다. 거친 격자 한 변이 16칸보다 작으면 먼저 풀기를 건너뜁니다 |
 | `hero/Refine.cs` | `Refine.RefineHero(planet, site, cfg) -> HeroState` | L0 값 보간(U, 유출, 기온, 강수, 깎인 두께, 습곡 위상, 템플릿은 nearest) → 지질 기둥 → 경계조건 → 2~4단계를 같은 함수로 |
 | `hero/Flat.cs` | `Flat.FlatHero(cfg) -> HeroState` | L0 없이 가짜 경계조건: 남북 방향 섭입 단면 U(y) = 0.1 mm/yr + 2 mm/yr·exp(−((y − 0.3L)/0.25L)²), 템플릿 1, 유출 0.5 m/yr, 기온 15 °C, 출구는 남쪽 가장자리 가운데 5칸(z = 200 m) |
@@ -828,7 +828,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 
 - **출구.** L0 수신 칸 방향으로 히어로 가장자리와 만나는 곳의 5칸이고, z_outlet은 그 위치의 L0 고도(골짜기 바닥)입니다.
 - **나머지 가장자리.** 닫힌 칸입니다(일반 칸, 출구 아님). 그래서 영역 전체가 하나의 유역이 됩니다.
-- **들어오는 물.** L0에서 상류 칸들이 히어로 영역으로 보내는 유량 Q_in = Q_L0(중심) − A_hero·R_eff가 0보다 크면, L0 기여 칸 방향 가장자리 칸 하나에 `extra_inflow`로 넣습니다.
+- **들어오는 물.** L0에서 상류 칸들이 히어로 영역으로 보내는 유량 Q_in = Q_L0(중심) − A_hero·R_eff가 0보다 크면, 물을 보내는 L0 상류 칸마다 그 칸 방향의 가장자리 칸 3개(`Refine.InflowPortCells`)에 `extra_inflow`로 나눠 넣습니다. 상류 칸이 여럿이면 각 칸의 L0 유량 비율대로 나눕니다.
     - 예: laptop 히어로 넓이 A_hero는 32 km × 32 km = 1,024 km²(서울의 약 1.7배)입니다. R_eff = 0.3 m/yr면 영역 안 빗물은 약 3.07e8 m³/yr입니다. L0 중심 칸의 유량이 이보다 크면 그 차이가 상류에서 들어옵니다.
 - **이음매.** L0과 만나는 띠는 엔진에서 안개로 가립니다.
 
@@ -977,7 +977,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 | 명령 | 하는 일 |
 |---|---|
 | `uv run bpcg planet --profile laptop --out out/earth` | 1~4단계, L0 묶음, 면 텍스처, 점수표 |
-| `uv run bpcg hero --from out/earth` | 히어로 L2 (L0 경계조건) |
+| `uv run bpcg hero --from out/earth` | 히어로 L2 (L0 경계조건). 행성 묶음의 설정을 그대로 쓰고, `--set` 은 `hero.` 로 시작하는 키만 받습니다. 예: `--set 'hero.site_lat_lon_deg=[8.39, -0.92]'` 는 행성을 다시 만들지 않고 히어로 자리만 옮깁니다 (`Runs.HeroConfig`) |
 | `uv run bpcg hero --flat --out out/flat` | 평면 히어로 (가짜 경계조건) |
 | `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
 | `uv run bpcg all --profile tiny --out out/tiny` | 전부 한 번 |
@@ -1001,6 +1001,7 @@ C#의 입구 함수는 `src/Bpcg/Pipeline.cs`의 `Pipeline.GeneratePlanet(cfg)`,
 - **확인이 필요한 값.** Gleeson 2011 투수성 값은 GLHYMPS(Gleeson 2014) 표 1과 같습니다. Fan 2013 α·β·f_min(120 m, 150, 5 m)은 1.25 km 격자로 맞춘 값이라 25 m 칸에서 다시 맞춰야 합니다. 슬로베니아 석회암 땅 넓이(입구 밀도의 분모)는 원문 확인이 필요합니다.
 - **손 보정 뒤 남은 문제(earth_v2, laptop).** 손 보정은 첫 실행에서 생긴 문제를 고치려고 손으로 바꾼 임시 값입니다.
     - 히어로 솔버에서 진동으로 고정된 칸이 30%입니다. 열 칸 가운데 세 칸입니다.
+    - 행성 지도(L0) 솔버가 시드에 따라 반복 상한 200번 안에 멈추지 못합니다. laptop 프로필 시드 열 개(0~7, 15, 1030) 가운데 시드 1030 하나가 그렇습니다. 칸 40~80개의 물길 방향이 반복마다 바뀌고 높이가 50~125 m씩 움직입니다(2026-11-12). 반복 상한을 400으로 올리면 316번째에, 문턱 `hysteresis_eta`를 0.05로 올리면 126번째에 멈춥니다.
     - 선상지 판정 `slope_drop_ratio` 4는 n = 1 기준입니다. n = 2에서는 경사 차이가 융기 차이의 제곱근이라, 평면 히어로에서는 선상지가 생기지 않습니다. 실제 히어로에는 선상지 2,874칸이 있습니다.
     - `soil.bare_slope` 0.8이 규암을 뺀 모든 S_crit 이상이라, '가파르면 맨 암반' 규칙이 거의 걸리지 않습니다.
         - 그래서 earth_v2 회랑은 지표 0.5 m 아래가 모두 흙(두께 1.6–1.8 m)이고, 프랙탈 디테일의 흙 항이 어디서나 `soil_factor` 0.35입니다. 가파른 암반만 더 거칠게 하는 대비는 흙 모델이 맨 암반을 만들어야 보입니다.

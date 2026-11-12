@@ -61,7 +61,7 @@ tiny 프로필(몇 초 만에 끝나도록 크기와 해상도를 줄인 설정)
 
 - 맞게 돌았으면 마지막 줄이 `[전체] 끝: 1.5 s → …/out/earth`처럼 나옵니다. `out/earth/` 아래에 `planet`, `hero`, `corridor`, `globe` 폴더가 생깁니다.
 - 걸리는 시간: 명령 전체 약 3초(맥북 에어 M3). 처음에는 C# 빌드가 먼저 돌아 더 걸립니다.
-- 노트북 기본 크기인 laptop 프로필(`uv run bpcg all --profile laptop`)은 약 70~90초 걸리고, 메모리를 최대 약 3.4 GB 씁니다(`/usr/bin/time -l`의 peak memory footprint). 맥북 에어 M3(메모리 16 GB)에서 다른 프로그램이 함께 돌던 상태로 두 번 잰 값입니다.
+- 노트북 기본 크기인 laptop 프로필(`uv run bpcg all --profile laptop`)은 약 50~90초 걸리고, 메모리를 최대 약 3.4 GB 씁니다(`/usr/bin/time -l`의 peak memory footprint). 맥북 에어 M3(메모리 16 GB)에서 다른 프로그램이 함께 돌던 상태로 네 번 잰 값입니다(2026-10-27에 71.7초와 91.3초, 2026-11-12에 52.7초와 50.8초. 메모리는 10-27에 잰 값).
 
 ### 4. 결과 보기
 
@@ -75,6 +75,7 @@ uv run bpcg studio
 ### 5. 자주 쓰는 명령
 
 ```bash
+uv run bpcg --help                # 명령과 옵션 목록
 uv run bpcg compare run           # 기존 지형 생성 방법과 같은 시드로 비교 (docs/compare.md)
 dotnet build Bpcg.slnx            # C# 빌드 (생성기, 명령줄, 엔진, 시험)
 dotnet test --solution Bpcg.slnx  # C# 시험 (golden 파일과 비트까지 같은지 등)
@@ -83,7 +84,9 @@ uv run ruff format . && uv run ruff check .
 .tools/godot-net/Godot_mono.app/Contents/MacOS/Godot --path engine -e   # 엔진 편집기 (맥)
 ```
 
-- 시드는 같은 행성을 다시 만들 때 쓰는 출발 번호입니다. 시드가 같으면 어느 컴퓨터에서든 같은 행성이 나옵니다.
+- 시드는 같은 행성을 다시 만들 때 쓰는 출발 번호입니다. 시드가 같으면 같은 행성이 나옵니다.
+    - 같은 운영체제와 같은 종류의 CPU에서는 결과 파일이 바이트까지 같습니다(맥 Apple Silicon에서 스레드 수를 바꿔 가며 확인).
+    - 운영체제가 다르면 지수·로그 계산의 마지막 자리가 달라, 값이 아주 조금 다를 수 있습니다. 운영체제끼리 결과를 맞대어 본 적은 없습니다.
 - `compare run`은 지형 생성 리뷰 논문(Galin 외 2019)이 꼽은 기존 방법 10개와 B-PCG를 같은 시드로 돌려, 같은 지표로 비교합니다.
 - golden 파일은 옛 Python 생성기의 결과를 정답으로 저장해 두고, 새 결과가 비트까지 같은지 비교하는 시험 자료입니다(`tests/golden/`).
 
