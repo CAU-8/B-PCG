@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Bpcg.Bake;
 using Bpcg.Core;
 
 namespace Bpcg.Cli;
@@ -57,6 +56,44 @@ public static class Program
     };
 
     private const string Usage = "usage: bpcg {planet,hero,bake,all,compare,figures} ...";
+
+    /// <summary>bpcg --help 가 보여 주는 사용법. 옵션 이름은 <see cref="Allowed"/> 와 같아야 합니다 (시험이 봅니다).</summary>
+    public const string Help = Usage + """
+
+
+        행성 하나를 만들고, 그 안의 강 유역 하나(히어로 유역)를 25 m 칸으로 다시 풀고,
+        걸어 다닐 띠(회랑)를 Godot 엔진이 읽는 파일로 굽습니다.
+
+        명령
+          all      행성 → 히어로 유역 → 회랑 → 지구본을 한 번에 만듭니다
+          planet   행성만 만듭니다 (<out>/planet)
+          hero     히어로 유역을 만듭니다. --from <행성을 만든 실행 폴더> 나 --flat 이 필요합니다
+          bake     히어로 유역에서 회랑과 지구본을 굽습니다. --hero <히어로 묶음 폴더> 가 필요합니다
+          compare  기존 지형 생성 방법과 같은 시드로 비교합니다 (bpcg compare methods|run|list|render)
+          figures  결과 그림을 그립니다 (bpcg figures results|cubesphere)
+          studio   브라우저에서 값을 바꿔 돌리고 지도로 봅니다 (uv run bpcg studio)
+
+        옵션
+          --planet <이름>    행성 설정 configs/planets/<이름>.toml (기본 earth)
+          --profile <이름>   크기와 해상도 묶음 configs/profiles/<이름>.toml: tiny, laptop, lab (기본 laptop)
+          --seed <정수>      출발 번호. 같은 시드면 같은 행성이 나옵니다
+          --out <폴더>       결과를 쓸 실행 폴더 (기본 out/<행성 이름>)
+          --set 키=값        설정 값 하나를 바꿉니다. 여러 번 쓸 수 있습니다 (예: --set landscape.theta=0.5)
+          --from <폴더>      hero: 행성을 만든 실행 폴더. 이때 --set 은 hero. 로 시작하는 키만 받습니다
+          --flat             hero, all: 행성 없이, 정해 둔 융기와 출구로 히어로 유역만 만듭니다
+          --hero <폴더>      bake: 히어로 묶음 폴더. 이때 --set 은 detail., profile.corridor. 로 시작하는 키만 받습니다
+          --engine           bake, all: engine/baked 에도 써서 Godot 가 바로 읽게 합니다
+          --no-globe         bake: 지구본을 굽지 않습니다
+
+        예
+          uv run bpcg all --profile tiny
+          uv run bpcg all --profile laptop --seed 15 --out out/s15
+          uv run bpcg hero --from out/earth --set 'hero.site_lat_lon_deg=[8.39, -0.92]'
+          uv run bpcg bake --hero out/earth/hero --engine
+        """;
+
+    private static bool WantsHelp(string[] argv) =>
+        argv.Length > 0 && (argv[0] == "help" || Array.Exists(argv, a => a is "--help" or "-h"));
 
     /// <summary>argparse 와 같은 뜻으로 인자를 읽습니다. 틀리면 CliExit(코드 2).</summary>
     public static Args Parse(string[] argv)
@@ -145,6 +182,8 @@ public static class Program
         {
             overrides["planet.seed"] = seed;
         }
+        CheckConfigName("planets", args.Planet, "--planet", "행성 설정");
+        CheckConfigName("profiles", args.Profile, "--profile", "프로필");
         Config b = Config.LoadConfig(args.Planet, args.Profile);
         if (overrides.Count == 0)
         {
@@ -167,6 +206,22 @@ public static class Program
             }
         }
         return b.WithOverrides(checkedOv);
+    }
+
+    // 이름이 틀리면 파일을 열다가 나는 예외 대신, 받은 이름과 쓸 수 있는 이름을 알려 주고 멈춥니다.
+    private static void CheckConfigName(string kind, string name, string flag, string label)
+    {
+        string dir = Path.Combine(Paths.Configs, kind);
+        string path = name.EndsWith(".toml", StringComparison.Ordinal) ? name : Path.Combine(dir, name + ".toml");
+        if (File.Exists(path))
+        {
+            return;
+        }
+        string[] names = Directory.Exists(dir)
+            ? Array.ConvertAll(Directory.GetFiles(dir, "*.toml"), f => Path.GetFileNameWithoutExtension(f))
+            : [];
+        Array.Sort(names, StringComparer.Ordinal);
+        throw new CliExit($"{flag} {name}: {label} 파일이 없습니다 ({path}). 쓸 수 있는 이름은 {string.Join(", ", names)} 입니다");
     }
 
     private static string OutDir(Args args) => args.Out ?? Path.Combine(Paths.Out, args.Planet);
@@ -227,12 +282,8 @@ public static class Program
         {
             throw new CliExit("hero 는 --from <행성 묶음 폴더> 나 --flat 중 하나가 필요합니다");
         }
-        if (args.Set.Count > 0)
-        {
-            throw new CliExit("--set 은 hero --flat 에서만 씁니다 (--from 은 묶음 설정을 그대로 씀)");
-        }
         string planetDir = PlanetBundleDir(args.FromDir);
-        Config cfg = Runs.WithSeed(Bundle.ConfigFromManifest(Bundle.ReadManifest(planetDir)), args.Seed);
+        Config cfg = Runs.HeroConfig(planetDir, Say, args.Seed, args.Set.Count > 0 ? args.Set : null);
         string runDir = args.Out ?? Parent(planetDir);
         Pipeline.ApplyThreads(cfg);
         Runs.RunHero(cfg, runDir, planetDir, flat: false, Say);
@@ -280,6 +331,11 @@ public static class Program
             if (argv.Length > 0 && argv[0] == "figures")
             {
                 return FiguresCommand.Dispatch(argv[1..]);
+            }
+            if (WantsHelp(argv))
+            {
+                Console.Out.WriteLine(Help);
+                return 0;
             }
             Args args = Parse(argv);
             return args.Command switch
