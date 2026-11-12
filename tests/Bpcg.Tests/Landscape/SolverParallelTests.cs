@@ -49,6 +49,48 @@ public sealed class SolverParallelTests
         }
     }
 
+    /// <summary>
+    /// 가라앉는 땅(융기 &lt; 0, 열곡)이 섞여 있어도 증분 누적이 전체 누적과 같은 답을 내는지 봅니다.
+    /// 퇴적물 유량은 누적한 뒤 0 아래를 자르는데, 자른 값을 다음 반복의 증분 누적이 다시 읽으면 하류 값이 커집니다.
+    /// </summary>
+    [Fact]
+    public void IncrementalSolverMatchesLegacyWithSubsidingCells()
+    {
+        Config cfg = Config.LoadConfig("earth", "tiny").WithOverrides(
+        [
+            new KeyValuePair<string, object?>("planet.seed", 421L),
+            new KeyValuePair<string, object?>("landscape.max_flow_iterations", 12L),
+        ]);
+        const int Side = 64;
+        CellGraph graph = Graph.FlatGraph(Side, Side, 1000.0);
+        bool[] outlets = graph.BoundaryMask();
+        // 가운데 띠(열 24~39)는 −0.1 mm/yr 로 가라앉고, 나머지는 0.2 mm/yr 로 솟습니다.
+        double[] uplift = new double[graph.NCells];
+        for (int c = 0; c < uplift.Length; c++)
+        {
+            int col = c % Side;
+            uplift[c] = col is >= 24 and < 40 ? -0.0001 : 0.0002;
+        }
+
+        try
+        {
+            Parallelism.Configure(1);
+            SolverResult legacy = Solver.SolveSteadyState(graph, outlets, [0.0], uplift, [0.0005], null, cfg,
+                useIncremental: false);
+            SolverResult incremental = Solver.SolveSteadyState(graph, outlets, [0.0], uplift, [0.0005], null, cfg,
+                useIncremental: true, verifyIncremental: true);
+
+            Assert.Contains(incremental.History, row => Equals(row["incremental"], true));
+            Assert.Equal(legacy.SedimentFlux, incremental.SedimentFlux);
+            Assert.Equal(legacy.Z, incremental.Z);
+            Assert.Equal(legacy.Receiver, incremental.Receiver);
+        }
+        finally
+        {
+            Parallelism.Configure(null);
+        }
+    }
+
     [Fact]
     public void SolverProducesBitIdenticalFieldsWithParallelKernels()
     {

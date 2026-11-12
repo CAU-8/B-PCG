@@ -902,6 +902,9 @@ public static class Solver
         double[] q = new double[n];
         double[] aUp = new double[n];
         double[] qs = new double[n];
+        // 퇴적물 유량을 자르기 전의 누적값. 증분 누적은 지난 반복에 구한 기여 셀 값을 다시 읽으므로,
+        // 0 아래를 자른 qs 가 아니라 이 배열에 이어 씁니다 (가라앉는 칸의 누적값은 음수).
+        double[] qsSum = new double[n];
         double[]? fullGridVerificationZ = verifyIncremental ? new double[n] : null;
         bool[] changedMask = new bool[n];
         bool[] hydrologyDirty = new bool[n];
@@ -976,21 +979,21 @@ public static class Solver
                 }
                 Array.Clear(hydrologyValueChanged);
                 AccumulateDirty3(donorStart, donors, order, topologicalPosition, donorScratch,
-                    hydrologyDirty, hydrologyValueChanged, wWater, q, area, aUp, wSed, qs);
+                    hydrologyDirty, hydrologyValueChanged, wWater, q, area, aUp, wSed, qsSum);
                 if (verifyIncremental)
                 {
                     VerifyAccumulation(it, "유량", rcv, order, wWater, q);
                     VerifyAccumulation(it, "집수 면적", rcv, order, area, aUp);
-                    VerifyAccumulation(it, "퇴적물 유량", rcv, order, wSed, qs);
+                    VerifyAccumulation(it, "퇴적물 유량", rcv, order, wSed, qsSum);
                 }
             }
             else
             {
-                AccumulateModule.Accumulate3IntoTrusted(rcv, order, wWater, q, area, aUp, wSed, qs);
+                AccumulateModule.Accumulate3IntoTrusted(rcv, order, wWater, q, area, aUp, wSed, qsSum);
             }
             for (int c = 0; c < n; c++)
             {
-                qs[c] = Math.Max(qs[c], 0.0);
+                qs[c] = Math.Max(qsSum[c], 0.0);
             }
             double iterAccumulationSeconds = Stopwatch.GetElapsedTime(stageStart).TotalSeconds;
             accumulationSeconds += iterAccumulationSeconds;
