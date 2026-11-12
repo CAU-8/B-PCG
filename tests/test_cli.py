@@ -130,6 +130,39 @@ def test_hero_from_planet_bundle(csharp_cli, tiny_run, hero, tmp_path):
         assert (again[name] == hero[name]).all(), name
 
 
+def test_hero_from_moves_site_without_new_planet(csharp_cli, tiny_run, hero, tmp_path):
+    """hero --from 의 --set 은 hero. 키만 받습니다: 행성은 그대로 두고 히어로 자리만 옮깁니다."""
+    auto = hero.manifest["meta"]["site"]
+    proc = csharp_cli(
+        "hero", "--from", tiny_run / "planet", "--out", tmp_path,
+        "--set", "hero.site_lat_lon_deg=[8.39, -0.92]",
+    )  # fmt: skip
+    assert "설정 hero.site_lat_lon_deg [8.39, -0.92] 에서 가장 가까운 칸" in proc.stdout
+    moved = read_json(tmp_path / "hero" / "manifest.json")["meta"]["site"]
+    assert moved["l0_cell"] != auto["l0_cell"]
+    assert abs(moved["lat_deg"] - 8.39) < 0.01 and abs(moved["lon_deg"] + 0.92) < 0.01
+    assert not (tmp_path / "planet").exists()
+
+    proc = csharp_cli(
+        "hero", "--from", tiny_run / "planet", "--out", tmp_path,
+        "--set", "landscape.theta=0.5", check=False,
+    )  # fmt: skip
+    assert proc.returncode != 0
+    assert "hero --from 에서는 hero. 로 시작하는 키만" in proc.stderr
+
+
+def test_help_lists_commands_and_options(csharp_cli):
+    """bpcg --help 는 오류 없이 명령과 옵션을 모두 보여 줍니다."""
+    for args in (["--help"], ["all", "-h"], ["help"]):
+        proc = csharp_cli(*args)
+        assert proc.stdout.startswith("usage: bpcg"), args
+        for word in ("all", "planet", "hero", "bake", "compare", "figures", "studio"):
+            assert f"\n  {word} " in proc.stdout, word
+        for flag in ("--planet", "--profile", "--seed", "--out", "--set", "--from", "--flat",
+                     "--hero", "--engine", "--no-globe"):  # fmt: skip
+            assert f"\n  {flag} " in proc.stdout, flag
+
+
 def test_rejects_missing_inputs(csharp_cli, tmp_path):
     cases = [
         (["hero", "--profile", "tiny", "--out", tmp_path], "--from"),
@@ -141,6 +174,8 @@ def test_rejects_missing_inputs(csharp_cli, tmp_path):
             "비슷한 키: landscape.theta",
         ),
         (["all", "--profile", "tiny", "--set", "planet.name=mars"], "덮어쓸 수 없습니다"),
+        (["all", "--profile", "preview"], "쓸 수 있는 이름은 lab, laptop, tiny 입니다"),
+        (["planet", "--planet", "venus"], "쓸 수 있는 이름은 earth, mars 입니다"),
     ]
     for args, message in cases:
         proc = csharp_cli(*args, check=False)

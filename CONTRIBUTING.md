@@ -43,7 +43,7 @@ uv run ruff format . && uv run ruff check .
 
 | 명령 | 무엇을 보나 | 걸리는 시간 (맥북 에어 M3) |
 |---|---|---|
-| `dotnet build` + `dotnet test` | C#이 경고 없이 빌드되는지, C# 시험(옛 Python 판과 비트까지 같은지 포함) | 빌드가 끝난 뒤 시험 약 6초 |
+| `dotnet build` + `dotnet test` | C#이 경고 없이 빌드되는지, C# 시험(옛 Python 판과 비트까지 같은지 포함) | 빌드가 끝난 뒤 시험 약 7초 |
 | `dotnet format … --verify-no-changes` | C# 코드 모양(띄어쓰기, 중괄호)이 규칙대로인지 | 약 12초 |
 | `uv run pytest -m "not slow"` | C# 명령줄이 쓴 결과 파일, 스튜디오(매개변수를 바꿔 행성을 다시 만들고 결과를 지도로 보는 브라우저 도구) | 약 40초 |
 | `ruff` | 파이썬 코드 모양과 흔한 실수 | 몇 초 |

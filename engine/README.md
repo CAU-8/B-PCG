@@ -44,6 +44,24 @@ $GODOT --path engine -- --baked-dir="$(pwd)/out/earth/corridor"
 
 처음 화면을 건너뛰고 바로 회랑이 열립니다. `--baked-dir` 에는 실행 폴더 안의 `corridor/` 를 절대 경로로 줍니다.
 
+걸어 볼 강 유역(히어로 유역)은 생성기가 점수로 자동으로 고릅니다. 원하는 곳에 두려면 첫 줄에 위도와 경도를 넘깁니다. 좌표는 스튜디오의 행성 지도나 `[히어로] 후보:` 기록 줄에서 읽습니다.
+
+```bash
+uv run bpcg all --profile tiny --set 'hero.site_lat_lon_deg=[8.39, -0.92]'
+```
+
+그 자리가 바다이거나 해안에 너무 가까우면, 실행이 멈추고 가장 가까운 후보 자리를 `hero.site_lat_lon_deg 를 [위도, 경도] 로 바꾸세요` 꼴로 알려 줍니다.
+
+이미 만든 행성에서 자리만 옮길 때는 행성을 다시 만들지 않습니다. 히어로 유역과 회랑만 다시 만듭니다.
+
+```bash
+uv run bpcg hero --from out/earth --set 'hero.site_lat_lon_deg=[8.39, -0.92]'
+```
+
+```bash
+uv run bpcg bake --hero out/earth/hero
+```
+
 | 다른 실행 방법 | 명령 |
 |---|---|
 | 편집기 없이 처음 화면부터 | `dotnet build engine/Bpcg.Engine.csproj` 뒤 `$GODOT --path engine` |
@@ -145,8 +163,9 @@ Godot .NET 판이나 dotnet이 없으면 건너뜁니다.
 | `test_engine_matches_cli` | 엔진 안에서 만든 결과 = 명령줄 `all` 결과 (목록 파일의 `seconds` 만 뺌) |
 | `test_engine_loads_console_bake` | 명령줄로 구운 동굴 회랑과 지구본 대체 자료(`tests/globe_fixture.py`)도 읽는지 |
 | `test_engine_globe_malformed` | 크기가 틀린 지구본 자료에 '읽지 못했습니다' 알림 |
+| `test_fixture_globe_follows_contract` | 시험용 지구본 대체 자료(`tests/globe_fixture.py`)가 지구본 파일 형식 약속을 지키는지 (Godot 없이 돎) |
 
-엔진 안의 노드를 들여다보는 검사(`Tests/SmokeTest.cs`, `Tests/GlobeSmokeTest.cs`)는 Godot 안에서 돌아야 해서 C#입니다. 손으로 돌릴 때는 HOME을 임시 폴더로 바꿉니다. 그러지 않으면 내 편집기 설정과 `user://` 를 덮어씁니다([docs/history.md](../docs/history.md) 3절).
+엔진 안의 노드를 들여다보는 검사(`Tests/SmokeTest.cs`, `Tests/GlobeSmokeTest.cs`)는 Godot 안에서 돌아야 해서 C#입니다. 손으로 돌릴 때는 HOME을 임시 폴더로 바꿉니다. 그러지 않으면 내 편집기 설정과 `user://` 를 덮어씁니다([docs/history.md](../docs/history.md)의 2026-10-02 줄, Godot 설정 사고).
 
 ```bash
 cd engine && dotnet build Bpcg.Engine.csproj
@@ -258,7 +277,7 @@ C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.Lo
 
 <details><summary>예전 GDScript 판과의 대응</summary>
 
-예전 GDScript 판을 C#으로 옮긴 사정은 [docs/history.md](../docs/history.md) 1절에 있습니다.
+예전 GDScript 판을 C#으로 옮긴 사정은 [docs/history.md](../docs/history.md)의 2026-10-03 줄에 있습니다.
 
 | 예전 (GDScript) | 지금 (C#) | 비고 |
 |---|---|---|

@@ -710,7 +710,10 @@ public static class Pipeline
             ["dry_fraction"] = "건조 칸 비율",
         };
         string parts = string.Join(", ", site.Parts.Select(kv => $"{partNames.GetValueOrDefault(kv.Key, kv.Key)} {kv.Value:F2}"));
-        Say(log, $"[히어로] 후보: L0 칸 {site.L0Cell}, 위도 {site.LatDeg:F2}°, 경도 {site.LonDeg:F2}°, 점수 {site.Score:F3} ({parts}), {tFind:F2} s");
+        string how = Finder.RequestedSite(cfg) is (double lat, double lon)
+            ? $", 설정 hero.site_lat_lon_deg [{lat:F2}, {lon:F2}] 에서 가장 가까운 칸"
+            : "";
+        Say(log, $"[히어로] 후보: L0 칸 {site.L0Cell}, 위도 {site.LatDeg:F2}°, 경도 {site.LonDeg:F2}°, 점수 {site.Score:F3} ({parts}){how}, {tFind:F2} s");
         HeroState hero = Refine.RefineHero(planet, site, cfg, log);
         if (!hero.Diag.TryGetValue("seconds", out object? s) || s is not OrderedDictionary<string, object?>)
         {

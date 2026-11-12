@@ -75,7 +75,7 @@ Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → H
 - **`Compare`.** 기존 지형 생성 방법과 견주는 도구라, 생성 단계 어디서도 부르지 않습니다. `Compare`는 평면 히어로(`Hero`), 물길(`Hydro`), 색표(`Bake`)를 씁니다.
 - **콘솔과 엔진.** `src/Bpcg.Cli`와 `engine/`은 `src/Bpcg`를 참조하고, `src/Bpcg`는 둘을 모릅니다. 그래서 생성기는 Godot 없이 콘솔과 시험에서 돕니다.
 - **결과 그림.** `src/Bpcg.Figures`는 `src/Bpcg`를 참조하고, 콘솔만 `src/Bpcg.Figures`를 참조합니다. 엔진이 그림용 네이티브 라이브러리(SkiaSharp)를 싣지 않게 막기 위해서입니다.
-- **파이썬.** `bpcg_studio`, `analysis/`, `tools/`, `tests/`는 C#을 콘솔 명령으로만 부르고, C# 결과 파일을 읽습니다. 파이썬 쪽에는 생성기 코드가 없습니다([history.md](history.md) 1절).
+- **파이썬.** `bpcg_studio`, `analysis/`, `tools/`, `tests/`는 C#을 콘솔 명령으로만 부르고, C# 결과 파일을 읽습니다. 파이썬 쪽에는 생성기 코드가 없습니다([history.md](history.md)의 2026-10-03 줄).
 - **스튜디오.** `src/bpcg_studio`는 `analysis/`와 `tools/`를 import하지 않습니다. `analysis/`는 GPL 도구를 import해도 되는 곳이라, 스튜디오가 그곳을 import하면 9절의 라이선스 격리가 깨집니다.
 
 ### 무엇을 어디에 두나
@@ -190,6 +190,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 - **도구와 위치.** 두 겹입니다.
     - C# 단위 시험: `tests/Bpcg.Tests/`(xunit v3). 함수 하나를 golden 자료와 비트 단위로 맞대어 봅니다. golden 자료는 옛 Python 판이 만든 기준 결과이고, `tests/golden/data/`에 있습니다(큰 사례는 `out/golden/`). C# 판이 옛 Python 판과 같은 답을 내는지 확인합니다. `dotnet test --solution Bpcg.slnx`로 돕니다. 큰 사례가 없으면 그 시험만 건너뜁니다.
     - 결과 검사: `tests/test_<대상>.py`(pytest). C# 콘솔(`bpcg all` 등)이 쓴 묶음·굽기 파일을 읽어 불변식(물은 아래로, 넓이 합, 형식 약속)을 봅니다. 엔진은 `tests/test_engine.py`가 Godot을 띄워 봅니다.
+- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 116개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
 - **표시(marker).** 시험에 붙여 언제 돌지를 정하는 이름표입니다.
 
     | 표시 | 뜻 |
@@ -295,7 +296,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 엔진 안 생성 결과는 같은 설정의 콘솔 결과와 바이트까지 같아야 합니다. 엔진과 콘솔은 같은 `Runs`를 부릅니다([csharp_port.md](csharp_port.md) 0장).
 - **커밋하는 파일.** `*.cs`, `*.tscn`, `*.gdshader`, `*.import`, `*.uid`, `Bpcg.Engine.csproj`·`.sln`·`packages.lock.json`은 커밋합니다. `.godot/`(C# 빌드 출력 포함)와 `baked/`는 커밋하지 않습니다. `.godot/`는 Godot이 만드는 캐시와 빌드 출력이고, `baked/`는 다시 구울 수 있는 결과입니다(8절).
 - **스크립트로 실행할 때.** `--headless`(화면 없이)로 돌리고, HOME을 임시 폴더로 바꿉니다.
-    - 그러지 않으면 Godot이 내 컴퓨터의 Godot 편집기 설정과 `user://`를 덮어씁니다([history.md](history.md) 3절).
+    - 그러지 않으면 Godot이 내 컴퓨터의 Godot 편집기 설정과 `user://`를 덮어씁니다([history.md](history.md)의 2026-10-02 줄, Godot 설정 사고).
     - 예: CI는 `HOME="$(mktemp -d)" "$GODOT" --headless --version`처럼 돌립니다.
     - 실행 전에 `dotnet build engine/Bpcg.Engine.csproj`로 C#을 빌드합니다.
 

@@ -28,6 +28,8 @@ public static class Runs
     public const string GlobeDir = "globe";
     public static readonly string[] BakeSections = ["detail"];
     public static readonly string[] BakeSetPrefixes = ["detail.", "profile.corridor."];
+    public static readonly string[] HeroSections = ["hero"];
+    public static readonly string[] HeroSetPrefixes = ["hero."];
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
 
@@ -136,51 +138,81 @@ public static class Runs
     public static Config BakeConfig(string heroDir, Action<string> log, long? seed = null, IEnumerable<string>? sets = null)
     {
         Config cfg = WithSeed(Bundle.ConfigFromManifest(Bundle.ReadManifest(heroDir)), seed);
-        var missing = BakeSections.Where(s => !cfg.Contains(s)).ToList();
-        if (missing.Count > 0)
+        cfg = WithMissingSections(cfg, BakeSections, "[굽기]", log);
+        return WithStageOverrides(cfg, sets, BakeSetPrefixes, "bake", "지형을 바꾸려면 bpcg all 에서 --set", log);
+    }
+
+    /// <summary>
+    /// 히어로 설정 = 행성 묶음 설정 + hero --from 의 --set. --set 은 hero. 로 시작하는 키(히어로 자리)만 받습니다.
+    /// 행성을 다시 만들지 않고 걸어 볼 자리만 옮길 때 씁니다. 묶음 설정에 hero 절이 없으면(옛 묶음) 지금 설정 파일의 값을 씁니다.
+    /// </summary>
+    public static Config HeroConfig(string planetDir, Action<string> log, long? seed = null, IEnumerable<string>? sets = null)
+    {
+        Config cfg = WithSeed(Bundle.ConfigFromManifest(Bundle.ReadManifest(planetDir)), seed);
+        if (sets is null || !sets.Any())
         {
-            string planet = Convert.ToString(cfg.Sec("planet").Get("name", "earth"), CultureInfo.InvariantCulture) ?? "earth";
-            string profile = cfg.Sec("profile").Get("name") is string pn && pn.Length > 0 ? pn : "laptop";
-            Config current = Config.LoadConfig(planet, profile);
-            var add = new OrderedDictionary<string, object?>();
-            foreach (string s in missing)
+            return cfg;
+        }
+        cfg = WithMissingSections(cfg, HeroSections, "[히어로]", log);
+        return WithStageOverrides(cfg, sets, HeroSetPrefixes, "hero --from", "행성을 바꾸려면 bpcg all 에서 --set", log);
+    }
+
+    // 묶음 설정에 없는 절을 지금 설정 파일(같은 행성·프로필)에서 가져옵니다. 절이 생기기 전에 만든 묶음을 읽을 때 씁니다.
+    private static Config WithMissingSections(Config cfg, string[] sections, string head, Action<string> log)
+    {
+        var missing = sections.Where(s => !cfg.Contains(s)).ToList();
+        if (missing.Count == 0)
+        {
+            return cfg;
+        }
+        string planet = Convert.ToString(cfg.Sec("planet").Get("name", "earth"), CultureInfo.InvariantCulture) ?? "earth";
+        string profile = cfg.Sec("profile").Get("name") is string pn && pn.Length > 0 ? pn : "laptop";
+        Config current = Config.LoadConfig(planet, profile);
+        var add = new OrderedDictionary<string, object?>();
+        foreach (string s in missing)
+        {
+            if (current.Contains(s))
             {
-                if (current.Contains(s))
-                {
-                    add[s] = current.Sec(s).AsDict();
-                }
-            }
-            if (add.Count > 0)
-            {
-                cfg = cfg.WithOverrides(add);
-                log($"[굽기] 묶음 설정에 [{string.Join(", ", add.Keys)}] 가 없어 지금 설정 파일({planet}.toml)의 값을 씁니다");
+                add[s] = current.Sec(s).AsDict();
             }
         }
+        if (add.Count == 0)
+        {
+            return cfg;
+        }
+        log($"{head} 묶음 설정에 [{string.Join(", ", add.Keys)}] 가 없어 지금 설정 파일({planet}.toml)의 값을 씁니다");
+        return cfg.WithOverrides(add);
+    }
+
+    // 묶음에서 이어 가는 단계(bake, hero --from)의 --set: 그 단계가 쓰는 키(prefixes)만 받고, 형식을 맞춰 덮어씁니다.
+    private static Config WithStageOverrides(
+        Config cfg, IEnumerable<string>? sets, string[] prefixes, string command, string elsewhere, Action<string> log)
+    {
         OrderedDictionary<string, object?> overrides = SetOverrides(sets);
-        if (overrides.Count > 0)
+        if (overrides.Count == 0)
         {
-            var bad = overrides.Keys.Where(k => !BakeSetPrefixes.Any(p => k.StartsWith(p, StringComparison.Ordinal))).ToList();
-            if (bad.Count > 0)
-            {
-                throw new RunError(
-                    $"--set: bake 에서는 {string.Join(", ", BakeSetPrefixes)} 로 시작하는 키만 바꿀 수 있습니다: {string.Join(", ", bad)} (지형을 바꾸려면 bpcg all 에서 --set)");
-            }
-            OrderedDictionary<string, object?> checkedOv;
-            try
-            {
-                checkedOv = Config.CheckedOverrides(cfg, overrides);
-            }
-            catch (ArgumentException e)
-            {
-                throw new RunError($"--set: {e.Message}");
-            }
-            foreach (KeyValuePair<string, object?> kv in checkedOv)
-            {
-                log($"[설정] {kv.Key} = {ConfigValue.PyRepr(kv.Value)} (묶음 {ConfigValue.PyRepr(cfg[kv.Key])})");
-            }
-            cfg = cfg.WithOverrides(checkedOv);
+            return cfg;
         }
-        return cfg;
+        var bad = overrides.Keys.Where(k => !prefixes.Any(p => k.StartsWith(p, StringComparison.Ordinal))).ToList();
+        if (bad.Count > 0)
+        {
+            throw new RunError(
+                $"--set: {command} 에서는 {string.Join(", ", prefixes)} 로 시작하는 키만 바꿀 수 있습니다: {string.Join(", ", bad)} ({elsewhere})");
+        }
+        OrderedDictionary<string, object?> checkedOv;
+        try
+        {
+            checkedOv = Config.CheckedOverrides(cfg, overrides);
+        }
+        catch (ArgumentException e)
+        {
+            throw new RunError($"--set: {e.Message}");
+        }
+        foreach (KeyValuePair<string, object?> kv in checkedOv)
+        {
+            log($"[설정] {kv.Key} = {ConfigValue.PyRepr(kv.Value)} (묶음 {ConfigValue.PyRepr(cfg[kv.Key])})");
+        }
+        return cfg.WithOverrides(checkedOv);
     }
 
     /// <summary>히어로 묶음에서 회랑을 outDir 에 굽습니다 (run_bake). engineDir 이 있으면 그곳에도 씁니다.</summary>

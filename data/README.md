@@ -36,7 +36,7 @@ uv run python tools/download_pilot.py --verify-only
 | `cache/` | 지워도 되는 임시 파일 (zip 에서 꺼낸 파일 등) | 필요할 때 다시 생깁니다 |
 | `logs/` | 내려받기 기록 | 지워도 됩니다 |
 
-코드에서는 이 경로를 직접 쓰지 않고 `bpcg_studio.paths`(파이썬)·`Bpcg.Core.Paths`(C#) 의 `PILOT`, `EXTERNAL`, `DERIVED`, `CACHE` 를 씁니다.
+코드에서는 이 경로를 직접 쓰지 않고 `bpcg_studio.paths`(파이썬)의 `PILOT`, `EXTERNAL`, `DERIVED`, `CACHE` 와 `Bpcg.Core.Paths`(C#)의 `Pilot`, `External`, `Derived`, `Cache` 를 씁니다.
 
 ## 자료 목록
 

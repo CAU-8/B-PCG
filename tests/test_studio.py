@@ -153,11 +153,14 @@ def test_checked_overrides_rejects_unknown_keys_and_bad_types():
         checked_overrides(cfg, {"plates.speed_m_per_yr": [0.1]})
 
 
-def test_cli_set_errors_clearly(csharp_cli, tmp_path):
+def test_cli_set_errors_clearly(csharp_cli, runs, tmp_path):
     base = ["planet", "--profile", "tiny", "--out", str(tmp_path), "--set"]
     assert "landscape.thetaa" in _cli_error(base + ["landscape.thetaa=1"])
     assert "--set" in _cli_error(base + ["nonsense"])
-    assert "--flat" in _cli_error(["hero", "--from", str(tmp_path), "--set", "landscape.theta=0.5"])
+    # hero --from 은 히어로 자리(hero. 키)만 바꿉니다. 지형 키는 받지 않습니다.
+    planet = str(runs[0] / "tiny")
+    hero = ["hero", "--from", planet, "--out", str(tmp_path), "--set", "landscape.theta=0.5"]
+    assert "hero --from 에서는 hero. 로 시작하는 키만" in _cli_error(hero)
 
 
 def test_cli_set_reaches_bundle_config(runs):

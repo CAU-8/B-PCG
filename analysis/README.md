@@ -148,7 +148,7 @@ uv run python tools/make_tile512_fixture.py lope rabi
 | 꺼낸 HDF5 | `data/cache/afrisar/data/` | Fourier HV 2개 0.76 GB + Capon HH·HV 2.8 GB | `extract.py` 가 만듦 (지워도 됨) |
 | 중간 결과 | `data/derived/afrisar/`, `data/derived/veg/` | 합계 약 260 MB | 위 순서로 다시 만듦 |
 
-`dem_catalog/` 는 인터넷만, `scale/`·`legacy/`·`demos/` 는 아무 자료도 필요 없습니다.
+`dem_catalog/` 는 인터넷만, `scale/`·`legacy/` 는 아무 자료도 필요 없습니다.
 
 자료 출처: Hawkins, B.P., N. Pinto, M. Lavalle, and S. Hensley. 2018. AfriSAR: Polarimetric Height Profiles by TomoSAR,
 Lope and Rabi Forests, Gabon, 2016. ORNL DAAC. https://doi.org/10.3334/ORNLDAAC/1577
