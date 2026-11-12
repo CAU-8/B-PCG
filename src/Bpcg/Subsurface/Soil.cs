@@ -48,11 +48,17 @@ public static class Soil
 
     /// <summary>
     /// 흙 두께·충적층 두께·맨 암반 (soil_and_alluvium). discharge·sedimentFlux 는 솔버 결과 Q·Qs.
+    /// sCrit: (N,) 그 칸의 지표 암석이 버티는 가장 가파른 경사 [m/m] (솔버가 경사를 자른 값, SolverResult.SCritSurface).
     /// 반환: soil_thickness_m, alluvium_m, bare_rock.
     /// </summary>
+    /// <remarks>
+    /// 가파른 비탈의 맨 암반은 '경사 ≥ bare_slope_ratio × sCrit' 로 정합니다. 솔버가 경사를 sCrit 에서 자르므로,
+    /// 고정된 문턱(예전 bare_slope = 0.8)과 견주면 문턱에 딱 걸린 칸들이 반올림 끝자리에 따라 갈려 깨알 무늬가 생깁니다.
+    /// 비율로 견주면 문턱(0.9 × sCrit)이 칸들이 몰려 있는 값(sCrit)에서 떨어져 있어 그런 일이 없습니다.
+    /// </remarks>
     public static FieldSet SoilAndAlluvium(
-        double[] z, double[] slope, double[] uplift, double[] temperature, double[] precip, double[] discharge,
-        double[] sedimentFlux, double[]? fanRaise, Array surfaceRock, Config cfg, bool[]? isOcean = null)
+        double[] z, double[] slope, double[] sCrit, double[] uplift, double[] temperature, double[] precip,
+        double[] discharge, double[] sedimentFlux, double[]? fanRaise, Array surfaceRock, Config cfg, bool[]? isOcean = null)
     {
         int n = z.Length;
         double[] s = Array.ConvertAll(Water.AsVector(slope, n, "slope"), v => Math.Max(v, 0.0));
@@ -62,6 +68,14 @@ public static class Soil
         if (surfaceRock.Length != n)
         {
             throw new ArgumentException($"surface_rock 은 ({n},) 배열이어야 합니다");
+        }
+        double[] sc = Water.AsVector(sCrit, n, "s_crit");
+        foreach (double v in sc)
+        {
+            if (!(v > 0.0))
+            {
+                throw new ArgumentException($"s_crit 은 0 보다 커야 합니다 (받은 값 {v}). 솔버 결과의 SCritSurface 를 그대로 넘기세요.");
+            }
         }
         if (discharge.Length != n || sedimentFlux.Length != n)
         {
@@ -89,12 +103,13 @@ public static class Soil
         }
         double h0 = cfg.F("soil.decay_depth_m");
         double cap = cfg.F("soil.thickness_cap_m");
-        double bareSlope = cfg.F("soil.bare_slope");
+        double bareRatio = cfg.F("soil.bare_slope_ratio");
         double aMax = cfg.F("soil.alluvium_max_m");
-        if (!(h0 > 0.0 && cap >= 0.0 && bareSlope > 0.0 && aMax >= 0.0))
+        if (!(h0 > 0.0 && cap >= 0.0 && bareRatio > 0.0 && bareRatio <= 1.0 && aMax >= 0.0))
         {
             throw new ArgumentException(
-                $"soil 설정은 decay_depth_m > 0, thickness_cap_m ≥ 0, bare_slope > 0, alluvium_max_m ≥ 0 이어야 합니다: {h0}, {cap}, {bareSlope}, {aMax}");
+                "soil 설정은 decay_depth_m > 0, thickness_cap_m ≥ 0, 0 < bare_slope_ratio ≤ 1, alluvium_max_m ≥ 0 이어야 합니다. "
+                + $"받은 값: {h0}, {cap}, {bareRatio}, {aMax}");
         }
         double gDep = cfg.F("landscape.deposition_g");
         double rRef = cfg.F("climate.runoff_ref_m_per_yr");
@@ -109,7 +124,7 @@ public static class Soil
             double e = Math.Max(u[c], MinDenudationMPerYr);
             double hStar = p0[c] > e ? h0 * Math.Log(p0[c] / e) : 0.0;
             soil[c] = NpMath.Clip(hStar, 0.0, cap);
-            if (s[c] > bareSlope || !land[c])
+            if (s[c] >= bareRatio * sc[c] || !land[c])
             {
                 soil[c] = 0.0;
             }

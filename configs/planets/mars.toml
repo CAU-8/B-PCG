@@ -118,7 +118,7 @@ production_max_m_per_yr = 3.0e-4      # 흙 생산 최댓값: 흙이 없을 때 
 production_max_cap_m_per_yr = 2.5e-3  # 흙 생산의 상한, 2.5 mm/yr (남알프스 관측, Larsen 2014, 설계도 5장 14번)
 decay_depth_m = 0.5
 thickness_cap_m = 3.0
-bare_slope = 0.8                      # 이보다 가파르면 흙이 없는 맨 암반 (0.8 은 약 39°). 규암을 뺀 모든 암석의 임계 경사 이상이라 지금은 거의 걸리지 않음 (pipeline.md 14장)
+bare_slope_ratio = 0.9                # 경사가 그 암석이 버티는 가장 가파른 경사(임계 경사)의 이 배수 이상이면 흙이 없는 맨 암반. 줄이면 맨 암반이 넓어짐 (0 초과 1 이하. 석회암·화강암은 0.9 × 0.8 = 0.72, 약 36°)
 alluvium_max_m = 30.0
 
 [groundwater]
@@ -140,8 +140,10 @@ levels = 2
 valley_window_m = 1_500.0             # 골짜기 깊이를 잴 때 강 둘레에서 가장 높은 땅을 찾는 반경. 키우면 골짜기가 깊게 재여 위층 동굴이 높아짐
 entrance_tolerance_m = 3.0
 entrance_spacing_m = 200.0            # 같은 층 동굴 입구 사이의 최소 거리 [m]. 줄이면 입구가 늘어남 (슬로베니아 동굴 대장은 석회암 땅 1 km² 에 약 2개)
-passage_radius_m = 3.0
-noise_wavelength_m = 60.0
+passage_radius_m = 3.0                # 동굴 통로(둥근 관)의 반지름 [m]. 키우면 통로가 굵어짐. 동굴 구역 가장자리에서는 이보다 가늘어짐 (출처 없는 가정값)
+noise_wavelength_m = 200.0            # 통로 무늬의 간격 [m]. 키우면 통로가 성기고 고리가 커짐. 실제 동굴 구역은 평면의 약 6.4% 가 통로 (Klimchouk 2006). 60 m 였을 때는 그보다 세 배쯤 촘촘했음
+rarity_wavelength_m = 1_000.0         # 동굴이 모여 있는 구역의 크기를 정하는 큰 무늬의 간격 [m]. 키우면 구역이 커지고 드물어짐. 0 이면 석회암 땅 어디에나 통로를 둠
+rarity_threshold = 0.0                # 큰 무늬 잡음이 이 값보다 큰 곳만 동굴 구역. 키우면 구역이 줄어듦 (0 이면 석회암 땅의 절반쯤, 잡음 값은 대략 −0.5~0.5)
 
 [rivers]
 min_discharge_m3_per_s = 0.3          # 1초에 이만큼 이상 흐르는 칸을 강으로 봄. 키우면 큰 강만 남음
