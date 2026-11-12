@@ -40,6 +40,8 @@ public static class Corridor
     public static bool HasBeds(byte rock) => rock >= Rocks.Sandstone && rock <= Rocks.Quartzite && rock != Rocks.Granite;
     public const byte StrataAir = HeroVolume.MaterialEmpty;
     public const int MaxCandidates = 256;
+    // 본류 밖의 강(지류) 위에 놓는 회랑 시작점 후보 수의 상한.
+    public const int MaxTributaryCandidates = 1024;
     public const int StrataChunkPoints = 4_000_000;
     public const double WaterSurfaceTolM = 0.01;
     public const double CaveMouthClipM = 20.0;
@@ -132,7 +134,8 @@ public static class Corridor
     /// <remarks>
     /// Score 는 후보끼리 비교하는 점수(0~4)이고, 네 항목의 합입니다: 지표 암석이 고루 섞인 정도 RockDiversity,
     /// 완만한 땅부터 가파른 비탈까지 고루 섞인 정도 SlopeDiversity, 동굴이 있는 정도 Caves, 강이 있는 정도 Stem (모두 0~1).
-    /// Stem 은 회랑 안 강 칸을 이은 길이를 회랑 길이로 나눈 값입니다 (강이 회랑을 끝에서 끝까지 따라가면 1).
+    /// Stem 은 회랑을 길이 방향으로 히어로 칸 간격마다 자른 조각 가운데 강 칸이 있는 조각의 몫입니다 (강이 회랑을 끝에서 끝까지 따라가면 1).
+    /// StartCell 은 고른 후보의 시작 칸(본류나 지류 위의 강 칸)이고, ApexCell 은 본류를 따라가기 시작한 칸입니다.
     /// NRocks 는 회랑 넓이의 2% 이상을 차지하는 지표 암석의 종류 수입니다.
     /// </remarks>
     public sealed record Choice(
@@ -202,7 +205,7 @@ public static class Corridor
     }
 
     /// <summary>
-    /// 회랑 직사각형을 고릅니다 (choose_corridor). 큰 강 줄기를 따라 후보 직사각형을 놓고 점수가 가장 높은 후보를 고릅니다.
+    /// 회랑 직사각형을 고릅니다 (choose_corridor). 본류(유역에서 가장 큰 강 줄기)와 지류 위에 후보 직사각형을 놓고 점수가 가장 높은 후보를 고릅니다.
     /// </summary>
     /// <remarks>
     /// 점수 = 지표 암석이 고루 섞인 정도 + 경사가 고루 섞인 정도 + 동굴 + 강 (각 0~1, <see cref="Choice"/>).
@@ -338,21 +341,13 @@ public static class Corridor
             double[] lin = NpGrid.Linspace(0, cand.Length - 1, MaxCandidates);
             cand = lin.Select(v => cand[(int)Math.Round(v)]).ToArray();
         }
-        // 시작점 후보마다 직사각형을 여러 모양으로 놓아 봅니다: 길게 뻗는 방향 둘(동서, 남북) × 뻗는 쪽 둘 × 옆으로 옮긴 자리 다섯.
-        // 본류가 뻗는 방향 하나만 보면, 강을 따라가면서 암석 경계도 지나는 자리를 놓칩니다.
-        // 직사각형마다 점수의 재료(입구 수, 줄기 칸 수, 강 칸 수, 암석·경사·동굴 구역의 칸 수)를 따로 구한 뒤,
-        // 후보 순서, 모양 순서대로 점수가 가장 큰 직사각형을 고릅니다. 서로 독립이라 병렬로 구해도 고르는 결과가 같습니다.
-        bool[] isStem = new bool[xc.Length];
-        foreach (long c in path)
+        // 후보마다 시작 칸, 강이 흘러가는 방향 (vx, vy), 선상지 꼭짓점까지의 거리를 적어 둡니다.
+        var anchorCell = new List<long>();
+        var anchorVx = new List<double>();
+        var anchorVy = new List<double>();
+        var anchorFar = new List<double>();
+        foreach (int a in cand)
         {
-            isStem[c] = true;
-        }
-        int nVar = 4 * LateralOffsets.Length;
-        var evals = new (string Axis, double Sign, (double, double, double, double) Rect, double L, double Wd, long NEnt, long NStem,
-            long[] Rocks, long[] Slopes, long NZone, long NCells, long NRiver)[cand.Length * nVar];
-        Parallelism.ForTasks(cand.Length, ci =>
-        {
-            int a = cand[ci];
             int b = Math.Min(SciPy.SearchSorted(s, s[a] + length, false), np - 1);
             double vx = px[b] - px[a];
             double vy = py[b] - py[a];
@@ -362,14 +357,72 @@ public static class Corridor
                 double ey = py[^1] - py[a];
                 (vx, vy) = ex != 0 || ey != 0 ? (ex, ey) : (0.0, 1.0);
             }
+            anchorCell.Add(path[a]);
+            anchorVx.Add(vx);
+            anchorVy.Add(vy);
+            anchorFar.Add(Math.Abs(s[a] - s[p0]));
+        }
+        // 본류 밖의 강(지류) 칸도 후보로 넣습니다. 본류가 암석 띠와 나란히 흐르는 유역에서는 본류 위의 후보만으로는
+        // 암석 여러 종류와 강을 한 회랑에 담지 못합니다. 암석 띠를 가로질러 본류로 내려오는 지류를 따라가면 둘 다 담깁니다.
+        // 지류 칸은 칸 번호 순서로 일정한 간격마다 하나씩 골라 MaxTributaryCandidates 개를 넘지 않게 합니다.
+        bool[] isStem = new bool[xc.Length];
+        foreach (long c in path)
+        {
+            isStem[c] = true;
+        }
+        int nTributary = 0;
+        for (int c = 0; c < isRiver.Length; c++)
+        {
+            nTributary += isRiver[c] && !isStem[c] ? 1 : 0;
+        }
+        int every = Math.Max((int)Math.Ceiling((double)nTributary / MaxTributaryCandidates), 1);
+        int seen = 0;
+        for (int c = 0; c < isRiver.Length; c++)
+        {
+            if (!isRiver[c] || isStem[c] || seen++ % every != 0)
+            {
+                continue;
+            }
+            // 강이 흘러가는 방향: 이 칸에서 물길을 회랑 길이만큼 따라 내려간 칸까지의 방향.
+            long end = c;
+            double run = 0.0;
+            while (run < length && rcv[end] != end && rcv[end] >= 0)
+            {
+                long next = rcv[end];
+                run += double.Hypot(xc[next] - xc[end], yc[next] - yc[end]);
+                end = next;
+            }
+            double vx = xc[end] - xc[c];
+            double vy = yc[end] - yc[c];
+            if (vx == 0 && vy == 0)
+            {
+                vy = 1.0;
+            }
+            anchorCell.Add(c);
+            anchorVx.Add(vx);
+            anchorVy.Add(vy);
+            anchorFar.Add(double.Hypot(xc[c] - xc[start], yc[c] - yc[start]));
+        }
+        int nAnchor = anchorCell.Count;
+        // 시작점 후보마다 직사각형을 여러 모양으로 놓아 봅니다: 길게 뻗는 방향 둘(동서, 남북) × 뻗는 쪽 둘 × 옆으로 옮긴 자리 다섯.
+        // 본류가 뻗는 방향 하나만 보면, 강을 따라가면서 암석 경계도 지나는 자리를 놓칩니다.
+        // 직사각형마다 점수의 재료(입구 수, 줄기 칸 수, 강이 있는 조각 수, 암석·경사·동굴 구역의 칸 수)를 따로 구한 뒤,
+        // 후보 순서, 모양 순서대로 점수가 가장 큰 직사각형을 고릅니다. 서로 독립이라 병렬로 구해도 고르는 결과가 같습니다.
+        int nVar = 4 * LateralOffsets.Length;
+        var evals = new (string Axis, double Sign, (double, double, double, double) Rect, double L, double Wd, long NEnt, long NStem,
+            long[] Rocks, long[] Slopes, long NZone, long NCells, long NRiverSlices)[nAnchor * nVar];
+        Parallelism.ForTasks(nAnchor, ci =>
+        {
+            double vx = anchorVx[ci];
+            double vy = anchorVy[ci];
             // 모양 0번은 본류가 뻗는 방향과 쪽입니다. 점수가 같으면 이 모양이 먼저 뽑힙니다.
             string stemAxis = Math.Abs(vx) >= Math.Abs(vy) ? "east" : "north";
             double stemSign = (stemAxis == "east" ? vx : vy) >= 0 ? 1.0 : -1.0;
             string otherAxis = stemAxis == "east" ? "north" : "east";
             (string Axis, double Sign)[] shapes =
                 [(stemAxis, stemSign), (stemAxis, -stemSign), (otherAxis, 1.0), (otherAxis, -1.0)];
-            double ax = px[a];
-            double ay = py[a];
+            double ax = xc[anchorCell[ci]];
+            double ay = yc[anchorCell[ci]];
             for (int v = 0; v < nVar; v++)
             {
                 (string axis, double sign) = shapes[v / LateralOffsets.Length];
@@ -410,10 +463,11 @@ public static class Corridor
                 long nEnt = 0;
                 long nZone = 0;
                 long nCells = 0;
-                long nRiver = 0;
                 long nStem = 0;
                 long[] rocks = new long[Rocks.NRocks];
                 long[] slopes = new long[SlopeClassEdges.Length + 1];
+                // 회랑을 길이 방향으로 칸 간격마다 자른 조각에 강 칸이 있는지 적어 둡니다.
+                bool[] sliceHasRiver = new bool[axis == "east" ? iHi - iLo + 1 : jHi - jLo + 1];
                 for (int jj = jLo; jj <= jHi; jj++)
                 {
                     for (int ii = iLo; ii <= iHi; ii++)
@@ -426,7 +480,10 @@ public static class Corridor
                         nCells++;
                         nEnt += ent[c] ? 1 : 0;
                         nZone += zone[c] ? 1 : 0;
-                        nRiver += isRiver[c] ? 1 : 0;
+                        if (isRiver[c])
+                        {
+                            sliceHasRiver[axis == "east" ? ii - iLo : jj - jLo] = true;
+                        }
                         nStem += isStem[c] ? 1 : 0;
                         rocks[Math.Min((int)rockId[c], Rocks.NRocks - 1)]++;
                         int cls = 0;
@@ -437,29 +494,31 @@ public static class Corridor
                         slopes[cls]++;
                     }
                 }
-                evals[(ci * nVar) + v] = (axis, sign, rect, l, wd, nEnt, nStem, rocks, slopes, nZone, nCells, nRiver);
+                long nRiverSlices = sliceHasRiver.Count(b => b);
+                evals[(ci * nVar) + v] = (axis, sign, rect, l, wd, nEnt, nStem, rocks, slopes, nZone, nCells, nRiverSlices);
             }
         });
         (double, double, long)? bestKey = null;
         Choice? best = null;
         for (int e = 0; e < evals.Length; e++)
         {
-            int a = cand[e / nVar];
+            int a = e / nVar;
             (string axis, double sign, (double, double, double, double) rect, double l, double wd, long nEnt, long nStem,
-                long[] rocks, long[] slopes, long nZone, long nCells, long nRiver) = evals[e];
+                long[] rocks, long[] slopes, long nZone, long nCells, long nRiverSlices) = evals[e];
             double rockDiv = Evenness(rocks);
             double slopeDiv = Evenness(slopes);
             double zoneShare = nCells > 0 ? (double)nZone / nCells : 0.0;
             double caves = (0.5 * Math.Min(nEnt / EnoughEntrances, 1.0)) + (0.5 * Math.Min(zoneShare / EnoughCaveZone, 1.0));
-            double stem = Math.Min(nRiver * dx / l, 1.0);
+            // 강 항목: 강이 회랑 길이의 얼마를 따라가는지. 강이 회랑을 가로질러 지나가기만 하면 조각 한두 개만 셉니다.
+            double stem = Math.Min(nRiverSlices * dx / l, 1.0);
             double score = rockDiv + slopeDiv + caves + stem;
-            // 점수가 같으면 시작점(선상지 꼭짓점)에 가까운 후보, 그래도 같으면 줄기 칸이 많은 직사각형, 그래도 같으면 앞 순서.
-            (double, double, long) key = (score, -Math.Abs(s[a] - s[p0]), nStem);
+            // 점수가 같으면 선상지 꼭짓점에 가까운 후보, 그래도 같으면 본류 칸이 많은 직사각형, 그래도 같으면 앞 순서.
+            (double, double, long) key = (score, -anchorFar[a], nStem);
             if (bestKey is null || key.CompareTo(bestKey.Value) > 0)
             {
                 bestKey = key;
                 long nRocks = rocks.Count(v => nCells > 0 && (double)v / nCells >= RockShareMin);
-                best = new Choice(rect, axis, (int)sign, path[a], (px[a], py[a]), start, kind, nEnt, nStem, l, wd, evals.Length,
+                best = new Choice(rect, axis, (int)sign, anchorCell[a], (xc[anchorCell[a]], yc[anchorCell[a]]), start, kind, nEnt, nStem, l, wd, evals.Length,
                     score, rockDiv, slopeDiv, caves, stem, nRocks);
             }
         }
@@ -747,7 +806,7 @@ public static class Corridor
         (double XMin, double XMax, double YMin, double YMax) rect = cor.Rect;
         sec["choose"] = Seconds(t);
         string apex = cor.ApexKind switch { "fan" => "선상지 꼭짓점", "river" => "출구 쪽 큰 강", _ => cor.ApexKind };
-        log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} ({apex}에서 출발), 동굴 입구 칸 {LogText.N(cor.NEntranceCells)}개, 지표 암석 {cor.NRocks}종, 점수 {cor.Score:F2}");
+        log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} (본류 기준점: {apex}), 동굴 입구 칸 {LogText.N(cor.NEntranceCells)}개, 지표 암석 {cor.NRocks}종, 점수 {cor.Score:F2}");
 
         // --- 높이맵 (회랑 지표)
         t = Stopwatch.GetTimestamp();

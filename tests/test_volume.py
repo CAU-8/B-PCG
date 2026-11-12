@@ -72,8 +72,13 @@ def test_cave_void_is_flooded_below_water_table(volume):
     rows, layers, cols = vol.shape
     dy = meta["spacing_m"]["y"]
     oy = top_meta["origin"][1]
-    step = round(wt_meta["spacing_m"] / top_meta["spacing_m"])
-    wt_fine = _bilinear_to(wt, step, rows, cols)
+    ratio = wt_meta["spacing_m"] / top_meta["spacing_m"]
+    if ratio >= 1:
+        wt_fine = _bilinear_to(wt, round(ratio), rows, cols)
+    else:
+        # 지하수면 격자가 재질 부피 격자보다 촘촘하면(2 m 굽기: 2 m 와 4 m) 겹치는 점만 고릅니다.
+        skip = round(1 / ratio)
+        wt_fine = wt[::skip, ::skip][:rows, :cols]
     yc = (top + oy)[:, None, :] - (np.arange(layers)[None, :, None] + 0.5) * dy
     wt_y = np.broadcast_to((wt_fine + oy)[:, None, :], vol.shape)
     over = (yc - wt_y)[vol == WATER_ID]  # 물인데 지하수면보다 높은 만큼

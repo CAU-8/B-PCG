@@ -356,12 +356,14 @@ public sealed class HeroVolume
         }
         // z_m 은 흔들어 둔 격자점의 높이입니다. 아래 계산은 값이 칸 정중앙에 있다고 보고 그 사이를 이으므로,
         // 먼저 칸 중심의 높이로 옮깁니다 (NodeResample). 물 칸은 수면·강바닥이 그 칸의 z 를 기준으로 하므로 그대로 둡니다.
-        bool[] water = ImgB("is_river");
+        // 물 칸 = 강 + 호수 + 바다. 강 칸 배열에 바로 더하면 히어로 필드가 바뀌므로 새 배열에 담습니다.
+        bool[] riverCell = ImgB("is_river");
+        bool[] water = new bool[n];
         bool[] lakeCell = ImgB("is_lake");
         bool[] oceanCell = fields.Contains("is_ocean") ? ImgB("is_ocean") : new bool[n];
         for (int c = 0; c < n; c++)
         {
-            water[c] |= lakeCell[c] || oceanCell[c];
+            water[c] = riverCell[c] || lakeCell[c] || oceanCell[c];
         }
         double[] zCenter = NodeResample.ToCellCenters(graph, zNode, water);
         // 산비탈 칸의 울퉁불퉁함을 줄입니다 (보기용, 설정 detail.hillslope_smooth_passes). 물 칸과, 상류 면적이
