@@ -495,7 +495,14 @@ def test_job_manager_runs_tiny_pipeline(csharp_cli, tmp_path):
     assert result["planet_solver"].startswith("[2단계] 솔버 끝"), result
     assert result["bake_finish"].startswith("[굽기] 끝"), result
     assert result["globe"].startswith("[지구본] 끝"), result
-    saved = json.loads((job.run_dir / "job.json").read_text(encoding="utf-8"))
+    # 실행 스레드는 메모리의 상태를 먼저 '끝'으로 바꾸고 job.json 을 그 뒤에 씁니다.
+    # 파일에 끝난 상태가 적힐 때까지 잠깐 기다립니다.
+    saved_path = job.run_dir / "job.json"
+    saved = json.loads(saved_path.read_text(encoding="utf-8"))
+    deadline = time.time() + 30
+    while saved["status"] == "running" and time.time() < deadline:
+        time.sleep(0.1)
+        saved = json.loads(saved_path.read_text(encoding="utf-8"))
     assert saved["status"] == "done" and saved["stage_seconds"]["hero_solver"] >= 0
     assert saved["server_pid"] == os.getpid() and saved["cost"]["hero_cells"] == 64 * 64
     assert (job.run_dir / "job.log").read_text(encoding="utf-8").count("[굽기]") >= 3
