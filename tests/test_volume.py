@@ -14,7 +14,7 @@ WATER_ID = 254
 AIR_ID = 255
 SOLUBLE = (3, 9)  # 석회암, 대리암
 # 층리의 어두운 띠: 같은 암석을 번호 + 16 으로 굽습니다.
-# 쌓여서 생긴 암석과 줄무늬 변성암 1..10 가운데 화강암 4 를 뺀 것입니다
+# 어두운 띠가 있는 암석은 쌓여서 생긴 암석과 줄무늬 변성암(1..10)에서 화강암(4)을 뺀 암석입니다
 # (Bake/Corridor.cs 의 BedIdOffset·HasBeds).
 BED_OFFSET = 16
 BED_IDS = {r + BED_OFFSET for r in range(1, 11) if r != 4}

@@ -166,6 +166,7 @@ UNIT_OVERRIDES: dict[str, str] = {
     "fans.slope_drop_ratio": "배",
     "soil.bare_slope_ratio": "배",
     "detail.slope_ref": "m/m",
+    "detail.hillslope_smooth_passes": "번",
     "plates.count": "개",
     "plates.warp_amplitude": "단위 구 길이",
     "caves.levels": "층",

@@ -91,4 +91,71 @@ public static class NodeResample
         });
         return output;
     }
+
+    /// <summary>
+    /// 산비탈 칸의 높이를 둘레 칸과 섞어 칸 크기의 울퉁불퉁함을 줄입니다. z (ny·nx) [m] 는 칸 중심 높이이고,
+    /// keep (ny·nx) 이 참인 칸(물 칸과 물길 칸)은 그대로 둡니다. passes 번 되풀이하며, 0 이면 z 와 같은 값을 돌려줍니다.
+    /// </summary>
+    /// <remarks>
+    /// 왜 필요한가: 솔버는 산비탈 칸의 높이를 '물이 흘러가는 이웃 칸의 높이 + 거리 × 경사'로 쌓습니다. 이웃한 두 칸이
+    /// 서로 다른 길로 물을 보내면 두 칸의 높이가 따로 정해져, 칸마다 몇 m 씩 어긋납니다. 지구의 산비탈은 흙이 천천히
+    /// 흘러내려 이 크기(25 m)에서는 매끈합니다.
+    /// 한 번에 칸 높이를 (4 × 자기 + 2 × 위·아래·왼쪽·오른쪽 칸 + 1 × 대각선 칸) ÷ 16 으로 바꿉니다. 가장자리 칸은
+    /// 있는 이웃만으로 같은 비율을 씁니다. 물길 칸은 바꾸지 않으므로 골짜기 선과 강바닥 높이는 그대로입니다.
+    /// 섞은 값은 둘레에서 가장 낮은 칸보다 낮아지지 않으므로 새 웅덩이가 생기지 않습니다.
+    /// 보기용입니다: 3D 샘플 함수와 엔진 지형만 이 높이를 쓰고, 히어로 묶음의 z_m 은 바뀌지 않습니다.
+    /// </remarks>
+    public static double[] SmoothHillslopes(int ny, int nx, double[] z, bool[] keep, int passes)
+    {
+        int n = ny * nx;
+        if (z.Length != n || keep.Length != n)
+        {
+            throw new ArgumentException($"z 와 keep 은 칸 수 ({n},) 와 같은 길이여야 합니다. 받은 길이: z {z.Length}, keep {keep.Length}");
+        }
+        if (passes < 0)
+        {
+            throw new ArgumentException($"섞는 횟수는 0 이상이어야 합니다. 받은 값: {passes}");
+        }
+        double[] cur = (double[])z.Clone();
+        double[] next = new double[n];
+        for (int pass = 0; pass < passes; pass++)
+        {
+            double[] src = cur;
+            double[] dst = next;
+            Parallelism.For(0, n, c =>
+            {
+                if (keep[c])
+                {
+                    dst[c] = src[c];
+                    return;
+                }
+                int j = c / nx;
+                int i = c % nx;
+                double sum = 0.0;
+                double wsum = 0.0;
+                for (int dj = -1; dj <= 1; dj++)
+                {
+                    int jj = j + dj;
+                    if (jj < 0 || jj >= ny)
+                    {
+                        continue;
+                    }
+                    for (int di = -1; di <= 1; di++)
+                    {
+                        int ii = i + di;
+                        if (ii < 0 || ii >= nx)
+                        {
+                            continue;
+                        }
+                        double w = (dj == 0 ? 2.0 : 1.0) * (di == 0 ? 2.0 : 1.0);
+                        sum += w * src[(jj * nx) + ii];
+                        wsum += w;
+                    }
+                }
+                dst[c] = sum / wsum;
+            });
+            (cur, next) = (next, cur);
+        }
+        return cur;
+    }
 }

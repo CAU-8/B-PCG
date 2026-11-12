@@ -127,9 +127,33 @@ def test_cave_mesh_glb(corridor, man):
 def test_entrances_match_manifest(corridor, man):
     ent = read_json(corridor / man["caves"]["entrances_file"])
     n = man["caves"]["n_entrances"]
-    assert len(ent["inside"]) == len(ent["outside"]) == n > 0
+    assert len(ent["inside"]) == len(ent["outside"]) == n
     for p in ent["inside"] + ent["outside"]:
         assert len(p) == 3 and all(np.isfinite(p))
+
+
+def test_dug_entrances_open_outside_and_reach_a_passage(cave_run, cave_hero):
+    """입구 굴은 산비탈 밖으로 열리고 통로에 닿는 입구 후보에만 팝니다 (docs/pipeline.md 10장).
+
+    굴 길이는 밖으로 찾는 거리(히어로 칸 4개)와 안으로 찾는 거리(통로 무늬 파장의 절반)에
+    통로 반지름을 두 번 더한 길이를 넘지 못합니다.
+    """
+    man = read_json(cave_run / "corridor" / "manifest.json")
+    caves = man["caves"]
+    dug, closed = caves["n_capsules"], caves["n_unopened_entrances"]
+    no_passage = caves["n_entrances_without_passage"]
+    assert caves["n_entrances"] > 0
+    assert dug > 0 and dug + closed + no_passage <= caves["n_entrance_candidates"]
+    cfg = cave_hero.config
+    radius = cfg["caves"]["passage_radius_m"]
+    limit = (
+        4.0 * cave_hero.manifest["graph"]["spacing_m"]
+        + 0.5 * cfg["caves"]["noise_wavelength_m"]
+        + 2.0 * radius
+    )
+    ent = read_json(cave_run / "corridor" / caves["entrances_file"])
+    for a, b in zip(ent["inside"], ent["outside"], strict=True):
+        assert np.linalg.norm(np.subtract(a, b)) <= limit + 1e-6
 
 
 def test_face_textures(tiny_run, planet):

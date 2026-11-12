@@ -69,6 +69,85 @@ public sealed class NodeResampleTests
     }
 
     [Fact]
+    public void SmoothingHalvesCellScaleBumpsAndLeavesKeptCellsAlone()
+    {
+        // 매끈한 비탈(동쪽으로 경사 0.4) 위에 칸마다 ±5 m 의 울퉁불퉁함을 얹습니다.
+        const int n = 40;
+        double[] z = new double[n * n];
+        double[] smooth = new double[n * n];
+        bool[] keep = new bool[n * n];
+        for (int c = 0; c < z.Length; c++)
+        {
+            smooth[c] = 0.4 * 25.0 * (c % n);
+            z[c] = smooth[c] + (10.0 * (Hashing.HashUnit(7, c, 0) - 0.5));
+            keep[c] = c % 17 == 0;
+        }
+        double[] once = NodeResample.SmoothHillslopes(n, n, z, keep, 1);
+        double before = 0.0;
+        double after = 0.0;
+        int count = 0;
+        for (int j = 2; j < n - 2; j++)
+        {
+            for (int i = 2; i < n - 2; i++)
+            {
+                int c = (j * n) + i;
+                if (keep[c])
+                {
+                    Assert.Equal(z[c], once[c]);
+                    continue;
+                }
+                before += (z[c] - smooth[c]) * (z[c] - smooth[c]);
+                after += (once[c] - smooth[c]) * (once[c] - smooth[c]);
+                count++;
+            }
+        }
+        // 한 번 섞으면 매끈한 비탈에서 벗어난 크기(RMS)가 절반 아래로 줄어듭니다.
+        Assert.True(Math.Sqrt(after / count) < 0.5 * Math.Sqrt(before / count), $"{Math.Sqrt(before / count)} → {Math.Sqrt(after / count)}");
+    }
+
+    [Fact]
+    public void SmoothingNeverGoesBelowTheLowestNeighbour()
+    {
+        const int n = 30;
+        double[] z = new double[n * n];
+        bool[] keep = new bool[n * n];
+        for (int c = 0; c < z.Length; c++)
+        {
+            z[c] = 100.0 * Hashing.HashUnit(11, c, 0);
+        }
+        double[] twice = NodeResample.SmoothHillslopes(n, n, z, keep, 1);
+        for (int j = 0; j < n; j++)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                double lowest = double.PositiveInfinity;
+                for (int dj = -1; dj <= 1; dj++)
+                {
+                    for (int di = -1; di <= 1; di++)
+                    {
+                        int jj = j + dj;
+                        int ii = i + di;
+                        if (jj >= 0 && jj < n && ii >= 0 && ii < n)
+                        {
+                            lowest = Math.Min(lowest, z[(jj * n) + ii]);
+                        }
+                    }
+                }
+                Assert.True(twice[(j * n) + i] >= lowest);
+            }
+        }
+    }
+
+    [Fact]
+    public void ZeroPassesReturnTheSameHeights()
+    {
+        double[] z = [1.0, 5.0, 2.0, 8.0, 3.0, 9.0, 4.0, 7.0, 6.0];
+        Assert.Equal(z, NodeResample.SmoothHillslopes(3, 3, z, new bool[9], 0));
+        Assert.Throws<ArgumentException>(() => NodeResample.SmoothHillslopes(3, 3, z, new bool[9], -1));
+        Assert.Throws<ArgumentException>(() => NodeResample.SmoothHillslopes(3, 3, z, new bool[8], 1));
+    }
+
+    [Fact]
     public void SphereGraphIsRejected()
     {
         CellGraph g = Graph.SphereGraph(4, 1000.0);
