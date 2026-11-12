@@ -174,6 +174,14 @@ public static class Finder
         return normalized;
     }
 
+    /// <summary>히어로 중심이 바다에서 떨어져야 하는 거리 [m]: 히어로 네모의 반대각선 + L0 칸 2개.</summary>
+    private static double OceanMarginM(CellGraph g, Config cfg)
+    {
+        (int nSide, double dx) = Domain.HeroGridSize(cfg);
+        double halfDiag = 0.5 * Math.Sqrt(2.0) * nSide * dx;
+        return halfDiag + (OceanMarginCells * g.Spacing);
+    }
+
     /// <summary>히어로 중심이 될 수 있는 L0 칸 (candidate_mask).</summary>
     public static bool[] CandidateMask(PlanetState planet, Config cfg)
     {
@@ -181,9 +189,7 @@ public static class Finder
         CellGraph g = planet.Graph;
         bool[] ocean = f.Get<bool>("is_ocean");
         double[] lat = Climate.LatitudeRad(g, cfg);
-        (int nSide, double dx) = Domain.HeroGridSize(cfg);
-        double halfDiag = 0.5 * Math.Sqrt(2.0) * nSide * dx;
-        double margin = halfDiag + (OceanMarginCells * g.Spacing);
+        double margin = OceanMarginM(g, cfg);
         double[] dOcean;
         if (Array.IndexOf(ocean, true) >= 0)
         {
@@ -287,30 +293,170 @@ public static class Finder
         {
             throw new ArgumentException($"cell 은 0..{g.NCells - 1} 이어야 합니다: {cell}");
         }
-        double[] p = g.Pos.AsSpan((int)cell * 3, 3).ToArray();
-        double np = LinAlg.Norm3(p);
-        double[] center = [p[0] / np, p[1] / np, p[2] / np];
-        double[] axis0 = cfg.FArray("planet.axis");
-        double na = LinAlg.Norm3(axis0);
-        double[] axis = [axis0[0] / na, axis0[1] / na, axis0[2] / na];
+        double[] center = UnitPos(g, cell);
+        (double[] axis, double[] rf) = LatLonFrame(cfg);
         (double[] east, double[] north) = Domain.TangentFrame(center, axis);
         double lat = Degrees(Math.Asin(NpMath.Clip(LinAlg.Dot3Np(center, axis), -1.0, 1.0)));
-        double[] rf = new double[3];
-        rf[Domain.ArgMinAbs(axis)] = 1.0;
-        double ra = LinAlg.Dot3Np(rf, axis);
-        rf = [rf[0] - (ra * axis[0]), rf[1] - (ra * axis[1]), rf[2] - (ra * axis[2])];
-        double nr = LinAlg.Norm3(rf);
-        rf = [rf[0] / nr, rf[1] / nr, rf[2] / nr];
         double[] cr = new double[3];
         LinAlg.Cross3(rf, center, cr);
         double lon = Degrees(Math.Atan2(LinAlg.Dot3Np(cr, axis), LinAlg.Dot3Np(center, rf)));
         return new HeroSite(center, east, north, cell, score, parts ?? [], lat, lon);
     }
 
-    /// <summary>점수가 가장 높은 L0 칸을 히어로 중심으로 고릅니다 (find_hero, 같으면 번호가 작은 쪽).</summary>
+    private static double[] UnitPos(CellGraph g, long cell)
+    {
+        double[] p = g.Pos.AsSpan((int)cell * 3, 3).ToArray();
+        double np = LinAlg.Norm3(p);
+        return [p[0] / np, p[1] / np, p[2] / np];
+    }
+
+    /// <summary>위도·경도를 재는 틀: 자전축 방향 axis 와 경도 0° 방향 rf (둘 다 단위 벡터이고 서로 수직).</summary>
+    private static (double[] Axis, double[] Rf) LatLonFrame(Config cfg)
+    {
+        double[] axis0 = cfg.FArray("planet.axis");
+        double na = LinAlg.Norm3(axis0);
+        double[] axis = [axis0[0] / na, axis0[1] / na, axis0[2] / na];
+        double[] rf = new double[3];
+        rf[Domain.ArgMinAbs(axis)] = 1.0;
+        double ra = LinAlg.Dot3Np(rf, axis);
+        rf = [rf[0] - (ra * axis[0]), rf[1] - (ra * axis[1]), rf[2] - (ra * axis[2])];
+        double nr = LinAlg.Norm3(rf);
+        rf = [rf[0] / nr, rf[1] / nr, rf[2] / nr];
+        return (axis, rf);
+    }
+
+    /// <summary>위도·경도 [°] 의 단위 벡터. SiteFromCell 이 칸에서 위도·경도를 구하는 계산을 거꾸로 합니다.</summary>
+    public static double[] UnitFromLatLon(double latDeg, double lonDeg, Config cfg)
+    {
+        (double[] axis, double[] rf) = LatLonFrame(cfg);
+        double[] east90 = new double[3];
+        LinAlg.Cross3(axis, rf, east90);
+        double la = NpMath.Radians(latDeg);
+        double lo = NpMath.Radians(lonDeg);
+        double a = Math.Cos(la) * Math.Cos(lo);
+        double b = Math.Cos(la) * Math.Sin(lo);
+        double s = Math.Sin(la);
+        return
+        [
+            (a * rf[0]) + (b * east90[0]) + (s * axis[0]),
+            (a * rf[1]) + (b * east90[1]) + (s * axis[1]),
+            (a * rf[2]) + (b * east90[2]) + (s * axis[2]),
+        ];
+    }
+
+    /// <summary>
+    /// 설정 hero.site_lat_lon_deg 의 [위도, 경도] [°]. 키가 없거나 빈 리스트 [] 면 null 이고, 이때는 점수로 고릅니다.
+    /// </summary>
+    public static (double LatDeg, double LonDeg)? RequestedSite(Config cfg)
+    {
+        if (!cfg.Contains("hero") || !cfg.Sec("hero").Contains("site_lat_lon_deg"))
+        {
+            return null;
+        }
+        double[] v = cfg.FArray("hero.site_lat_lon_deg");
+        if (v.Length == 0)
+        {
+            return null;
+        }
+        if (v.Length != 2)
+        {
+            throw new RunError(
+                $"히어로 자리 hero.site_lat_lon_deg 는 [위도, 경도] 두 값이어야 하는데 {v.Length}개를 받았습니다. "
+                + "예: --set 'hero.site_lat_lon_deg=[16.0, 15.4]'. 점수로 고르게 하려면 [] 로 둡니다");
+        }
+        if (!(Math.Abs(v[0]) <= 90.0) || !(Math.Abs(v[1]) <= 180.0))
+        {
+            throw new RunError(
+                $"히어로 자리 hero.site_lat_lon_deg 의 위도는 −90~90°, 경도는 −180~180° 여야 합니다: 받은 값 [{v[0]}, {v[1]}]");
+        }
+        return (v[0], v[1]);
+    }
+
+    /// <summary>단위 벡터 target 에 가장 가까운 칸 (mask 가 있으면 mask 가 참인 칸만, 없으면 −1). 같으면 번호가 작은 쪽.</summary>
+    private static int NearestCell(CellGraph g, double[] target, bool[]? mask)
+    {
+        int best = -1;
+        double bestDot = double.NegativeInfinity;
+        for (int c = 0; c < g.NCells; c++)
+        {
+            if (mask is not null && !mask[c])
+            {
+                continue;
+            }
+            double d = LinAlg.Dot3Np(UnitPos(g, c), target);
+            if (d > bestDot)
+            {
+                bestDot = d;
+                best = c;
+            }
+        }
+        return best;
+    }
+
+    private static OrderedDictionary<string, double> PartsAt(OrderedDictionary<string, double[]> parts, int cell)
+    {
+        var o = new OrderedDictionary<string, double>();
+        foreach (KeyValuePair<string, double[]> kv in parts)
+        {
+            o[kv.Key] = kv.Value[cell];
+        }
+        return o;
+    }
+
+    /// <summary>
+    /// 지정한 위도·경도에 가장 가까운 L0 칸을 히어로 중심으로 씁니다. 그 칸이 후보가 아니면 이유와 가장 가까운 후보를 담아 RunError.
+    /// </summary>
+    private static HeroSite SiteNear(
+        PlanetState planet, Config cfg, double latDeg, double lonDeg,
+        double[] total, OrderedDictionary<string, double[]> parts, bool[] cand)
+    {
+        CellGraph g = planet.Graph;
+        double[] target = UnitFromLatLon(latDeg, lonDeg, cfg);
+        int cell = NearestCell(g, target, null);
+        if (cand[cell])
+        {
+            return SiteFromCell(planet, cell, cfg, total[cell], PartsAt(parts, cell));
+        }
+        string why;
+        if (planet.Fields.Get<bool>("is_ocean")[cell])
+        {
+            why = "바다 위입니다";
+        }
+        else if (Math.Abs(SiteFromCell(planet, cell, cfg).LatDeg) > MaxLatDeg)
+        {
+            why = $"위도 {MaxLatDeg:F0}° 를 넘는 곳입니다 (히어로는 위도 {MaxLatDeg:F0}° 안에만 둡니다)";
+        }
+        else
+        {
+            why = $"해안에서 너무 가깝습니다 (히어로 네모가 바다에 걸리지 않게 해안에서 약 "
+                + $"{LogText.N((long)Math.Round(OceanMarginM(g, cfg) / 1000.0))} km 넘게 떨어져야 합니다)";
+        }
+        string asked = $"히어로 자리(위도 {latDeg:F2}°, 경도 {lonDeg:F2}°)는 {why}.";
+        int alt = NearestCell(g, target, cand);
+        if (alt < 0)
+        {
+            throw new RunError(
+                $"{asked} 이 행성에는 히어로 중심이 될 수 있는 칸이 없습니다. hero.site_lat_lon_deg 를 [] 로 두고 다른 시드를 쓰세요");
+        }
+        HeroSite a = SiteFromCell(planet, alt, cfg);
+        double angle = Math.Acos(NpMath.Clip(LinAlg.Dot3Np(target, a.CenterUnit), -1.0, 1.0));
+        long km = (long)Math.Round(angle * cfg.F("planet.radius_m") / 1000.0);
+        throw new RunError(
+            $"{asked} 가장 가까운 후보 칸은 위도 {a.LatDeg:F2}°, 경도 {a.LonDeg:F2}° 로 약 {LogText.N(km)} km 떨어져 있습니다. "
+            + $"hero.site_lat_lon_deg 를 [{a.LatDeg:F2}, {a.LonDeg:F2}] 로 바꾸세요");
+    }
+
+    /// <summary>
+    /// 히어로 중심 L0 칸을 고릅니다 (find_hero). 설정 hero.site_lat_lon_deg 가 있으면 그 자리에서 가장 가까운 칸,
+    /// 없으면 점수가 가장 높은 칸(같으면 번호가 작은 쪽)입니다.
+    /// </summary>
     public static HeroSite FindHero(PlanetState planet, Config cfg)
     {
         (double[] total, OrderedDictionary<string, double[]> parts, bool[] cand) = ScoreCells(planet, cfg);
+        if (RequestedSite(cfg) is (double latDeg, double lonDeg))
+        {
+            return SiteNear(planet, cfg, latDeg, lonDeg, total, parts, cand);
+        }
         if (Array.IndexOf(cand, true) < 0)
         {
             throw new ArgumentException(
@@ -327,11 +473,6 @@ public static class Finder
                 best = c;
             }
         }
-        var bestParts = new OrderedDictionary<string, double>();
-        foreach (KeyValuePair<string, double[]> kv in parts)
-        {
-            bestParts[kv.Key] = kv.Value[best];
-        }
-        return SiteFromCell(planet, best, cfg, total[best], bestParts);
+        return SiteFromCell(planet, best, cfg, total[best], PartsAt(parts, best));
     }
 }

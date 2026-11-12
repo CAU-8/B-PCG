@@ -121,6 +121,7 @@ SECTION_LABELS: dict[str, str] = {
     "groundwater": "지하수",
     "caves": "동굴",
     "rivers": "강",
+    "hero": "히어로 자리",
     "detail": "보기용 디테일 (굽기)",
     "profile.grid": "격자 해상도",
     "profile.hero": "히어로 유역",
