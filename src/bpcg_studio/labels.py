@@ -147,6 +147,16 @@ FIELD_TEXT: dict[str, dict[str, Any]] = {
         "부채꼴로 쌓은 땅(선상지)입니다. 솔버 뒤에 반지름 3 km 원뿔로 얹은 것이라 정상상태가 "
         "아닙니다. 평면 히어로에는 생기지 않는 것이 지금 알려진 한계입니다.",
     },
+    "dam": {
+        "label": "산사태 둑",
+        "group": "지형",
+        "kind": "categorical",
+        "categories": bool_cats("아님", "산사태 둑", "#8a5a2b"),
+        "read": "가파른 산비탈이 무너져 골짜기를 막은 돌무더기(산사태 둑)입니다. 둑 위쪽에 물이 "
+        "고여 호수가 됩니다. 솔버 뒤에 강 위 몇 곳을 골라 높이 20~60 m 둔덕으로 얹은 것이라 "
+        "정상상태가 아닙니다. 갈색 칸 바로 위쪽(상류)에 호수가 붙어 있지 않으면 이상합니다. 행성 "
+        "지도에는 칸이 둑보다 훨씬 커서 생기지 않습니다.",
+    },
     # --- 판·지각
     "plate_id": {
         "label": "판 번호",
@@ -384,8 +394,12 @@ FIELD_TEXT: dict[str, dict[str, Any]] = {
         "group": "물(강·호수·지하수)",
         "kind": "categorical",
         "categories": bool_cats("호수 아님", "호수", "#4aa3ff"),
-        "read": "물이 갇히는 웅덩이를 메운 육지 칸입니다(메운 높이가 땅보다 1 mm 넘게 높음). "
-        "솔버가 만든 지형에는 웅덩이가 없으므로, 호수는 주로 선상지가 물길을 막은 곳에 생깁니다.",
+        "read": "사방이 높아 물이 빠지지 못하는 우묵한 자리를 넘칠 높이까지 물로 채운 육지 "
+        "칸입니다. 솔버가 만든 지형에는 그런 자리가 없어서 따로 만듭니다. 행성 지도에서는 땅 몇 "
+        "군데를 넓고 얕게 낮춘 자리에, 히어로 유역에서는 산사태 둑이나 선상지가 골짜기를 막은 "
+        "위쪽에 생깁니다. 가장 깊은 곳이 2 m 에 못 미치거나 넓이가 1 ha 에 못 미치는 웅덩이는 "
+        "흙으로 메워 호수로 두지 않습니다. 호수가 강과 이어지지 않고 산비탈 한가운데에 떠 있으면 "
+        "이상합니다.",
     },
     "water_level_m": {
         "label": "수면 높이",
@@ -646,6 +660,8 @@ OVERLAYS: dict[str, list[dict[str, Any]]] = {
          "color": "#4aa3ff", "default": True},
         {"id": "fans", "label": "선상지", "field": "fan", "mode": "mask",
          "color": "#e0a526", "default": False},
+        {"id": "dams", "label": "산사태 둑", "field": "dam", "mode": "mask",
+         "color": "#8a5a2b", "default": False},
         {"id": "entrances", "label": "동굴 입구", "field": "cave_entrance", "mode": "mask",
          "color": "#e0218a", "default": False},
     ],
@@ -660,6 +676,7 @@ ANY_FIELDS = {
     "is_river",
     "is_lake",
     "fan",
+    "dam",
     "bare_rock",
     "not_steady",
     "cave_levels",

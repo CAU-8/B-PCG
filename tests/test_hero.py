@@ -13,8 +13,9 @@ from bpcg_studio.fields import FIELDS
 # 2~4단계가 늘 만드는 필드 (평면이라 relief_m·z_mean_m 없음)
 STAGE_FIELDS = {
     "uplift_m_per_yr", "z_m", "receiver", "drainage_area_m2", "discharge_m3_per_yr",
-    "sediment_flux_m3_per_yr", "slope", "k_s", "s_crit", "not_steady", "fan", "temperature_c",
-    "water_level_m", "is_lake", "is_river", "river_width_m", "river_depth_m", "valley_depth_m",
+    "sediment_flux_m3_per_yr", "slope", "k_s", "s_crit", "not_steady", "fan", "dam",
+    "temperature_c", "water_level_m", "is_lake", "is_river", "river_width_m", "river_depth_m",
+    "valley_depth_m",
     "surface_rock", "soil_thickness_m", "alluvium_m", "bare_rock", "water_table_m",
     "cave_level_0_m", "cave_level_1_m", "cave_entrance", "strata_bottom_m", "strata_rock",
 }  # fmt: skip

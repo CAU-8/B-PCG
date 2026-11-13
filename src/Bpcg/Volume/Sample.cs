@@ -422,7 +422,7 @@ public sealed class HeroVolume
         StrataBottom = columns.Bottom;
         StrataRock = columns.Rock;
         _detailSeed = SubSeed(Seed, StreamDetail);
-        BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos);
+        BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos, cfg);
         BuildCaveNetwork(fields, graph, cfg);
     }
 
@@ -610,7 +610,7 @@ public sealed class HeroVolume
     // nodePos: (N, 3) 그래프의 대표점(흔들어 둔 격자점). 강 선은 솔버가 높이를 푼 바로 그 점들을 지나게 합니다.
     // 칸 정중앙을 이으면 D8 물길이 가로·세로·대각선의 곧은 토막으로만 이어져, 자로 그은 수로처럼 보입니다.
     private void BuildRivers(List<long[]> rivers, FieldSet fields, Func<string, double[]> img, Func<string, bool[]> imgB,
-        double[] nodePos)
+        double[] nodePos, Config cfg)
     {
         int n = Ny * Nx;
         if (nodePos.Length != n * 3)
@@ -621,11 +621,39 @@ public sealed class HeroVolume
         double[] w = Array.ConvertAll(img("river_width_m"), NpMath.NanToNum);
         double[] d = Array.ConvertAll(img("river_depth_m"), NpMath.NanToNum);
         double[] lev = img("water_level_m");
-        bool[] isRiver = imgB("is_river");
+        // 강 칸 배열을 아래에서 고치므로 복사해 둡니다 (같은 형이면 CastTo 가 히어로 필드 배열을 그대로 돌려줌).
+        bool[] isRiver = (bool[])imgB("is_river").Clone();
         long[] rcv = (long[])FieldSet.CastTo(fields["receiver"], typeof(long));
         if (rcv.Length != n || rcv.Any(r => r < 0 || r >= n))
         {
             throw new ArgumentException("fields['receiver'] 는 0..N-1 범위의 (N,) 배열이어야 합니다");
+        }
+        // 호수 속 물길: 강만 한 물이 지나는 호수 칸도 강줄기 선에 넣습니다. 가파른 골짜기에서는 호수가 한 칸 폭으로 좁아지는데,
+        // 칸 사이를 잇는 지표에서는 그런 곳의 물이 칸 중심마다 점으로만 보입니다. 선을 따라 바닥을 파 두면 물이 이어집니다.
+        // 넓은 호수에서는 이 물길이 물에 잠겨 보이지 않습니다. 호수 칸의 폭과 깊이는 강과 같은 식(8.1)으로 유량에서 구합니다.
+        if (fields.Contains("discharge_m3_per_yr"))
+        {
+            bool[] isLake = imgB("is_lake");
+            double[] q = img("discharge_m3_per_yr");
+            double qMin = cfg.F("rivers.min_discharge_m3_per_s");
+            double kW = cfg.F("rivers.width_coefficient");
+            double kD = cfg.F("rivers.depth_coefficient");
+            bool any = false;
+            for (int c = 0; c < n; c++)
+            {
+                double qS = q[c] / Constants.SecondsPerYear;
+                if (isLake[c] && qS >= qMin)
+                {
+                    isRiver[c] = true;
+                    w[c] = kW * NpMath.Power(qS, Water.WidthExponent);
+                    d[c] = kD * NpMath.Power(qS, Water.DepthExponent);
+                    any = true;
+                }
+            }
+            if (any)
+            {
+                rivers = Hydro.Network.RiverSegments(rcv, Hydro.Routing.TopoOrder(rcv), isRiver);
+            }
         }
         const double fS = Water.RiverSurfaceDepthFraction;
         var ptsL = new List<double>();

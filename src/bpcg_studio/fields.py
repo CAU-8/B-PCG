@@ -69,6 +69,7 @@ FIELDS: dict[str, FieldInfo] = {
     "s_crit": _f("surface", "m/m", "float32", "지표 암석의 임계 경사"),
     "not_steady": _f("surface", "", "bool", "후처리로 고친 칸 (정상상태 아님)"),
     "fan": _f("surface", "", "bool", "선상지"),
+    "dam": _f("surface", "", "bool", "산사태 둑 (골짜기를 막은 돌무더기)"),
     # --- 물 (subsurface/water.py)
     "water_level_m": _f("water", "m", "float32", "수면 h_w (물 없으면 NaN)"),
     "is_lake": _f("water", "", "bool", "호수"),

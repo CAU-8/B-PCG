@@ -124,10 +124,12 @@ def test_cave_mesh_glb(corridor, man):
     assert faces > 0
 
 
-def test_corridor_river_score_is_the_share_of_length_with_a_river(hero, man):
-    """회랑 점수의 강 항목 (docs/pipeline.md 11장).
+def test_corridor_river_and_lake_scores_follow_the_water_cells(hero, man):
+    """회랑 점수의 강 항목과 호수 항목 (docs/pipeline.md 11장).
 
-    회랑을 길이 방향으로 히어로 칸 간격마다 자른 조각 가운데 강 칸이 있는 조각의 몫입니다.
+    강 항목은 회랑을 길이 방향으로 히어로 칸 간격마다 자른 조각 가운데 강이나 호수 칸이 있는
+    조각의 몫입니다. 호수 항목은 회랑 가장자리에서 100 m 넘게 안쪽에 든 호수 칸의 넓이를
+    3 ha 로 나눈 값입니다 (1 에서 자름).
     """
     cor = man["corridor"]
     graph = hero.manifest["graph"]
@@ -138,10 +140,21 @@ def test_corridor_river_score_is_the_share_of_length_with_a_river(hero, man):
     y = north0 - (np.arange(rows) + 0.5) * dx
     x_min, x_max, y_min, y_max = cor["rect"]
     inside = ((y >= y_min) & (y <= y_max))[:, None] & ((x >= x_min) & (x <= x_max))[None, :]
-    river = hero["is_river"].reshape(rows, cols).astype(bool) & inside
-    n_slices = int(river.any(axis=0 if cor["axis"] == "east" else 1).sum())
+    lake = hero["is_lake"].reshape(rows, cols).astype(bool)
+    water = (hero["is_river"].reshape(rows, cols).astype(bool) | lake) & inside
+    n_slices = int(water.any(axis=0 if cor["axis"] == "east" else 1).sum())
     assert 0.0 <= cor["stem"] <= 1.0
     assert cor["stem"] == pytest.approx(min(n_slices * dx / cor["length_m"], 1.0))
+    margin = 100.0
+    inner = ((y >= y_min + margin) & (y <= y_max - margin))[:, None] & (
+        (x >= x_min + margin) & (x <= x_max - margin)
+    )[None, :]
+    n_lake = int((lake & inner).sum())
+    assert cor["n_lake_cells"] == n_lake
+    assert cor["lake"] == pytest.approx(min(n_lake * dx * dx / 3.0e4, 1.0))
+    assert cor["score"] == pytest.approx(
+        cor["rock_diversity"] + cor["slope_diversity"] + cor["caves"] + cor["stem"] + cor["lake"]
+    )
 
 
 def test_entrances_match_manifest(corridor, man):
