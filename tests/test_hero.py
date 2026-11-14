@@ -13,8 +13,9 @@ from bpcg_studio.fields import FIELDS
 # 2~4단계가 늘 만드는 필드 (평면이라 relief_m·z_mean_m 없음)
 STAGE_FIELDS = {
     "uplift_m_per_yr", "z_m", "receiver", "drainage_area_m2", "discharge_m3_per_yr",
-    "sediment_flux_m3_per_yr", "slope", "k_s", "s_crit", "not_steady", "fan", "temperature_c",
-    "water_level_m", "is_lake", "is_river", "river_width_m", "river_depth_m", "valley_depth_m",
+    "sediment_flux_m3_per_yr", "slope", "k_s", "s_crit", "not_steady", "fan", "dam",
+    "temperature_c", "water_level_m", "is_lake", "is_river", "river_width_m", "river_depth_m",
+    "valley_depth_m",
     "surface_rock", "soil_thickness_m", "alluvium_m", "bare_rock", "water_table_m",
     "cave_level_0_m", "cave_level_1_m", "cave_entrance", "strata_bottom_m", "strata_rock",
 }  # fmt: skip
@@ -51,7 +52,12 @@ def test_flat_hero_with_low_river_threshold_has_rivers_and_caves(cave_hero):
     assert cave_hero["is_river"].sum() > 10
     assert np.isfinite(cave_hero["cave_level_0_m"]).any()
     assert (cave_hero["cave_entrance"] > 0).any()
-    assert cave_hero["is_lake"].any()  # 선상지가 막은 호수
+    # 선상지가 골짜기를 막은 자리는 흙으로 메워져 호수가 남지 않습니다 (docs/pipeline.md 7.4).
+    # 선상지도 둑도 아닌 not_steady 칸은 흙이 메운 칸이거나,
+    # 물길을 다시 계산해 흐르는 방향만 바뀐 칸입니다.
+    filled = cave_hero["not_steady"] & ~cave_hero["fan"] & ~cave_hero["dam"]
+    assert (cave_hero["alluvium_m"][filled] > 0).any()
+    assert not cave_hero["is_lake"].any()
 
 
 def test_flat_hero_domain_size_is_adjustable(csharp_cli, tmp_path):

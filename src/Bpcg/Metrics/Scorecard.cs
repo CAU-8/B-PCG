@@ -568,12 +568,18 @@ public static class Scorecard
             string key = $"{p}.grid_alignment" + (band == "all" ? "" : $"_{band}");
             Run(jobs, key, "check", "", l.Missing(["receiver", "is_river"], graph: true), () =>
             {
-                double v = Drainage.GridAlignment(l.Graph!, l.Rcv(), l.Bool("is_river"), band);
-                if (!double.IsFinite(v))
+                (long hit, long used) = Drainage.AlignmentCounts(l.Graph!, l.Rcv(), l.Bool("is_river"), band);
+                if (used == 0)
                 {
                     return (null, null, $"띠 '{band}' 에 6칸을 따라갈 하천 칸 없음");
                 }
-                string note = $"띠 '{band}', 면 로컬 (i, j), 6칸 하류 방향, 무작위 = 1, 목표 < {G(th["alignment_max"])}";
+                double v = ((double)hit / used) / (2.0 * Drainage.AlignmentTolDeg / 45.0);
+                string note = $"띠 '{band}', 면 로컬 (i, j), 6칸 하류 방향, 하천 칸 {used}개, 무작위 = 1, 목표 < {G(th["alignment_max"])}";
+                if (used < Drainage.AlignmentMinCells)
+                {
+                    // 칸이 적으면 방향이 무작위여도 지수가 합격선을 넘을 수 있어 판정하지 않습니다.
+                    return (v, null, note + $". 하천 칸이 {Drainage.AlignmentMinCells}개에 못 미쳐 판정하지 않음");
+                }
                 return (v, v < th["alignment_max"], note);
             });
         }

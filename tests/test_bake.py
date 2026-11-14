@@ -124,10 +124,12 @@ def test_cave_mesh_glb(corridor, man):
     assert faces > 0
 
 
-def test_corridor_river_score_is_the_share_of_length_with_a_river(hero, man):
-    """회랑 점수의 강 항목 (docs/pipeline.md 11장).
+def test_corridor_river_and_lake_scores_follow_the_water_cells(hero, man):
+    """회랑 점수의 강 항목과 호수 항목 (docs/pipeline.md 11장).
 
-    회랑을 길이 방향으로 히어로 칸 간격마다 자른 조각 가운데 강 칸이 있는 조각의 몫입니다.
+    강 항목은 회랑을 길이 방향으로 히어로 칸 간격마다 자른 조각 가운데 강이나 호수 칸이 있는
+    조각의 몫입니다. 호수 항목은 회랑 가장자리에서 100 m 넘게 안쪽에 든 호수 칸의 넓이를
+    3 ha 로 나눈 값입니다 (1 에서 자름).
     """
     cor = man["corridor"]
     graph = hero.manifest["graph"]
@@ -138,10 +140,21 @@ def test_corridor_river_score_is_the_share_of_length_with_a_river(hero, man):
     y = north0 - (np.arange(rows) + 0.5) * dx
     x_min, x_max, y_min, y_max = cor["rect"]
     inside = ((y >= y_min) & (y <= y_max))[:, None] & ((x >= x_min) & (x <= x_max))[None, :]
-    river = hero["is_river"].reshape(rows, cols).astype(bool) & inside
-    n_slices = int(river.any(axis=0 if cor["axis"] == "east" else 1).sum())
+    lake = hero["is_lake"].reshape(rows, cols).astype(bool)
+    water = (hero["is_river"].reshape(rows, cols).astype(bool) | lake) & inside
+    n_slices = int(water.any(axis=0 if cor["axis"] == "east" else 1).sum())
     assert 0.0 <= cor["stem"] <= 1.0
     assert cor["stem"] == pytest.approx(min(n_slices * dx / cor["length_m"], 1.0))
+    margin = 100.0
+    inner = ((y >= y_min + margin) & (y <= y_max - margin))[:, None] & (
+        (x >= x_min + margin) & (x <= x_max - margin)
+    )[None, :]
+    n_lake = int((lake & inner).sum())
+    assert cor["n_lake_cells"] == n_lake
+    assert cor["lake"] == pytest.approx(min(n_lake * dx * dx / 3.0e4, 1.0))
+    assert cor["score"] == pytest.approx(
+        cor["rock_diversity"] + cor["slope_diversity"] + cor["caves"] + cor["stem"] + cor["lake"]
+    )
 
 
 def test_entrances_match_manifest(corridor, man):
@@ -152,28 +165,61 @@ def test_entrances_match_manifest(corridor, man):
         assert len(p) == 3 and all(np.isfinite(p))
 
 
-def test_dug_entrances_open_outside_and_reach_a_passage(cave_run, cave_hero):
-    """입구 굴은 산비탈 밖으로 열리고 통로에 닿는 입구 후보에만 팝니다 (docs/pipeline.md 10장).
+def test_dug_entrances_open_outside_and_carry_water_from_a_sinkhole(cave_run, cave_hero):
+    """입구 굴은 산비탈 밖으로 열리고 싱크홀에서 온 통로가 닿는 입구 후보에만 팝니다.
 
-    굴 길이는 밖으로 찾는 거리(히어로 칸 4개)와 안으로 찾는 거리(통로 무늬 파장의 절반)에
-    통로 반지름을 두 번 더한 길이를 넘지 못합니다.
+    규칙은 docs/pipeline.md 10장에 있습니다.
+
+    입구 굴은 샘 칸에서 산 밖으로만 뻗습니다. 길이는 밖으로 찾는 거리(히어로 칸 4개)에 통로 반지름을
+    더한 길이를 넘지 못합니다.
     """
     man = read_json(cave_run / "corridor" / "manifest.json")
     caves = man["caves"]
-    dug, closed = caves["n_capsules"], caves["n_unopened_entrances"]
+    dug, closed = caves["n_entrances_dug"], caves["n_unopened_entrances"]
     no_passage = caves["n_entrances_without_passage"]
     assert caves["n_entrances"] > 0
-    assert dug > 0 and dug + closed + no_passage <= caves["n_entrance_candidates"]
-    cfg = cave_hero.config
-    radius = cfg["caves"]["passage_radius_m"]
-    limit = (
-        4.0 * cave_hero.manifest["graph"]["spacing_m"]
-        + 0.5 * cfg["caves"]["noise_wavelength_m"]
-        + 2.0 * radius
-    )
+    assert dug > 0 and dug + closed + no_passage == caves["n_entrance_candidates"]
+    # 통로는 싱크홀에서 시작하므로, 통로가 있으면 싱크홀도 있습니다.
+    assert caves["n_sinkholes"] > 0 and caves["passage_km"] > 0
+    assert caves["n_capsules"] > dug + caves["n_sinkholes"]
+    radius = cave_hero.config["caves"]["passage_radius_m"]
+    limit = 4.0 * cave_hero.manifest["graph"]["spacing_m"] + radius
     ent = read_json(cave_run / "corridor" / caves["entrances_file"])
     for a, b in zip(ent["inside"], ent["outside"], strict=True):
         assert np.linalg.norm(np.subtract(a, b)) <= limit + 1e-6
+        assert a[1] == b[1]  # 입구 굴은 수평입니다 (엔진 좌표의 둘째 값이 높이)
+
+
+def test_sinkholes_get_bowls_and_passages_get_lake_chambers(cave_run, cave_hero):
+    """싱크홀 둘레의 꺼진 땅과 동굴 호수가 생기는 방 (docs/pipeline.md 10장).
+
+    꺼진 땅의 반지름은 15 m 와 설정 doline_radius_m 사이이고, 깊이는 깊이 비 × 지름을 넘지 않습니다.
+    회랑 안 동굴 호수의 물 높이는 그 자리의 아래층 높이(녹는 암석 안의 물 높이)입니다.
+    """
+    caves = read_json(cave_run / "corridor" / "manifest.json")["caves"]
+    cfg = cave_hero.config["caves"]
+    assert 0 < caves["n_dolines"] <= caves["n_sinkholes"]
+    sinks = caves["sinkholes_in_corridor"]
+    assert len(sinks) == caves["n_sinkholes_in_corridor"]
+    for _east, _north, radius, depth in sinks:
+        if depth == 0:
+            continue
+        assert 15.0 <= radius <= cfg["doline_radius_m"]
+        assert 0 < depth <= cfg["doline_depth_ratio"] * 2 * radius + 1e-9
+    assert caves["n_cave_lakes"] > 0
+    lakes = caves["cave_lakes_in_corridor"]
+    assert len(lakes) == caves["n_cave_lakes_in_corridor"]
+    graph = cave_hero.manifest["graph"]
+    rows, cols = graph["shape"]
+    dx = graph["spacing_m"]
+    east0, north0 = graph["origin"]
+    level0 = cave_hero["cave_level_0_m"].reshape(rows, cols)
+    for east, north, water in lakes:
+        # 방의 가운데는 통로를 다듬으며 칸 중심에서 조금 옮겨집니다.
+        # 그래서 둘레 3 × 3 칸 가운데 높이가 같은 칸을 찾습니다.
+        i, j = int((east - east0) // dx), int((north0 - north) // dx)
+        near = level0[max(j - 1, 0) : j + 2, max(i - 1, 0) : i + 2]
+        assert np.isclose(near, water, atol=1e-3).any()
 
 
 def test_face_textures(tiny_run, planet):

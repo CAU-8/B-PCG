@@ -42,15 +42,6 @@ public sealed class ColumnValues
 
     public required double[] WaterDist { get; init; }
 
-    public required double[] CaveZ { get; init; }
-
-    public required double[] CaveW { get; init; }
-
-    public required double[] NuDist { get; init; }
-
-    /// <summary>동굴 통로의 굵기 비율 (C,) 0~1. 통로 반지름에 곱합니다. 동굴 구역 밖은 0 (동굴 거리를 계산하지 않았으면 빈 배열).</summary>
-    public required double[] CaveRho { get; init; }
-
     public required double[] StrataBottom { get; init; }
 
     public required byte[] StrataRock { get; init; }
@@ -157,23 +148,13 @@ public sealed class HeroVolume
     public const double RiverDensifyM = 1.0;
     public const double RiverSmoothKM = 0.5;
     public const double ConformCells = 0.5;
-    public const int CaveOctaves = 3;
-    public const double CaveCoreFraction = 0.5;
-    public const double CaveGradStepM = 0.25;
-    public const double CaveGradFloor = 0.05;
     // 상류 면적이 이보다 좁은 칸을 산비탈로 봅니다 [m²]. 1만 m² 는 25 m 칸 16개입니다. 이보다 넓으면 물길 칸으로 보고 높이를 섞지 않습니다.
     public const double HillslopeMaxAreaM2 = 1.0e4;
-    // 동굴 구역(통로가 모여 있는 곳)을 정하는 큰 무늬 잡음의 옥타브 수와, 구역 가장자리에서 통로가 가늘어지는 잡음 값의 폭.
-    public const int CaveRarityOctaves = 2;
-    public const double CaveRaritySoft = 0.15;
-    // 통로 반지름이 이보다 가늘어지면 통로가 없는 것으로 봅니다 (동굴 메시의 2 m 칸으로는 더 가는 관을 그리지 못함).
-    public const double CaveMinRadiusM = 1.2;
-    public const double CaveDistCapRadii = 2.0;
     public const double AlluviumClipBlendM = 1.0;
     public const double LakeWeightMin = 0.5;
-    // 입구에서 산 안쪽으로 통로를 찾는 가장 먼 거리 = 이 값 × 통로 무늬의 파장. 0.5 는 통로 사이 간격 하나쯤입니다 (파장 200 m 일 때 100 m).
-    public const double EntranceSearchWavelengths = 0.5;
     public const double EntranceOutCells = 4.0;
+    // 동굴 조각을 구역에 등록할 때 조각 둘레로 잡는 여유 [m].
+    public const double BucketPadM = 6.0;
     public const int SurfaceFixedPointIters = 10;
     public const int SurfaceBisectIters = 48;
     public const int ChunkPoints = 1_000_000;
@@ -183,18 +164,15 @@ public sealed class HeroVolume
     public const double FarM = 1.0e12;
     public const byte MaterialEmpty = 255;
     private const long StreamDetail = 7201;
-    private const long StreamCave = 7202;
 
     private static readonly string[] Required =
     [
         "z_m", "soil_thickness_m", "alluvium_m", "water_table_m", "water_level_m", "is_lake", "is_river",
-        "river_width_m", "river_depth_m", "receiver", "cave_entrance",
+        "river_width_m", "river_depth_m", "receiver", "cave_entrance", "drainage_area_m2", "surface_rock",
     ];
 
     private readonly double _amp;
     private readonly long _detailSeed;
-    private readonly long[] _caveSeeds;
-    private readonly long _caveRaritySeed;
     private KdTree? _tree;
     private double _riverReach;
     private (double X0, double Y0, double Size, int Nbx, int Nby) _bucket;
@@ -215,13 +193,11 @@ public sealed class HeroVolume
 
     public double RPass { get; }
 
+    /// <summary>물이 잘 통하는 자리와 덜 통하는 자리가 번갈아 놓이는 간격 [m] (caves.noise_wavelength_m). 통로가 굽이치는 크기를 정합니다.</summary>
     public double Wavelength { get; }
 
-    /// <summary>동굴 구역 무늬의 간격 [m] (caves.rarity_wavelength_m). 0 이면 구역을 나누지 않고 석회암 땅 어디에나 통로를 둡니다.</summary>
-    public double RarityWavelength { get; }
-
-    /// <summary>동굴 구역 잡음의 문턱 (caves.rarity_threshold). 잡음 값이 이보다 큰 곳이 동굴 구역입니다.</summary>
-    public double RarityThreshold { get; }
+    /// <summary>통로가 가장 굵어지는, 싱크홀로 모인 빗물 넓이 [m²] (caves.full_size_area_m2).</summary>
+    public double FullSizeAreaM2 { get; }
 
     public int NLevels { get; }
 
@@ -262,16 +238,48 @@ public sealed class HeroVolume
 
     public bool[] RiverConn { get; private set; } = [];
 
-    /// <summary>입구 캡슐 축 시작점 (E, 3).</summary>
+    /// <summary>동굴 통로 그물 (싱크홀에서 샘까지의 물길).</summary>
+    public CaveNetwork Network { get; private set; } = null!;
+
+    /// <summary>동굴 조각(층 통로, 수직굴, 입구 굴)의 한쪽 끝 (E, 3) [m].</summary>
     public double[] CapA { get; private set; } = [];
 
-    /// <summary>입구 캡슐 축 끝점 (E, 3).</summary>
+    /// <summary>동굴 조각의 다른 쪽 끝 (E, 3) [m].</summary>
     public double[] CapB { get; private set; } = [];
 
-    public int NCapsules => CapA.Length / 3;
+    /// <summary>동굴 조각의 반지름 (E,) [m].</summary>
+    public double[] CapR { get; private set; } = [];
 
-    /// <summary>입구 굴을 판 칸 (N,). 산비탈 밖으로 열리고 통로에 닿은 입구 칸만 참입니다.</summary>
+    /// <summary>조각이 지표로 열릴 수 있으면 참 (E,): 수직굴과 입구 굴. 층 통로는 지표 아래에만 둡니다.</summary>
+    public bool[] CapOpen { get; private set; } = [];
+
+    /// <summary>조각이 45° 보다 가파르게 서 있으면 참 (E,). 수직굴이 여기에 들어갑니다.</summary>
+    public bool[] CapSteep { get; private set; } = [];
+
+    /// <summary>입구 굴인 조각의 번호. 조각의 A 끝이 샘 칸(통로가 시작하는 자리), B 끝이 산비탈 밖입니다.</summary>
+    public int[] EntranceCapsules { get; private set; } = [];
+
+    public int NCapsules => CapR.Length;
+
+    /// <summary>입구 굴을 판 칸 (N,). 산비탈 밖으로 열리고 싱크홀에서 온 통로가 닿는 입구 칸만 참입니다.</summary>
     public bool[] EntranceOpen { get; private set; } = [];
+
+    /// <summary>싱크홀 칸 (N,). 지표에서 동굴 층까지 수직굴이 열려 있습니다.</summary>
+    public bool[] SinkOpen { get; private set; } = [];
+
+    /// <summary>싱크홀마다 그 둘레의 그릇 모양으로 꺼진 땅(돌리네)의 반지름 [m]. Network.Sinks 와 같은 순서. 0 이면 꺼뜨리지 않습니다.</summary>
+    public double[] DolineRadius { get; private set; } = [];
+
+    /// <summary>싱크홀마다 꺼진 땅의 가장 깊은 곳(가운데)의 깊이 [m]. Network.Sinks 와 같은 순서.</summary>
+    public double[] DolineDepth { get; private set; } = [];
+
+    // 히어로 칸마다 그 칸에 걸치는 꺼진 땅의 싱크홀 순번 (없으면 −1), 그리고 싱크홀마다 그 가운데의 x, y [m].
+    private int[] _dolineOf = [];
+    private double[] _sinkX = [];
+    private double[] _sinkY = [];
+
+    /// <summary>(N,) 칸마다 그 칸에서 하류로 나가는 층 통로의 길이 [m].</summary>
+    public double[] PassageM { get; private set; } = [];
 
     /// <summary>히어로 묶음의 입구 후보 수 (동굴 층마다 따로 셈).</summary>
     public long NEntranceCandidates { get; private set; }
@@ -279,7 +287,7 @@ public sealed class HeroVolume
     /// <summary>산비탈 밖으로 열리지 않아 파지 않은 입구 후보 수.</summary>
     public long NUnopened { get; private set; }
 
-    /// <summary>산비탈 밖으로는 열리지만 찾는 거리 안에 통로가 없어 파지 않은 입구 후보 수.</summary>
+    /// <summary>산비탈 밖으로는 열리지만 싱크홀에서 온 통로가 닿지 않아 파지 않은 입구 후보 수.</summary>
     public long NNoPassage { get; private set; }
 
     private static long SubSeed(long seed, long stream, long k = 0) => (long)(Hashing.Hash3(seed, stream, k) >> 1);
@@ -325,13 +333,12 @@ public sealed class HeroVolume
         _amp = detailAmplitudeM;
         RPass = cfg.F("caves.passage_radius_m");
         Wavelength = cfg.F("caves.noise_wavelength_m");
-        RarityWavelength = cfg.F("caves.rarity_wavelength_m");
-        RarityThreshold = cfg.F("caves.rarity_threshold");
-        if (!(RPass > 0.0 && Wavelength > 0.0 && RarityWavelength >= 0.0 && double.IsFinite(RarityThreshold)))
+        FullSizeAreaM2 = cfg.F("caves.full_size_area_m2");
+        if (!(RPass > 0.0 && Wavelength > 0.0 && FullSizeAreaM2 > 0.0))
         {
             throw new ArgumentException(
-                "caves 설정은 passage_radius_m > 0, noise_wavelength_m > 0, rarity_wavelength_m ≥ 0 이고 rarity_threshold 는 유한한 값이어야 합니다. "
-                + $"받은 값: {RPass}, {Wavelength}, {RarityWavelength}, {RarityThreshold}");
+                "caves 설정은 passage_radius_m > 0, noise_wavelength_m > 0, full_size_area_m2 > 0 이어야 합니다. "
+                + $"받은 값: {RPass}, {Wavelength}, {FullSizeAreaM2}");
         }
         NLevels = (int)cfg.I("caves.levels");
         if (NLevels < 1)
@@ -426,11 +433,152 @@ public sealed class HeroVolume
         StrataBottom = columns.Bottom;
         StrataRock = columns.Rock;
         _detailSeed = SubSeed(Seed, StreamDetail);
-        _caveSeeds = Enumerable.Range(0, NLevels).Select(k => SubSeed(Seed, StreamCave, k)).ToArray();
-        // 구역 잡음은 층마다 같은 잡음을 씁니다. 한 동굴 구역 안에서 위층과 아래층이 같은 자리에 겹쳐야 하기 때문입니다.
-        _caveRaritySeed = SubSeed(Seed, StreamCave, 1000);
-        BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos);
-        BuildCapsules(fields);
+        BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos, cfg);
+        BuildCaveNetwork(fields, graph, cfg);
+    }
+
+    /// <summary>꺼진 땅의 반지름 아래 한계 [m]. 2 m 지표에서 그릇 모양이 보이려면 지름이 칸 여러 개여야 합니다.</summary>
+    public const double DolineRadiusMinM = 15.0;
+
+    /// <summary>꺼진 땅의 깊이는 지표에서 가장 얕은 동굴 층까지 깊이의 이 몫을 넘지 않습니다. 바닥이 동굴 천장을 뚫지 않게 합니다.</summary>
+    public const double DolineMaxDepthShare = 0.5;
+
+    /// <summary>꺼진 땅의 반지름은 싱크홀 사이 최소 거리의 이 몫을 넘지 않습니다. 그릇끼리 겹치지 않게 합니다.</summary>
+    public const double DolineMaxSpacingShare = 0.45;
+
+    /// <summary>
+    /// 싱크홀 둘레의 땅을 그릇 모양으로 꺼뜨릴 크기를 정합니다 (돌리네). 석회암 땅에서는 빗물이 구멍으로 빠지며 둘레의 암석을
+    /// 녹여, 구멍 둘레가 그릇처럼 꺼집니다. 바닥에 구멍이 있어 물은 고이지 않습니다.
+    /// 반지름 = radiusMaxM × sqrt(싱크홀로 모인 넓이 ÷ FullSizeAreaM2) 를 DolineRadiusMinM 과 radiusMaxM 사이로 자른 값,
+    /// 깊이 = depthRatio × 지름. 보기용입니다: 3D 샘플 함수의 지표만 낮추고 히어로 묶음의 z_m 은 바꾸지 않습니다.
+    /// </summary>
+    private void BuildDolines(CellGraph graph, double[] areaM2, double sinkSpacingM, double radiusMaxM, double depthRatio)
+    {
+        int n = Ny * Nx;
+        int[] sinks = Network.Sinks;
+        DolineRadius = new double[sinks.Length];
+        DolineDepth = new double[sinks.Length];
+        _dolineOf = [];
+        if (!(radiusMaxM >= 0.0 && depthRatio >= 0.0))
+        {
+            throw new ArgumentException(
+                $"caves.doline_radius_m ≥ 0, caves.doline_depth_ratio ≥ 0 이어야 합니다. 받은 값: {radiusMaxM}, {depthRatio}");
+        }
+        if (!(radiusMaxM > 0.0 && depthRatio > 0.0 && sinkSpacingM > 0.0) || sinks.Length == 0)
+        {
+            return;
+        }
+        _dolineOf = new int[n];
+        Array.Fill(_dolineOf, -1);
+        double[] pos = graph.Pos;
+        _sinkX = new double[sinks.Length];
+        _sinkY = new double[sinks.Length];
+        for (int i = 0; i < sinks.Length; i++)
+        {
+            int s = sinks[i];
+            _sinkX[i] = pos[s * 3];
+            _sinkY[i] = pos[(s * 3) + 1];
+            double toCave = double.PositiveInfinity;
+            for (int k = 0; k < NLevels; k++)
+            {
+                double lv = CaveLevels[(k * n) + s];
+                if (double.IsFinite(lv))
+                {
+                    toCave = Math.Min(toCave, Z[s] - lv);
+                }
+            }
+            (double radius, double depth) = DolineSize(areaM2[s], FullSizeAreaM2, radiusMaxM, depthRatio, sinkSpacingM, toCave);
+            if (!(depth > 0.0))
+            {
+                continue;
+            }
+            DolineRadius[i] = radius;
+            DolineDepth[i] = depth;
+            // 그릇이 걸칠 수 있는 칸에 이 싱크홀의 순번을 적습니다. 두 그릇이 한 칸에 걸치면 가운데가 더 가까운 쪽을 남깁니다.
+            double sx = pos[s * 3];
+            double sy = pos[(s * 3) + 1];
+            int reach = (int)Math.Ceiling(radius / Dx) + 1;
+            int si = (int)Math.Floor((sx - X0) / Dx);
+            int sj = (int)Math.Floor((Y0 - sy) / Dx);
+            for (int jj = Math.Max(sj - reach, 0); jj <= Math.Min(sj + reach, Ny - 1); jj++)
+            {
+                for (int ii = Math.Max(si - reach, 0); ii <= Math.Min(si + reach, Nx - 1); ii++)
+                {
+                    int c = (jj * Nx) + ii;
+                    int other = _dolineOf[c];
+                    if (other >= 0)
+                    {
+                        double cx = X0 + ((ii + 0.5) * Dx);
+                        double cy = Y0 - ((jj + 0.5) * Dx);
+                        double dNew = double.Hypot(cx - sx, cy - sy);
+                        double dOld = double.Hypot(cx - pos[sinks[other] * 3], cy - pos[(sinks[other] * 3) + 1]);
+                        if (dOld <= dNew)
+                        {
+                            continue;
+                        }
+                    }
+                    _dolineOf[c] = i;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 점 (x, y) 에서 싱크홀 둘레의 꺼진 땅이 지표를 낮추는 깊이 [m]. 가운데에서 DolineDepth, 가장자리(반지름)에서 0 이고
+    /// 그 사이는 깊이 × (1 − (거리 ÷ 반지름)²)² 입니다. 가운데와 가장자리에서 기울기가 0 이라 지표가 매끄럽게 이어집니다.
+    /// </summary>
+    public double DolineDepthAt(double x, double y)
+    {
+        if (_dolineOf.Length == 0)
+        {
+            return 0.0;
+        }
+        int ii = (int)Math.Floor((x - X0) / Dx);
+        int jj = (int)Math.Floor((Y0 - y) / Dx);
+        if (ii < 0 || ii >= Nx || jj < 0 || jj >= Ny)
+        {
+            return 0.0;
+        }
+        int i = _dolineOf[(jj * Nx) + ii];
+        if (i < 0)
+        {
+            return 0.0;
+        }
+        return DolineProfile(DolineDepth[i], DolineRadius[i], double.Hypot(x - _sinkX[i], y - _sinkY[i]));
+    }
+
+    /// <summary>
+    /// 꺼진 땅 하나의 반지름과 가운데 깊이 [m] 를 정합니다. areaM2: 싱크홀로 빗물이 모이는 넓이, depthToCaveM: 지표에서 가장 얕은
+    /// 동굴 층까지의 깊이. 반지름은 radiusMaxM × sqrt(areaM2 ÷ fullSizeAreaM2) 를 DolineRadiusMinM 과 radiusMaxM 사이로 자른 뒤
+    /// 싱크홀 사이 최소 거리의 DolineMaxSpacingShare 배를 넘지 않게 합니다. 깊이는 depthRatio × 지름이고, 동굴 층까지 깊이의
+    /// DolineMaxDepthShare 배를 넘지 않습니다. 꺼뜨릴 수 없으면 (0, 0).
+    /// </summary>
+    public static (double RadiusM, double DepthM) DolineSize(
+        double areaM2, double fullSizeAreaM2, double radiusMaxM, double depthRatio, double sinkSpacingM, double depthToCaveM)
+    {
+        if (!(radiusMaxM > 0.0 && depthRatio > 0.0 && sinkSpacingM > 0.0 && fullSizeAreaM2 > 0.0))
+        {
+            return (0.0, 0.0);
+        }
+        double radius = radiusMaxM * Math.Sqrt(Math.Max(areaM2, 0.0) / fullSizeAreaM2);
+        radius = Math.Min(Math.Max(radius, Math.Min(DolineRadiusMinM, radiusMaxM)), radiusMaxM);
+        radius = Math.Min(radius, DolineMaxSpacingShare * sinkSpacingM);
+        double depth = Math.Min(depthRatio * 2.0 * radius, DolineMaxDepthShare * Math.Max(depthToCaveM, 0.0));
+        return depth > 0.0 && double.IsFinite(depth) ? (radius, depth) : (0.0, 0.0);
+    }
+
+    /// <summary>
+    /// 꺼진 땅의 단면: 가운데에서 distM 떨어진 곳을 낮추는 깊이 [m] = depthM × (1 − (distM ÷ radiusM)²)².
+    /// 가운데에서 depthM, 반지름 밖에서 0 입니다.
+    /// </summary>
+    public static double DolineProfile(double depthM, double radiusM, double distM)
+    {
+        if (!(radiusM > 0.0) || distM >= radiusM)
+        {
+            return 0.0;
+        }
+        double u = 1.0 - ((distM * distM) / (radiusM * radiusM));
+        return depthM * u * u;
     }
 
     /// <summary>히어로 영역 (x_min, x_max, y_min, y_max) [m].</summary>
@@ -617,7 +765,7 @@ public sealed class HeroVolume
     // nodePos: (N, 3) 그래프의 대표점(흔들어 둔 격자점). 강 선은 솔버가 높이를 푼 바로 그 점들을 지나게 합니다.
     // 칸 정중앙을 이으면 D8 물길이 가로·세로·대각선의 곧은 토막으로만 이어져, 자로 그은 수로처럼 보입니다.
     private void BuildRivers(List<long[]> rivers, FieldSet fields, Func<string, double[]> img, Func<string, bool[]> imgB,
-        double[] nodePos)
+        double[] nodePos, Config cfg)
     {
         int n = Ny * Nx;
         if (nodePos.Length != n * 3)
@@ -628,11 +776,39 @@ public sealed class HeroVolume
         double[] w = Array.ConvertAll(img("river_width_m"), NpMath.NanToNum);
         double[] d = Array.ConvertAll(img("river_depth_m"), NpMath.NanToNum);
         double[] lev = img("water_level_m");
-        bool[] isRiver = imgB("is_river");
+        // 강 칸 배열을 아래에서 고치므로 복사해 둡니다 (같은 형이면 CastTo 가 히어로 필드 배열을 그대로 돌려줌).
+        bool[] isRiver = (bool[])imgB("is_river").Clone();
         long[] rcv = (long[])FieldSet.CastTo(fields["receiver"], typeof(long));
         if (rcv.Length != n || rcv.Any(r => r < 0 || r >= n))
         {
             throw new ArgumentException("fields['receiver'] 는 0..N-1 범위의 (N,) 배열이어야 합니다");
+        }
+        // 호수 속 물길: 강만 한 물이 지나는 호수 칸도 강줄기 선에 넣습니다. 가파른 골짜기에서는 호수가 한 칸 폭으로 좁아지는데,
+        // 칸 사이를 잇는 지표에서는 그런 곳의 물이 칸 중심마다 점으로만 보입니다. 선을 따라 바닥을 파 두면 물이 이어집니다.
+        // 넓은 호수에서는 이 물길이 물에 잠겨 보이지 않습니다. 호수 칸의 폭과 깊이는 강과 같은 식(8.1)으로 유량에서 구합니다.
+        if (fields.Contains("discharge_m3_per_yr"))
+        {
+            bool[] isLake = imgB("is_lake");
+            double[] q = img("discharge_m3_per_yr");
+            double qMin = cfg.F("rivers.min_discharge_m3_per_s");
+            double kW = cfg.F("rivers.width_coefficient");
+            double kD = cfg.F("rivers.depth_coefficient");
+            bool any = false;
+            for (int c = 0; c < n; c++)
+            {
+                double qS = q[c] / Constants.SecondsPerYear;
+                if (isLake[c] && qS >= qMin)
+                {
+                    isRiver[c] = true;
+                    w[c] = kW * NpMath.Power(qS, Water.WidthExponent);
+                    d[c] = kD * NpMath.Power(qS, Water.DepthExponent);
+                    any = true;
+                }
+            }
+            if (any)
+            {
+                rivers = Hydro.Network.RiverSegments(rcv, Hydro.Routing.TopoOrder(rcv), isRiver);
+            }
         }
         const double fS = Water.RiverSurfaceDepthFraction;
         var ptsL = new List<double>();
@@ -743,83 +919,6 @@ public sealed class HeroVolume
         return o;
     }
 
-    /// <summary>동굴 층 k 의 수평 2D 노이즈 ν_k(x, y) (cave_noise).</summary>
-    public double[] CaveNoise(double[] x, double[] y, int k)
-    {
-        if (x.Length == 0)
-        {
-            return [];
-        }
-        double[] pts = new double[x.Length * 3];
-        for (int i = 0; i < x.Length; i++)
-        {
-            pts[i * 3] = x[i];
-            pts[(i * 3) + 1] = y[i];
-        }
-        return Noise.Fbm3(pts, _caveSeeds[k], CaveOctaves, frequency: 1.0 / Wavelength);
-    }
-
-    /// <summary>
-    /// 동굴 통로의 굵기 비율 ρ(x, y) (0~1). 실제 동굴은 석회암 땅 어디에나 있지 않고 구역을 이뤄 모여 있으므로,
-    /// 간격이 큰 잡음 μ 가 문턱보다 큰 곳만 동굴 구역으로 둡니다: ρ = smoothstep((μ − 문턱) / CaveRaritySoft).
-    /// 구역 가장자리에서는 ρ 가 0 으로 줄어 통로가 가늘어지다 끝납니다. rarity_wavelength_m 이 0 이면 어디서나 1 입니다.
-    /// </summary>
-    public double[] CaveRarity(double[] x, double[] y)
-    {
-        double[] rho = new double[x.Length];
-        if (RarityWavelength <= 0.0 || x.Length == 0)
-        {
-            Array.Fill(rho, 1.0);
-            return rho;
-        }
-        double[] pts = new double[x.Length * 3];
-        for (int i = 0; i < x.Length; i++)
-        {
-            pts[i * 3] = x[i];
-            pts[(i * 3) + 1] = y[i];
-        }
-        double[] mu = Noise.Fbm3(pts, _caveRaritySeed, CaveRarityOctaves, frequency: 1.0 / RarityWavelength);
-        for (int i = 0; i < rho.Length; i++)
-        {
-            rho[i] = Smoothstep01((mu[i] - RarityThreshold) / CaveRaritySoft);
-        }
-        return rho;
-    }
-
-    /// <summary>층 k 통로 중심선까지 수평 거리 근사 δ_ν = |ν|/|∇ν| (cave_distance).</summary>
-    public double[] CaveDistance(double[] x, double[] y, int k)
-    {
-        const double h = CaveGradStepM;
-        int m = x.Length;
-        double[] xs = new double[m * 5];
-        double[] ys = new double[m * 5];
-        for (int i = 0; i < m; i++)
-        {
-            xs[i] = x[i];
-            xs[m + i] = x[i] + h;
-            xs[(2 * m) + i] = x[i] - h;
-            xs[(3 * m) + i] = x[i];
-            xs[(4 * m) + i] = x[i];
-            ys[i] = y[i];
-            ys[m + i] = y[i];
-            ys[(2 * m) + i] = y[i];
-            ys[(3 * m) + i] = y[i] + h;
-            ys[(4 * m) + i] = y[i] - h;
-        }
-        double[] v = CaveNoise(xs, ys, k);
-        double floor = CaveGradFloor * 2.0 * Math.PI / Wavelength;
-        double cap = CaveDistCapRadii * RPass;
-        double[] o = new double[m];
-        for (int i = 0; i < m; i++)
-        {
-            double gx = (v[m + i] - v[(2 * m) + i]) / (2 * h);
-            double gy = (v[(3 * m) + i] - v[(4 * m) + i]) / (2 * h);
-            double dist = Math.Abs(v[i]) / Math.Max(double.Hypot(gx, gy), floor);
-            o[i] = Math.Min(dist, cap);
-        }
-        return o;
-    }
-
     // numpy arange(start, stop, step) (float): start + i·delta, delta = (start + step) − start
     private static double[] Arange(double start, double stop, double step)
     {
@@ -833,7 +932,11 @@ public sealed class HeroVolume
         return o;
     }
 
-    private void BuildCapsules(FieldSet fields)
+    /// <summary>
+    /// 동굴 조각을 만듭니다. 입구 칸마다 산 밖으로 열리는지 확인해 샘으로 삼고, 싱크홀에서 샘까지의 통로 그물
+    /// (<see cref="CaveNetwork"/>)을 만든 뒤, 층 통로·수직굴·입구 굴을 캡슐(양 끝과 반지름) 목록으로 모읍니다.
+    /// </summary>
+    private void BuildCaveNetwork(FieldSet fields, CellGraph graph, Config cfg)
     {
         long[] ent = (long[])FieldSet.CastTo(fields["cave_entrance"], typeof(long));
         (double[] xc, double[] yc) = CellCenters();
@@ -844,32 +947,31 @@ public sealed class HeroVolume
         int n = ny * nx;
         double dx = Dx;
         double r = RPass;
-        var aL = new List<double>();
-        var bL = new List<double>();
         NUnopened = 0;
         NNoPassage = 0;
         NEntranceCandidates = 0;
         EntranceOpen = new bool[n];
+        SinkOpen = new bool[n];
+
+        // --- 1. 입구 칸마다 산 밖으로 나가는 방향과, 그 방향으로 지표가 층 높이보다 낮아지는 거리
+        bool[] outlet = new bool[NLevels * n];
+        bool[] candidate = new bool[NLevels * n];
+        double[] outDirX = new double[NLevels * n];
+        double[] outDirY = new double[NLevels * n];
+        double[] outDist = new double[NLevels * n];
         for (int k = 0; k < NLevels; k++)
         {
-            var cellList = new List<int>();
-            for (int c = 0; c < n; c++)
-            {
-                if (((ent[c] >> k) & 1) != 0 && double.IsFinite(CaveLevels[(k * n) + c]))
-                {
-                    cellList.Add(c);
-                }
-            }
-            if (cellList.Count == 0)
-            {
-                continue;
-            }
-            NEntranceCandidates += cellList.Count;
-            var keepCells = new List<int>();
+            var cells = new List<int>();
             var dirxL = new List<double>();
             var diryL = new List<double>();
-            foreach (int c in cellList)
+            for (int c = 0; c < n; c++)
             {
+                if (((ent[c] >> k) & 1) == 0 || !double.IsFinite(CaveLevels[(k * n) + c]))
+                {
+                    continue;
+                }
+                NEntranceCandidates++;
+                candidate[(k * n) + c] = true;
                 int jj = c / nx;
                 int ii = c % nx;
                 double best = 0.0;
@@ -909,94 +1011,129 @@ public sealed class HeroVolume
                 }
                 if (double.Hypot(dirx, diry) > 0)
                 {
-                    keepCells.Add(c);
+                    cells.Add(c);
                     dirxL.Add(dirx);
                     diryL.Add(diry);
                 }
             }
-            if (keepCells.Count == 0)
+            if (cells.Count == 0)
             {
                 continue;
             }
-            int m = keepCells.Count;
+            int m = cells.Count;
             double step = 0.5 * r;
             double tOutMax = EntranceOutCells * dx;
             double[] tsOut = Arange(0.0, tOutMax + 1e-9, step);
-            double tInMax = EntranceSearchWavelengths * Wavelength;
-            double[] tsIn = Arange(step, tInMax + 1e-9, step);
             double[] sxo = new double[m * tsOut.Length];
             double[] syo = new double[m * tsOut.Length];
-            double[] sxi = new double[m * tsIn.Length];
-            double[] syi = new double[m * tsIn.Length];
             for (int q = 0; q < m; q++)
             {
-                int c = keepCells[q];
+                int c = cells[q];
                 for (int t = 0; t < tsOut.Length; t++)
                 {
                     sxo[(q * tsOut.Length) + t] = xc[c] + (dirxL[q] * tsOut[t]);
                     syo[(q * tsOut.Length) + t] = yc[c] + (diryL[q] * tsOut[t]);
                 }
-                for (int t = 0; t < tsIn.Length; t++)
-                {
-                    sxi[(q * tsIn.Length) + t] = xc[c] - (dirxL[q] * tsIn[t]);
-                    syi[(q * tsIn.Length) + t] = yc[c] - (diryL[q] * tsIn[t]);
-                }
             }
             double[] zsOut = Bilinear(z, sxo, syo);
-            double[] nu = CaveDistance(sxi, syi, k);
-            double[] rhoIn = CaveRarity(sxi, syi);
-            double[] valid = new double[n];
-            for (int c = 0; c < n; c++)
-            {
-                valid[c] = double.IsFinite(CaveLevels[(k * n) + c]) ? 1.0 : 0.0;
-            }
-            double[] wv = Bilinear(valid, sxi, syi);
             for (int q = 0; q < m; q++)
             {
-                int c = keepCells[q];
+                int c = cells[q];
                 double zk = CaveLevels[(k * n) + c];
-                double tOut = tOutMax;
-                bool found = false;
                 for (int t = 0; t < tsOut.Length; t++)
                 {
                     if (zsOut[(q * tsOut.Length) + t] < zk)
                     {
-                        tOut = tsOut[t] + r;
-                        found = true;
+                        outlet[(k * n) + c] = true;
+                        outDirX[(k * n) + c] = dirxL[q];
+                        outDirY[(k * n) + c] = diryL[q];
+                        outDist[(k * n) + c] = tsOut[t] + r;
                         break;
                     }
                 }
-                // 통로에 닿는 자리: 중심선 가까이이고, 동굴 층이 있고, 통로가 그릴 수 있을 만큼 굵은 곳.
-                double tIn = 0.0;
-                bool joined = false;
-                for (int t = 0; t < tsIn.Length; t++)
+            }
+        }
+
+        // --- 2. 싱크홀에서 샘까지의 통로 그물
+        // 싱크홀은 지표 암석이 물에 녹는 암석이고 물에 잠기지 않은 육지 칸에만 둡니다.
+        byte[] surfaceRock = (byte[])FieldSet.CastTo(fields["surface_rock"], typeof(byte));
+        double[] area = fields.GetFloat64("drainage_area_m2");
+        bool[] isRiver = (bool[])FieldSet.CastTo(fields["is_river"], typeof(bool));
+        bool[] isLake = (bool[])FieldSet.CastTo(fields["is_lake"], typeof(bool));
+        bool[] isOcean = fields.Contains("is_ocean") ? (bool[])FieldSet.CastTo(fields["is_ocean"], typeof(bool)) : new bool[n];
+        bool[] sinkAllowed = new bool[n];
+        for (int c = 0; c < n; c++)
+        {
+            sinkAllowed[c] = Rocks.Soluble[surfaceRock[c]] && !isRiver[c] && !isLake[c] && !isOcean[c];
+        }
+        // 동굴 호수와 꺼진 땅의 설정 키가 없는 묶음(이 키가 생기기 전의 히어로 묶음)에서는 둘 다 만들지 않습니다.
+        Section cavesCfg = cfg.Sec("caves");
+        double sinkSpacing = cfg.F("caves.sink_spacing_m");
+        double lakeSpacing = cavesCfg.Contains("lake_spacing_m") ? cfg.F("caves.lake_spacing_m") : 0.0;
+        double chamberRadius = cavesCfg.Contains("chamber_radius_m") ? cfg.F("caves.chamber_radius_m") : 0.0;
+        Network = CaveNetwork.Build(graph, z, CaveLevels, outlet, sinkAllowed, area, new CaveNetworkParams(
+            RadiusMaxM: r, FullSizeAreaM2: FullSizeAreaM2, SinkSpacingM: sinkSpacing,
+            SinkMinAreaM2: cfg.F("caves.sink_min_area_m2"), PathWavelengthM: Wavelength, Seed: Seed,
+            LakeSpacingM: lakeSpacing, ChamberRadiusM: chamberRadius));
+        BuildDolines(
+            graph, area, sinkSpacing,
+            cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,
+            cavesCfg.Contains("doline_depth_ratio") ? cfg.F("caves.doline_depth_ratio") : 0.0);
+
+        // --- 3. 캡슐 목록: 층 통로와 수직굴(그물), 그 뒤에 입구 굴
+        var aL = new List<double>(Network.SegA);
+        var bL = new List<double>(Network.SegB);
+        var rL = new List<double>(Network.SegRadius);
+        var openL = new List<bool>(Network.SegIsShaft);
+        var entranceIdx = new List<int>();
+        for (int k = 0; k < NLevels; k++)
+        {
+            for (int c = 0; c < n; c++)
+            {
+                int i = (k * n) + c;
+                if (!candidate[i])
                 {
-                    int idx = (q * tsIn.Length) + t;
-                    if (nu[idx] < CaveCoreFraction * r && wv[idx] > 0.5 && r * rhoIn[idx] >= CaveMinRadiusM)
-                    {
-                        tIn = tsIn[t] + r;
-                        joined = true;
-                        break;
-                    }
+                    continue;
                 }
-                // 밖으로 열리지 않거나 통로에 닿지 않는 입구는 파지 않습니다. 파면 어디로도 이어지지 않는 곧은 굴이 됩니다.
-                if (!found)
+                if (!outlet[i])
                 {
                     NUnopened++;
                     continue;
                 }
-                if (!joined)
+                // 싱크홀에서 온 물이 이 샘으로 나오지 않으면 통로가 없으므로 입구 굴도 파지 않습니다.
+                if (!(Network.Flow[i] > 0.0))
                 {
                     NNoPassage++;
                     continue;
                 }
+                double rr = CaveNetwork.Radius(Network.Flow[i], r, FullSizeAreaM2);
+                double zk = CaveLevels[i] + (k == 0 ? CaveNetwork.StreamLift * rr : 0.0);
+                entranceIdx.Add(rL.Count);
+                aL.AddRange([xc[c], yc[c], zk]);
+                bL.AddRange([xc[c] + (outDirX[i] * outDist[i]), yc[c] + (outDirY[i] * outDist[i]), zk]);
+                rL.Add(rr);
+                openL.Add(true);
                 EntranceOpen[c] = true;
-                aL.AddRange([xc[c] - (dirxL[q] * tIn), yc[c] - (diryL[q] * tIn), zk]);
-                bL.AddRange([xc[c] + (dirxL[q] * tOut), yc[c] + (diryL[q] * tOut), zk]);
             }
+        }
+        foreach (int s in Network.Sinks)
+        {
+            SinkOpen[s] = true;
         }
         CapA = aL.ToArray();
         CapB = bL.ToArray();
+        CapR = rL.ToArray();
+        CapOpen = openL.ToArray();
+        CapSteep = new bool[CapR.Length];
+        for (int e = 0; e < CapSteep.Length; e++)
+        {
+            double hx = CapB[e * 3] - CapA[e * 3];
+            double hy = CapB[(e * 3) + 1] - CapA[(e * 3) + 1];
+            double vz = CapB[(e * 3) + 2] - CapA[(e * 3) + 2];
+            CapSteep[e] = vz * vz > (hx * hx) + (hy * hy);
+        }
+        EntranceCapsules = entranceIdx.ToArray();
+        PassageM = Network.PassageM;
         BuildBuckets();
     }
 
@@ -1012,9 +1149,10 @@ public sealed class HeroVolume
         {
             lists[i] = [];
         }
-        double r = RPass;
         for (int e = 0; e < NCapsules; e++)
         {
+            // 굵은 격자에 칠할 때는 조각을 제 반지름보다 굵게 보므로(EvaluateGridCoarse), 그 굵기까지 덮도록 넉넉히 등록합니다.
+            double r = Math.Max(CapR[e], BucketPadM);
             double loX = Math.Min(CapA[e * 3], CapB[e * 3]) - r;
             double hiX = Math.Max(CapA[e * 3], CapB[e * 3]) + r;
             double loY = Math.Min(CapA[(e * 3) + 1], CapB[(e * 3) + 1]) - r;
@@ -1100,11 +1238,8 @@ public sealed class HeroVolume
         return (oL, oHw, oD, oZq, oLev);
     }
 
-    /// <summary>
-    /// 수평 위치 (x, y) 마다 높이와 상관없는 값들 (columns). withCaveDistance 가 거짓이면 동굴 거리(NuDist, 수준마다 잡음)를
-    /// 계산하지 않고 빈 배열로 둡니다. 동굴 거리는 d_cave 와 그것을 쓰는 d·material·water 에만 들어갑니다.
-    /// </summary>
-    public ColumnValues Columns(double[] x, double[] y, bool withCaveDistance = true)
+    /// <summary>수평 위치 (x, y) 마다 높이와 상관없는 값들 (columns).</summary>
+    public ColumnValues Columns(double[] x, double[] y)
     {
         if (x.Length != y.Length)
         {
@@ -1118,7 +1253,6 @@ public sealed class HeroVolume
             }
         }
         int cN = x.Length;
-        int kN = NLevels;
         int lN = NLayers;
         int ny = Ny;
         int nx = Nx;
@@ -1130,8 +1264,6 @@ public sealed class HeroVolume
         double[] zgwLower = new double[cN];
         double[] lake = new double[cN];
         double[] lakeDist = new double[cN];
-        double[] caveZ = new double[cN * kN];
-        double[] caveW = new double[cN * kN];
         double[] sb = new double[cN * lN];
         byte[] sr = new byte[cN * (lN + 1)];
         Parallelism.For(0, cN, c =>
@@ -1175,22 +1307,6 @@ public sealed class HeroVolume
                 }
             }
             lake[c] = ws >= LakeWeightMin ? acc / ws : NpMath.NaN;
-            for (int k = 0; k < kN; k++)
-            {
-                ws = 0.0;
-                acc = 0.0;
-                for (int q = 0; q < 4; q++)
-                {
-                    double v = CaveLevels[(k * n) + corner[q]];
-                    if (wq[q] > 0.0 && !double.IsNaN(v))
-                    {
-                        ws += wq[q];
-                        acc += wq[q] * v;
-                    }
-                }
-                caveW[(c * kN) + k] = ws;
-                caveZ[(c * kN) + k] = ws > 0.0 ? acc / ws : NpMath.NaN;
-            }
             bool same = true;
             for (int q = 1; q < 4 && same; q++)
             {
@@ -1236,38 +1352,16 @@ public sealed class HeroVolume
             waterDist[c] = Math.Min(lakeDist[c], riverGap);
             m[c] = Smoothstep01((waterDist[c] - WaterCalmM) / WaterCalmM);
         }
-        double[] nu = withCaveDistance ? new double[cN * kN] : [];
-        double[] rho = withCaveDistance ? CaveRarity(x, y) : [];
-        if (withCaveDistance)
+        if (_dolineOf.Length > 0)
         {
-            Array.Fill(nu, FarM);
-            var sel = new List<int>();
-            for (int k = 0; k < kN; k++)
+            // 싱크홀 둘레의 꺼진 땅. 물가(WaterCalmM 안)에서는 꺼뜨리지 않아 강바닥과 호숫가가 그대로입니다.
+            Parallelism.For(0, cN, c =>
             {
-                sel.Clear();
-                for (int c = 0; c < cN; c++)
+                if (m[c] > 0.0)
                 {
-                    if (caveW[(c * kN) + k] > 0)
-                    {
-                        sel.Add(c);
-                    }
+                    zSurface[c] -= m[c] * DolineDepthAt(x[c], y[c]);
                 }
-                if (sel.Count > 0)
-                {
-                    double[] sx = new double[sel.Count];
-                    double[] sy = new double[sel.Count];
-                    for (int q = 0; q < sel.Count; q++)
-                    {
-                        sx[q] = x[sel[q]];
-                        sy[q] = y[sel[q]];
-                    }
-                    double[] dist = CaveDistance(sx, sy, k);
-                    for (int q = 0; q < sel.Count; q++)
-                    {
-                        nu[(sel[q] * kN) + k] = dist[q];
-                    }
-                }
-            }
+            });
         }
         return new ColumnValues
         {
@@ -1286,10 +1380,6 @@ public sealed class HeroVolume
             RiverBank = zq,
             RiverLevel = lev,
             WaterDist = waterDist,
-            CaveZ = caveZ,
-            CaveW = caveW,
-            NuDist = nu,
-            CaveRho = rho,
             StrataBottom = sb,
             StrataRock = sr,
         };
@@ -1328,7 +1418,7 @@ public sealed class HeroVolume
     }
 
     private VolumeEval EvaluateCore(ColumnValues cols, long[] col, double[] px, double[] py, double[] up, double noiseBandM,
-        VolumeField need = VolumeField.All)
+        VolumeField need = VolumeField.All, double caveMinRadiusFlat = 0.0, double caveMinRadiusSteep = 0.0)
     {
         int mN = col.Length;
         double[] xi = new double[mN];
@@ -1390,7 +1480,7 @@ public sealed class HeroVolume
         bool wSolid = (need & VolumeField.SolidMaterial) != 0;
         bool wRock = (need & VolumeField.Rock) != 0;
         bool wWater = (need & VolumeField.Water) != 0;
-        // 동굴 거리(수준별 동굴·캡슐·녹는 층)는 d_cave 와 그것을 쓰는 d·material·water 에만 필요합니다.
+        // 동굴 거리(동굴 조각·녹는 층)는 d_cave 와, d_cave 로 정하는 d·material·water 에만 필요합니다.
         bool needCave = wDCave || wD || wMat || wWater;
         double[] oD0 = wD0 ? new double[mN] : [];
         double[] oD1 = wD1 ? new double[mN] : [];
@@ -1402,13 +1492,15 @@ public sealed class HeroVolume
         byte[] oRock = wRock ? new byte[mN] : [];
         bool[] oWater = wWater ? new bool[mN] : [];
         int nL = NLayers;
-        int nLv = NLevels;
         double amp = _amp;
         double rPass = RPass;
         double dx = Dx;
         (double bx0, double by0, double bsize, int nbx, int nby) = _bucket;
         double[] capA = CapA;
         double[] capB = CapB;
+        double[] capR = CapR;
+        bool[] capOpen = CapOpen;
+        bool[] capSteep = CapSteep;
         Parallelism.For(0, mN, p =>
         {
             long c = col[p];
@@ -1440,25 +1532,9 @@ public sealed class HeroVolume
             double dcave = double.PositiveInfinity;
             if (needCave)
             {
+                // 동굴 조각은 둥근 관입니다: 조각의 축(선분)까지 거리에서 그 조각의 반지름을 뺍니다.
+                // dLevel 은 층 통로까지, dCapsule 은 지표로 열릴 수 있는 조각(수직굴·입구 굴)까지의 거리입니다.
                 double dLevel = double.PositiveInfinity;
-                // 통로는 둥근 관입니다: 중심선까지 수평 거리 δ_ν 와 층 높이까지 수직 거리로 잰 거리에서 반지름을 뺍니다.
-                // 두 거리를 따로 재어 큰 쪽을 쓰면 단면이 네모가 되므로 한 거리로 합쳐 잽니다.
-                // 반지름은 동굴 구역 가장자리에서 가늘어지고, CaveMinRadiusM 미만일 때는 통로를 두지 않습니다.
-                double rTube = rPass * cols.CaveRho[c];
-                if (rTube >= CaveMinRadiusM)
-                {
-                    for (int k = 0; k < nLv; k++)
-                    {
-                        double w = cols.CaveW[(c * nLv) + k];
-                        if (w > 0.0)
-                        {
-                            double dh = cols.NuDist[(c * nLv) + k];
-                            double dv = z - cols.CaveZ[(c * nLv) + k];
-                            double tK = NpMath.PyMax(Math.Sqrt((dh * dh) + (dv * dv)) - rTube, (0.5 - w) * dx);
-                            dLevel = NpMath.PyMin(dLevel, tK);
-                        }
-                    }
-                }
                 double dCapsule = double.PositiveInfinity;
                 if (_bItems.Length > 0)
                 {
@@ -1468,7 +1544,16 @@ public sealed class HeroVolume
                     for (long q = _bStart[bb]; q < _bStart[bb + 1]; q++)
                     {
                         long e = _bItems[q];
-                        dCapsule = NpMath.PyMin(dCapsule, CapsuleDist(px[p], py[p], z, capA, capB, e) - rPass);
+                        double re = NpMath.PyMax(capR[e], capSteep[e] ? caveMinRadiusSteep : caveMinRadiusFlat);
+                        double de = CapsuleDist(px[p], py[p], z, capA, capB, e) - re;
+                        if (capOpen[e])
+                        {
+                            dCapsule = NpMath.PyMin(dCapsule, de);
+                        }
+                        else
+                        {
+                            dLevel = NpMath.PyMin(dLevel, de);
+                        }
                     }
                 }
                 if (NpMath.PyMin(dLevel, dCapsule) < double.PositiveInfinity)
@@ -1483,7 +1568,7 @@ public sealed class HeroVolume
                             dSol = NpMath.PyMin(dSol, NpMath.PyMax(z - top, bot - z));
                         }
                     }
-                    // 입구 통로(캡슐)만 흙을 지나 지표로 열립니다. 층 통로는 흙·충적층 아래로 통로 반지름만큼 덮인
+                    // 수직굴과 입구 굴만 흙을 지나 지표로 열립니다. 층 통로는 흙·충적층 아래로 통로 반지름만큼 덮인
                     // 곳에만 두어, 입구가 아닌 곳에서 동굴이 지표를 뚫지 않습니다.
                     double blend = NpMath.PyMin(cols.Alluvium[c] / AlluviumClipBlendM, 1.0);
                     double plane = surf - cols.Alluvium[c] - cols.Soil[c] + ((cols.Soil[c] + (2.0 * rPass)) * (1.0 - blend));
@@ -1615,7 +1700,7 @@ public sealed class HeroVolume
         int mN = pts.Length / 3;
         if (mN == 0)
         {
-            return EvaluateCore(Columns([], [], NeedsCaveDistance(need)), [], [], [], [], 0.0, need);
+            return EvaluateCore(Columns([], []), [], [], [], [], 0.0, need);
         }
         VolumeEval? whole = null;
         for (int s = 0; s < mN; s += ChunkPoints)
@@ -1631,7 +1716,7 @@ public sealed class HeroVolume
                 py[i] = pts[((s + i) * 3) + 1];
                 pz[i] = pts[((s + i) * 3) + 2];
             }
-            ColumnValues cols = Columns(px, py, NeedsCaveDistance(need));
+            ColumnValues cols = Columns(px, py);
             long[] col = new long[len];
             for (int i = 0; i < len; i++)
             {
@@ -1696,6 +1781,32 @@ public sealed class HeroVolume
     /// 수평 기둥 (x, y) (C,) 와 기둥마다 높이 up (C, Z) 의 격자를 한꺼번에 계산합니다 (evaluate_grid). 반환: keys 의 (C, Z) 배열.
     /// </summary>
     public Dictionary<string, Array> EvaluateGrid(double[] x, double[] y, double[] up, int zCount, double noiseBandM = double.PositiveInfinity, params string[] keys)
+        => EvaluateGridCore(x, y, up, zCount, noiseBandM, 0.0, 0.0, keys);
+
+    /// <summary>
+    /// 칸이 동굴 통로보다 큰 격자(재질 부피)에 칠할 때 쓰는 evaluate_grid. spacingH, spacingV 는 격자의 가로·세로 간격 [m] 입니다.
+    /// </summary>
+    /// <remarks>
+    /// 왜 필요한가: 격자점에서만 '빈 곳인가'를 물으면, 칸보다 가는 통로는 격자점 사이로 빠져 토막 납니다.
+    /// 그래서 통로를 '어느 방향으로 놓여도 격자점 하나는 안에 드는 굵기'로 보고 칠합니다. 누운 통로는 가로·세로 간격으로 만든
+    /// 직사각형의 대각선 절반, 서 있는 통로(수직굴)는 가로 간격 정사각형의 대각선 절반이 그 굵기입니다.
+    /// 예: 가로 4 m, 세로 2 m 격자에서 반지름 2 m 인 누운 통로는 반지름 √(2² + 1²) ≈ 2.24 m 로 칠합니다.
+    /// 이보다 굵은 통로는 제 굵기 그대로입니다. 동굴 메시와 입구 구멍은 이 함수를 쓰지 않습니다.
+    /// </remarks>
+    public Dictionary<string, Array> EvaluateGridCoarse(
+        double[] x, double[] y, double[] up, int zCount, double spacingH, double spacingV, params string[] keys)
+    {
+        if (!(spacingH > 0.0 && spacingV > 0.0))
+        {
+            throw new ArgumentException($"격자 간격은 0 보다 커야 합니다. 받은 값: 가로 {spacingH}, 세로 {spacingV}");
+        }
+        double flat = 0.5 * Math.Sqrt((spacingH * spacingH) + (spacingV * spacingV));
+        double steep = 0.5 * Math.Sqrt(2.0) * spacingH;
+        return EvaluateGridCore(x, y, up, zCount, double.PositiveInfinity, flat, steep, keys);
+    }
+
+    private Dictionary<string, Array> EvaluateGridCore(
+        double[] x, double[] y, double[] up, int zCount, double noiseBandM, double caveMinRadiusFlat, double caveMinRadiusSteep, string[] keys)
     {
         if (keys.Length == 0)
         {
@@ -1733,7 +1844,7 @@ public sealed class HeroVolume
         {
             int e = Math.Min(s + step, cN);
             int len = e - s;
-            ColumnValues cols = Columns(x[s..e], y[s..e], NeedsCaveDistance(need));
+            ColumnValues cols = Columns(x[s..e], y[s..e]);
             long[] col = new long[len * zCount];
             double[] px = new double[len * zCount];
             double[] py = new double[len * zCount];
@@ -1750,7 +1861,7 @@ public sealed class HeroVolume
                     uz[p] = up[((s0 + c) * zCount) + k];
                 }
             });
-            VolumeEval ev = EvaluateCore(cols, col, px, py, uz, noiseBandM, need);
+            VolumeEval ev = EvaluateCore(cols, col, px, py, uz, noiseBandM, need, caveMinRadiusFlat, caveMinRadiusSteep);
             foreach (string key in keys)
             {
                 Array src = ev.Get(key);
@@ -1789,7 +1900,7 @@ public sealed class HeroVolume
 
     private double[] SurfaceHeightCore(double[] x, double[] y)
     {
-        ColumnValues cols = Columns(x, y, withCaveDistance: false);
+        ColumnValues cols = Columns(x, y);
         double[] h = (double[])cols.ZSurface.Clone();
         int[] noisy = Enumerable.Range(0, x.Length).Where(c => cols.M[c] > 0).ToArray();
         if (_amp > 0 && noisy.Length > 0)
@@ -1862,7 +1973,7 @@ public sealed class HeroVolume
     /// <summary>물 규칙에 쓰는 지상 수면 h_w (water_surface). 없으면 NaN.</summary>
     public double[] WaterSurface(double[] x, double[] y) => ByChunks((xx, yy) =>
     {
-        ColumnValues cols = Columns(xx, yy, withCaveDistance: false);
+        ColumnValues cols = Columns(xx, yy);
         double[] o = new double[xx.Length];
         for (int c = 0; c < o.Length; c++)
         {
@@ -1919,7 +2030,4 @@ public sealed class HeroVolume
         return o;
     }
 
-    // 동굴 거리(NuDist)를 쓰는 값: d_cave 와 그것으로 정하는 d·material·water.
-    private static bool NeedsCaveDistance(VolumeField need)
-        => (need & (VolumeField.DCave | VolumeField.D | VolumeField.Material | VolumeField.Water)) != 0;
 }
