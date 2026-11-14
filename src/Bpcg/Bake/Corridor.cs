@@ -828,7 +828,6 @@ public static class Corridor
         var vol = new HeroVolume(heroState, cfg);
         sec["volume"] = Seconds(t);
         t = Stopwatch.GetTimestamp();
-        (double[] hx, double[] hy) = vol.CellCenters();
         // 지표에서 동굴로 들어갈 수 있는 칸: 입구 굴을 판 칸과 싱크홀 칸.
         bool[] openings = new bool[vol.EntranceOpen.Length];
         for (int c = 0; c < openings.Length; c++)
@@ -1039,9 +1038,42 @@ public static class Corridor
         caves["n_entrances_dug"] = (long)vol.EntranceCapsules.Length;
         caves["n_entrances"] = (long)entIn.Count;
         caves["n_sinkholes"] = (long)vol.Network.Sinks.Length;
+        // 싱크홀의 자리는 칸의 대표점입니다 (꺼진 땅의 가운데와 같은 점). 아래 sinkholes_in_corridor 와 같은 기준으로 셉니다.
+        double[] nodePos = heroState.Graph.Pos;
         caves["n_sinkholes_in_corridor"] = (long)vol.Network.Sinks.Count(
-            c => hx[c] >= rect.XMin && hx[c] <= rect.XMax && hy[c] >= rect.YMin && hy[c] <= rect.YMax);
+            c => nodePos[c * 3] >= rect.XMin && nodePos[c * 3] <= rect.XMax
+                && nodePos[(c * 3) + 1] >= rect.YMin && nodePos[(c * 3) + 1] <= rect.YMax);
         caves["passage_km"] = vol.PassageM.Sum() / 1000.0;
+        // 싱크홀 둘레의 꺼진 땅(돌리네)과 동굴 호수가 생기는 방의 수.
+        caves["n_dolines"] = (long)vol.DolineDepth.Count(d => d > 0.0);
+        // 회랑 안 싱크홀의 자리와 그 둘레 꺼진 땅의 크기: [동쪽, 북쪽, 반지름, 깊이] (히어로 국소 좌표, m).
+        var sinksIn = new List<object?>();
+        for (int i = 0; i < vol.Network.Sinks.Length; i++)
+        {
+            int c = vol.Network.Sinks[i];
+            double sx = nodePos[c * 3];
+            double sy = nodePos[(c * 3) + 1];
+            if (sx >= rect.XMin && sx <= rect.XMax && sy >= rect.YMin && sy <= rect.YMax)
+            {
+                sinksIn.Add(new List<object?> { sx, sy, vol.DolineRadius[i], vol.DolineDepth[i] });
+            }
+        }
+        caves["sinkholes_in_corridor"] = sinksIn;
+        caves["n_cave_lakes"] = (long)vol.Network.Lakes.Length;
+        // 회랑 안 동굴 호수의 자리: [동쪽, 북쪽, 물 높이] (히어로 국소 좌표, m).
+        var lakesIn = new List<object?>();
+        double[] lakeXyz = vol.Network.LakeXyz;
+        for (int i = 0; i < vol.Network.Lakes.Length; i++)
+        {
+            double lx = lakeXyz[i * 3];
+            double ly = lakeXyz[(i * 3) + 1];
+            if (lx >= rect.XMin && lx <= rect.XMax && ly >= rect.YMin && ly <= rect.YMax)
+            {
+                lakesIn.Add(new List<object?> { lx, ly, lakeXyz[(i * 3) + 2] });
+            }
+        }
+        caves["n_cave_lakes_in_corridor"] = (long)lakesIn.Count;
+        caves["cave_lakes_in_corridor"] = lakesIn;
         caves["entrances_file"] = "entrances.json";
         var manifest = new OrderedDictionary<string, object?>
         {

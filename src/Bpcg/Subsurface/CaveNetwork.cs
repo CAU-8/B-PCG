@@ -11,8 +11,11 @@ namespace Bpcg.Subsurface;
 /// <param name="SinkMinAreaM2">빗물이 이 넓이 이상 모이는 칸만 싱크홀 후보 [m²] (caves.sink_min_area_m2).</param>
 /// <param name="PathWavelengthM">물이 잘 통하는 자리와 덜 통하는 자리가 번갈아 놓이는 간격 [m] (caves.noise_wavelength_m).</param>
 /// <param name="Seed">시드 (planet.seed).</param>
+/// <param name="LakeSpacingM">동굴 호수가 생기는 방 사이의 최소 거리 [m] (caves.lake_spacing_m). 0 이면 방을 두지 않습니다.</param>
+/// <param name="ChamberRadiusM">방의 반지름 [m] (caves.chamber_radius_m). 0 이면 방을 두지 않습니다.</param>
 public sealed record CaveNetworkParams(
-    double RadiusMaxM, double FullSizeAreaM2, double SinkSpacingM, double SinkMinAreaM2, double PathWavelengthM, long Seed);
+    double RadiusMaxM, double FullSizeAreaM2, double SinkSpacingM, double SinkMinAreaM2, double PathWavelengthM, long Seed,
+    double LakeSpacingM = 0.0, double ChamberRadiusM = 0.0);
 
 /// <summary>
 /// 동굴 통로 그물: 싱크홀(지표의 물이 땅속으로 들어가는 자리)에서 샘(땅속의 물이 지표로 나오는 자리)까지 물이 흐르는 길.
@@ -28,6 +31,7 @@ public sealed record CaveNetworkParams(
 /// 2. 석회암 지표에서 빗물이 모이는 칸 가운데 서로 떨어진 칸을 싱크홀로 고릅니다.
 /// 3. 싱크홀마다 샘까지 길을 따라가며, 지나는 칸에 그 싱크홀로 모인 빗물 넓이를 더합니다. 넓이가 0 보다 큰 칸이 통로입니다.
 /// 4. 통로 반지름은 모인 넓이의 제곱근에 비례합니다(단면 넓이가 물의 양에 비례). 싱크홀에서 가장 낮은 층까지 수직굴을 둡니다.
+/// 5. 아래층 통로의 몇 곳을 넓고 깊은 방으로 만듭니다. 물 높이는 그대로라 방에는 물이 깊게 고입니다(동굴 호수).
 /// 계산에는 더하기, 곱하기, 제곱근만 씁니다. 지수·로그 함수는 운영체제마다 끝자리가 달라, 길을 고르는 비교가 달라질 수 있습니다.
 /// </remarks>
 public sealed class CaveNetwork
@@ -47,6 +51,15 @@ public sealed class CaveNetwork
     /// </summary>
     public const double StreamLift = 0.4;
 
+    /// <summary>
+    /// 방의 가운데를 물 높이보다 낮추는 정도 (방 반지름의 배수). −0.2 면 방의 가운데가 물 높이보다 반지름의 0.2 배 아래라,
+    /// 물 깊이는 반지름의 1.2 배, 물 위의 빈 높이는 반지름의 0.8 배입니다 (반지름 6 m 면 물 깊이 7.2 m, 빈 높이 4.8 m).
+    /// </summary>
+    public const double ChamberLift = -0.2;
+
+    /// <summary>방을 둘 수 있는 가장 얕은 깊이 (방 반지름의 배수): 지표에서 물 높이까지 이만큼 이상일 때만 둡니다.</summary>
+    public const double ChamberMinCoverRadii = 3.0;
+
     /// <summary>저항의 범위: 물이 가장 잘 통하는 자리와 가장 덜 통하는 자리 (거리 1 m 를 가는 데 드는 힘).</summary>
     public const double ResistanceMin = 0.25;
     public const double ResistanceMax = 4.0;
@@ -58,6 +71,7 @@ public sealed class CaveNetwork
     // 해시·잡음의 용도 번호.
     private const long StreamSink = 7261;
     private const long StreamPath = 7262;
+    private const long StreamLake = 7263;
 
     private CaveNetwork()
     {
@@ -77,6 +91,15 @@ public sealed class CaveNetwork
 
     /// <summary>조각이 수직굴이면 참 (E,). 수직굴만 지표로 열립니다.</summary>
     public bool[] SegIsShaft { get; private init; } = [];
+
+    /// <summary>조각이 동굴 호수가 생기는 방이면 참 (E,). 방 조각은 층 통로와 수직굴 뒤에 놓입니다.</summary>
+    public bool[] SegIsChamber { get; private init; } = [];
+
+    /// <summary>동굴 호수가 생기는 방의 칸 번호 (오름차순). 아래층에만 둡니다.</summary>
+    public int[] Lakes { get; private init; } = [];
+
+    /// <summary>방마다 가운데의 x, y 와 물 높이 (L, 3) [m]. Lakes 와 같은 순서.</summary>
+    public double[] LakeXyz { get; private init; } = [];
 
     /// <summary>싱크홀 칸 번호 (오름차순).</summary>
     public int[] Sinks { get; private init; } = [];
@@ -138,6 +161,11 @@ public sealed class CaveNetwork
                 "동굴 통로 설정은 passage_radius_m > 0, full_size_area_m2 > 0, sink_spacing_m ≥ 0, sink_min_area_m2 ≥ 0, "
                 + $"noise_wavelength_m > 0 이어야 합니다. 받은 값: {p.RadiusMaxM}, {p.FullSizeAreaM2}, {p.SinkSpacingM}, "
                 + $"{p.SinkMinAreaM2}, {p.PathWavelengthM}");
+        }
+        if (!(p.LakeSpacingM >= 0.0 && p.ChamberRadiusM >= 0.0))
+        {
+            throw new ArgumentException(
+                $"동굴 호수 설정은 lake_spacing_m ≥ 0, chamber_radius_m ≥ 0 이어야 합니다. 받은 값: {p.LakeSpacingM}, {p.ChamberRadiusM}");
         }
         int kN = levels.Length / n;
         int nx = (int)graph.Shape[1];
@@ -219,7 +247,7 @@ public sealed class CaveNetwork
                 candidates.Add(c);
             }
         }
-        int[] sinks = ThinSinks(candidates, pos, p.SinkSpacingM, p.Seed);
+        int[] sinks = Thin(candidates, pos, p.SinkSpacingM, p.Seed, StreamSink);
 
         // --- 3. 싱크홀마다 샘까지 따라가며 모인 넓이를 더합니다
         double[] flow = new double[kN * n];
@@ -338,6 +366,79 @@ public sealed class CaveNetwork
             segR.Add(r);
             segShaft.Add(true);
         }
+
+        // --- 6. 동굴 호수가 생기는 방 (아래층만)
+        // 물이 흐르는 통로의 몇 칸을 골라, 그 칸에서 이웃 칸까지의 절반씩을 넓고 깊은 방으로 만듭니다. 방은 원래 통로에 겹쳐 놓는
+        // 굵은 조각이라 통로는 그대로 이어집니다. 물 높이는 그대로이고 방의 바닥만 낮아서, 방에는 물이 깊게 고입니다.
+        int nPassage = segR.Count;
+        int[] lakes = [];
+        var lakeXyz = new List<double>();
+        if (p.LakeSpacingM > 0.0 && p.ChamberRadiusM > 0.0)
+        {
+            double rc = p.ChamberRadiusM;
+            int[] nUpstream = new int[n];
+            for (int c = 0; c < n; c++)
+            {
+                int q = parent[c];
+                if (flow[c] > 0.0 && q >= 0)
+                {
+                    nUpstream[q]++;
+                }
+            }
+            var lakeCandidates = new List<int>();
+            for (int c = 0; c < n; c++)
+            {
+                // 후보: 위에서 물이 들어오고 아래로 나가는 통로 칸. 싱크홀·샘 칸이 아니고, 방이 통로보다 굵고,
+                // 지표에서 물 높이까지가 방 반지름의 ChamberMinCoverRadii 배 이상인 칸.
+                if (flow[c] > 0.0 && parent[c] >= 0 && nUpstream[c] >= 1 && !isSink[c] && !outlet[c]
+                    && rc > Radius(flow[c], p.RadiusMaxM, p.FullSizeAreaM2) && z[c] - levels[c] >= ChamberMinCoverRadii * rc)
+                {
+                    lakeCandidates.Add(c);
+                }
+            }
+            lakes = Thin(lakeCandidates, pos, p.LakeSpacingM, p.Seed, StreamLake);
+            bool[] isLake = new bool[n];
+            foreach (int c in lakes)
+            {
+                isLake[c] = true;
+                lakeXyz.AddRange([xy[c * 2], xy[(c * 2) + 1], levels[c]]);
+            }
+            double drop = ChamberLift * rc;
+            for (int c = 0; c < n; c++)
+            {
+                int q = parent[c];
+                if (!(flow[c] > 0.0) || q < 0)
+                {
+                    continue;
+                }
+                // 방 칸 c 에서 하류 칸 q 쪽 절반, 그리고 방 칸 q 로 들어오는 상류 칸 c 쪽 절반.
+                if (isLake[c])
+                {
+                    AddHalf(c, q);
+                }
+                if (isLake[q])
+                {
+                    AddHalf(q, c);
+                }
+            }
+
+            void AddHalf(int room, int other)
+            {
+                double x0 = xy[room * 2];
+                double y0 = xy[(room * 2) + 1];
+                double x1 = 0.5 * (x0 + xy[other * 2]);
+                double y1 = 0.5 * (y0 + xy[(other * 2) + 1]);
+                segA.AddRange([x0, y0, levels[room] + drop]);
+                segB.AddRange([x1, y1, (0.5 * (levels[room] + levels[other])) + drop]);
+                segR.Add(rc);
+                segShaft.Add(false);
+            }
+        }
+        bool[] segChamber = new bool[segR.Count];
+        for (int e = nPassage; e < segChamber.Length; e++)
+        {
+            segChamber[e] = true;
+        }
         return new CaveNetwork
         {
             NLevels = kN,
@@ -345,7 +446,10 @@ public sealed class CaveNetwork
             SegB = segB.ToArray(),
             SegRadius = segR.ToArray(),
             SegIsShaft = segShaft.ToArray(),
+            SegIsChamber = segChamber,
             Sinks = sinks,
+            Lakes = lakes,
+            LakeXyz = lakeXyz.ToArray(),
             Flow = flow,
             Parent = parent,
             PassageM = passageM,
@@ -375,7 +479,13 @@ public sealed class CaveNetwork
     /// 싱크홀 후보를 솎습니다: spacing [m] 안에 우선순위가 더 높은 후보가 있으면 뺍니다. 우선순위는 시드와 칸 번호의 해시입니다.
     /// 남은 칸끼리는 spacing 넘게 떨어집니다. 반환: 남은 칸 번호 (오름차순).
     /// </summary>
-    internal static int[] ThinSinks(List<int> candidates, double[] pos, double spacing, long seed)
+    internal static int[] ThinSinks(List<int> candidates, double[] pos, double spacing, long seed) =>
+        Thin(candidates, pos, spacing, seed, StreamSink);
+
+    /// <summary>
+    /// 후보 칸을 솎습니다 (싱크홀, 동굴 호수의 방). stream 은 우선순위 해시의 용도 번호라, 용도가 다르면 다른 칸이 남습니다.
+    /// </summary>
+    internal static int[] Thin(List<int> candidates, double[] pos, double spacing, long seed, long stream)
     {
         if (spacing <= 0.0 || candidates.Count == 0)
         {
@@ -393,7 +503,7 @@ public sealed class CaveNetwork
             }
             list.Add(c);
         }
-        ulong Priority(int c) => Hashing.Hash3(seed, StreamSink, c);
+        ulong Priority(int c) => Hashing.Hash3(seed, stream, c);
         double s2 = spacing * spacing;
         var keep = new List<int>();
         foreach (int c in candidates)

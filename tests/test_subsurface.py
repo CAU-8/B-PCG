@@ -77,8 +77,10 @@ def test_soil(bundle, cfg):
     assert (soil >= 0).all() and (soil <= float(s["thickness_cap_m"]) + 1e-6).all()
     land = _land(bundle)
     alluvium = f["alluvium_m"]
-    off_fan = ~f["fan"]  # 선상지 칸의 충적층은 선상지 퇴적 두께라 상한이 없음
-    assert (alluvium >= 0).all() and (alluvium[off_fan] <= float(s["alluvium_max_m"]) + 1e-6).all()
+    # 선상지, 산사태 둑, 흙이 메운 칸의 충적층은 쌓은 두께라 상한이 없습니다.
+    # 이 칸들은 모두 not_steady 입니다.
+    steady = ~f["not_steady"]
+    assert (alluvium >= 0).all() and (alluvium[steady] <= float(s["alluvium_max_m"]) + 1e-6).all()
     # 맨 암반 = 흙도 충적층도 없는 육지 칸
     uncovered = (soil == 0) & (alluvium == 0)
     assert np.array_equal(uncovered[land], f["bare_rock"][land])

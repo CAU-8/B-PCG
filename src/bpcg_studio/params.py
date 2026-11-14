@@ -168,6 +168,10 @@ UNIT_OVERRIDES: dict[str, str] = {
     "fans.slope_drop_ratio": "배",
     "dams.slope": "m/m",
     "dams.min_slope_ratio": "배",
+    "dams.blocking_fraction": "비율 0~1",
+    "dams.persistence_yr": "년",
+    "dams.fill_slope_ratio": "배",
+    "dams.min_drainage_area_m2": "m²",
     "lakes.hollow_fraction": "비율 0~1",
     "lakes.hollow_age_yr": "년",
     "lakes.min_area_m2": "m²",
@@ -177,6 +181,7 @@ UNIT_OVERRIDES: dict[str, str] = {
     "plates.count": "개",
     "plates.warp_amplitude": "단위 구 길이",
     "caves.levels": "층",
+    "caves.doline_depth_ratio": "깊이 ÷ 지름",
     "profile.compute.numba_threads": "개 (0 = 모두)",
 }
 
@@ -261,6 +266,14 @@ HELP_FALLBACK: dict[str, str] = {
     "골짜기에만 생깁니다 (2만 m² 는 25 m 칸 32개)",
     "caves.full_size_area_m2": "싱크홀로 모인 빗물 넓이가 이만큼일 때 통로가 가장 굵습니다. "
     "키우면 통로가 가늘어집니다 (1.0e6 은 1 km²)",
+    "caves.lake_spacing_m": "동굴 호수가 생기는 방(통로가 넓고 깊어지는 곳) 사이의 최소 "
+    "거리입니다. 줄이면 동굴 호수가 늘어나고, 0 이면 방을 두지 않습니다",
+    "caves.chamber_radius_m": "동굴 호수가 생기는 방의 반지름입니다. 물 깊이는 이 값의 1.2배, "
+    "물 위의 빈 높이는 0.8배입니다. 키우면 방과 호수가 커집니다",
+    "caves.doline_radius_m": "싱크홀 둘레를 그릇 모양으로 꺼뜨릴 때 가장 큰 그릇의 "
+    "반지름입니다. 빗물이 적게 모이는 싱크홀은 15 m 까지 작아집니다. 0 이면 꺼뜨리지 않습니다",
+    "caves.doline_depth_ratio": "꺼진 땅의 깊이 ÷ 지름입니다 (0.25 면 지름 30 m 에 깊이 "
+    "7.5 m). 키우면 그릇이 깊고 가팔라집니다",
 }
 
 # 프로필 키의 일반 설명 (파일 주석은 프로필마다 달라서 note 로 붙임)

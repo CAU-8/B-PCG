@@ -304,8 +304,13 @@ public static class Pipeline
         // --- 3단계: 선상지 → 물길만 다시
         t = Stopwatch.GetTimestamp();
         (double[] z, bool[] fan, bool[] notSteady, List<object?> apexes) = Fans.AddFans(graph, res.Z, res, cfg);
-        // 산사태 둑: 강 위 몇 곳을 돌무더기로 막아 물이 고일 자리를 만듭니다 (선상지 칸은 피함). 호수는 4단계에서 정합니다.
-        (z, bool[] dam, List<object?> dams) = Dams.AddDams(graph, z, res, cfg, fan);
+        // 산사태 둑과 메운 흙 (히어로 유역만): 둑이 있을 기대 수를 솟는 속도와 골짜기 모양에서 계산해 뽑고, 둑과 선상지 뒤의
+        // 웅덩이를 강이 실어 온 흙으로 메웁니다. 덜 메워진 둑 뒤에만 호수가 남고, 호수는 4단계에서 정합니다.
+        DamResult damResult = Dams.Apply(graph, z, res, u, rEff, isOutlet, cfg, fan);
+        z = damResult.Z;
+        bool[] dam = damResult.Dam;
+        bool[] valleyFill = damResult.Fill;
+        List<object?> dams = damResult.Sites;
         // 우묵한 자리: 행성 지도에서 땅 몇 군데를 낮춰 물이 고일 자리를 만듭니다 (물이 고이는 칸만 낮춘 채로 둠).
         (z, bool[] hollow) = Hollows.AddHollows(graph, z, isOutlet, res.SedimentFlux, cfg);
         // 작은 웅덩이 메우기: 가장 깊은 곳이 lakes.min_depth_m 에 못 미치거나 넓이가 lakes.min_area_m2 에 못 미치는 웅덩이는
@@ -324,9 +329,9 @@ public static class Pipeline
         for (int c = 0; c < n; c++)
         {
             fanRaise[c] = Math.Max(z[c] - res.Z[c], 0.0);
-            raised[c] = fan[c] || dam[c] || hollow[c] || pitFilled[c];
-            notSteady[c] |= dam[c] || hollow[c] || pitFilled[c];
-            anyMoved |= hollow[c] || pitFilled[c];
+            raised[c] = fan[c] || dam[c] || valleyFill[c] || hollow[c] || pitFilled[c];
+            notSteady[c] |= dam[c] || valleyFill[c] || hollow[c] || pitFilled[c];
+            anyMoved |= valleyFill[c] || hollow[c] || pitFilled[c];
         }
         long nRerouted = 0;
         long[] rcv;
@@ -361,7 +366,8 @@ public static class Pipeline
             slope = res.Slope;
         }
         sec["fans"] = Seconds(t);
-        Say(log, $"[3단계] 선상지 {apexes.Count}개, 흙을 쌓아 올린 칸 {LogText.N(fan.Count(b => b))}개, 산사태 둑 {dams.Count}개, "
+        Say(log, $"[3단계] 선상지 {apexes.Count}개, 흙을 쌓아 올린 칸 {LogText.N(fan.Count(b => b))}개, 산사태 둑 {dams.Count}개"
+            + $"(이 가운데 흙이 다 메우지 못한 둑 {damResult.Diag["n_lakes"]}개), 흙이 메운 칸 {LogText.N(valleyFill.Count(b => b))}개, "
             + $"낮춘 칸 {LogText.N(hollow.Count(b => b))}개, 메운 작은 웅덩이 {LogText.N(nPitsFilled)}개, 물길이 바뀐 칸 {LogText.N(nRerouted)}개");
 
         if (zSeafloor is not null)
@@ -519,9 +525,8 @@ public static class Pipeline
                 ["n_raised"] = (long)fan.Count(b => b),
                 ["n_rerouted"] = nRerouted,
             },
-            ["dams"] = new OrderedDictionary<string, object?>
+            ["dams"] = new OrderedDictionary<string, object?>(damResult.Diag)
             {
-                ["n_dams"] = (long)dams.Count,
                 ["n_raised"] = (long)dam.Count(b => b),
                 ["sites"] = dams,
             },

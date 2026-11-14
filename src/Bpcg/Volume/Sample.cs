@@ -267,6 +267,17 @@ public sealed class HeroVolume
     /// <summary>싱크홀 칸 (N,). 지표에서 동굴 층까지 수직굴이 열려 있습니다.</summary>
     public bool[] SinkOpen { get; private set; } = [];
 
+    /// <summary>싱크홀마다 그 둘레의 그릇 모양으로 꺼진 땅(돌리네)의 반지름 [m]. Network.Sinks 와 같은 순서. 0 이면 꺼뜨리지 않습니다.</summary>
+    public double[] DolineRadius { get; private set; } = [];
+
+    /// <summary>싱크홀마다 꺼진 땅의 가장 깊은 곳(가운데)의 깊이 [m]. Network.Sinks 와 같은 순서.</summary>
+    public double[] DolineDepth { get; private set; } = [];
+
+    // 히어로 칸마다 그 칸에 걸치는 꺼진 땅의 싱크홀 순번 (없으면 −1), 그리고 싱크홀마다 그 가운데의 x, y [m].
+    private int[] _dolineOf = [];
+    private double[] _sinkX = [];
+    private double[] _sinkY = [];
+
     /// <summary>(N,) 칸마다 그 칸에서 하류로 나가는 층 통로의 길이 [m].</summary>
     public double[] PassageM { get; private set; } = [];
 
@@ -424,6 +435,150 @@ public sealed class HeroVolume
         _detailSeed = SubSeed(Seed, StreamDetail);
         BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos, cfg);
         BuildCaveNetwork(fields, graph, cfg);
+    }
+
+    /// <summary>꺼진 땅의 반지름 아래 한계 [m]. 2 m 지표에서 그릇 모양이 보이려면 지름이 칸 여러 개여야 합니다.</summary>
+    public const double DolineRadiusMinM = 15.0;
+
+    /// <summary>꺼진 땅의 깊이는 지표에서 가장 얕은 동굴 층까지 깊이의 이 몫을 넘지 않습니다. 바닥이 동굴 천장을 뚫지 않게 합니다.</summary>
+    public const double DolineMaxDepthShare = 0.5;
+
+    /// <summary>꺼진 땅의 반지름은 싱크홀 사이 최소 거리의 이 몫을 넘지 않습니다. 그릇끼리 겹치지 않게 합니다.</summary>
+    public const double DolineMaxSpacingShare = 0.45;
+
+    /// <summary>
+    /// 싱크홀 둘레의 땅을 그릇 모양으로 꺼뜨릴 크기를 정합니다 (돌리네). 석회암 땅에서는 빗물이 구멍으로 빠지며 둘레의 암석을
+    /// 녹여, 구멍 둘레가 그릇처럼 꺼집니다. 바닥에 구멍이 있어 물은 고이지 않습니다.
+    /// 반지름 = radiusMaxM × sqrt(싱크홀로 모인 넓이 ÷ FullSizeAreaM2) 를 DolineRadiusMinM 과 radiusMaxM 사이로 자른 값,
+    /// 깊이 = depthRatio × 지름. 보기용입니다: 3D 샘플 함수의 지표만 낮추고 히어로 묶음의 z_m 은 바꾸지 않습니다.
+    /// </summary>
+    private void BuildDolines(CellGraph graph, double[] areaM2, double sinkSpacingM, double radiusMaxM, double depthRatio)
+    {
+        int n = Ny * Nx;
+        int[] sinks = Network.Sinks;
+        DolineRadius = new double[sinks.Length];
+        DolineDepth = new double[sinks.Length];
+        _dolineOf = [];
+        if (!(radiusMaxM >= 0.0 && depthRatio >= 0.0))
+        {
+            throw new ArgumentException(
+                $"caves.doline_radius_m ≥ 0, caves.doline_depth_ratio ≥ 0 이어야 합니다. 받은 값: {radiusMaxM}, {depthRatio}");
+        }
+        if (!(radiusMaxM > 0.0 && depthRatio > 0.0 && sinkSpacingM > 0.0) || sinks.Length == 0)
+        {
+            return;
+        }
+        _dolineOf = new int[n];
+        Array.Fill(_dolineOf, -1);
+        double[] pos = graph.Pos;
+        _sinkX = new double[sinks.Length];
+        _sinkY = new double[sinks.Length];
+        for (int i = 0; i < sinks.Length; i++)
+        {
+            int s = sinks[i];
+            _sinkX[i] = pos[s * 3];
+            _sinkY[i] = pos[(s * 3) + 1];
+            double toCave = double.PositiveInfinity;
+            for (int k = 0; k < NLevels; k++)
+            {
+                double lv = CaveLevels[(k * n) + s];
+                if (double.IsFinite(lv))
+                {
+                    toCave = Math.Min(toCave, Z[s] - lv);
+                }
+            }
+            (double radius, double depth) = DolineSize(areaM2[s], FullSizeAreaM2, radiusMaxM, depthRatio, sinkSpacingM, toCave);
+            if (!(depth > 0.0))
+            {
+                continue;
+            }
+            DolineRadius[i] = radius;
+            DolineDepth[i] = depth;
+            // 그릇이 걸칠 수 있는 칸에 이 싱크홀의 순번을 적습니다. 두 그릇이 한 칸에 걸치면 가운데가 더 가까운 쪽을 남깁니다.
+            double sx = pos[s * 3];
+            double sy = pos[(s * 3) + 1];
+            int reach = (int)Math.Ceiling(radius / Dx) + 1;
+            int si = (int)Math.Floor((sx - X0) / Dx);
+            int sj = (int)Math.Floor((Y0 - sy) / Dx);
+            for (int jj = Math.Max(sj - reach, 0); jj <= Math.Min(sj + reach, Ny - 1); jj++)
+            {
+                for (int ii = Math.Max(si - reach, 0); ii <= Math.Min(si + reach, Nx - 1); ii++)
+                {
+                    int c = (jj * Nx) + ii;
+                    int other = _dolineOf[c];
+                    if (other >= 0)
+                    {
+                        double cx = X0 + ((ii + 0.5) * Dx);
+                        double cy = Y0 - ((jj + 0.5) * Dx);
+                        double dNew = double.Hypot(cx - sx, cy - sy);
+                        double dOld = double.Hypot(cx - pos[sinks[other] * 3], cy - pos[(sinks[other] * 3) + 1]);
+                        if (dOld <= dNew)
+                        {
+                            continue;
+                        }
+                    }
+                    _dolineOf[c] = i;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 점 (x, y) 에서 싱크홀 둘레의 꺼진 땅이 지표를 낮추는 깊이 [m]. 가운데에서 DolineDepth, 가장자리(반지름)에서 0 이고
+    /// 그 사이는 깊이 × (1 − (거리 ÷ 반지름)²)² 입니다. 가운데와 가장자리에서 기울기가 0 이라 지표가 매끄럽게 이어집니다.
+    /// </summary>
+    public double DolineDepthAt(double x, double y)
+    {
+        if (_dolineOf.Length == 0)
+        {
+            return 0.0;
+        }
+        int ii = (int)Math.Floor((x - X0) / Dx);
+        int jj = (int)Math.Floor((Y0 - y) / Dx);
+        if (ii < 0 || ii >= Nx || jj < 0 || jj >= Ny)
+        {
+            return 0.0;
+        }
+        int i = _dolineOf[(jj * Nx) + ii];
+        if (i < 0)
+        {
+            return 0.0;
+        }
+        return DolineProfile(DolineDepth[i], DolineRadius[i], double.Hypot(x - _sinkX[i], y - _sinkY[i]));
+    }
+
+    /// <summary>
+    /// 꺼진 땅 하나의 반지름과 가운데 깊이 [m] 를 정합니다. areaM2: 싱크홀로 빗물이 모이는 넓이, depthToCaveM: 지표에서 가장 얕은
+    /// 동굴 층까지의 깊이. 반지름은 radiusMaxM × sqrt(areaM2 ÷ fullSizeAreaM2) 를 DolineRadiusMinM 과 radiusMaxM 사이로 자른 뒤
+    /// 싱크홀 사이 최소 거리의 DolineMaxSpacingShare 배를 넘지 않게 합니다. 깊이는 depthRatio × 지름이고, 동굴 층까지 깊이의
+    /// DolineMaxDepthShare 배를 넘지 않습니다. 꺼뜨릴 수 없으면 (0, 0).
+    /// </summary>
+    public static (double RadiusM, double DepthM) DolineSize(
+        double areaM2, double fullSizeAreaM2, double radiusMaxM, double depthRatio, double sinkSpacingM, double depthToCaveM)
+    {
+        if (!(radiusMaxM > 0.0 && depthRatio > 0.0 && sinkSpacingM > 0.0 && fullSizeAreaM2 > 0.0))
+        {
+            return (0.0, 0.0);
+        }
+        double radius = radiusMaxM * Math.Sqrt(Math.Max(areaM2, 0.0) / fullSizeAreaM2);
+        radius = Math.Min(Math.Max(radius, Math.Min(DolineRadiusMinM, radiusMaxM)), radiusMaxM);
+        radius = Math.Min(radius, DolineMaxSpacingShare * sinkSpacingM);
+        double depth = Math.Min(depthRatio * 2.0 * radius, DolineMaxDepthShare * Math.Max(depthToCaveM, 0.0));
+        return depth > 0.0 && double.IsFinite(depth) ? (radius, depth) : (0.0, 0.0);
+    }
+
+    /// <summary>
+    /// 꺼진 땅의 단면: 가운데에서 distM 떨어진 곳을 낮추는 깊이 [m] = depthM × (1 − (distM ÷ radiusM)²)².
+    /// 가운데에서 depthM, 반지름 밖에서 0 입니다.
+    /// </summary>
+    public static double DolineProfile(double depthM, double radiusM, double distM)
+    {
+        if (!(radiusM > 0.0) || distM >= radiusM)
+        {
+            return 0.0;
+        }
+        double u = 1.0 - ((distM * distM) / (radiusM * radiusM));
+        return depthM * u * u;
     }
 
     /// <summary>히어로 영역 (x_min, x_max, y_min, y_max) [m].</summary>
@@ -911,9 +1066,19 @@ public sealed class HeroVolume
         {
             sinkAllowed[c] = Rocks.Soluble[surfaceRock[c]] && !isRiver[c] && !isLake[c] && !isOcean[c];
         }
+        // 동굴 호수와 꺼진 땅의 설정 키가 없는 묶음(이 키가 생기기 전의 히어로 묶음)에서는 둘 다 만들지 않습니다.
+        Section cavesCfg = cfg.Sec("caves");
+        double sinkSpacing = cfg.F("caves.sink_spacing_m");
+        double lakeSpacing = cavesCfg.Contains("lake_spacing_m") ? cfg.F("caves.lake_spacing_m") : 0.0;
+        double chamberRadius = cavesCfg.Contains("chamber_radius_m") ? cfg.F("caves.chamber_radius_m") : 0.0;
         Network = CaveNetwork.Build(graph, z, CaveLevels, outlet, sinkAllowed, area, new CaveNetworkParams(
-            RadiusMaxM: r, FullSizeAreaM2: FullSizeAreaM2, SinkSpacingM: cfg.F("caves.sink_spacing_m"),
-            SinkMinAreaM2: cfg.F("caves.sink_min_area_m2"), PathWavelengthM: Wavelength, Seed: Seed));
+            RadiusMaxM: r, FullSizeAreaM2: FullSizeAreaM2, SinkSpacingM: sinkSpacing,
+            SinkMinAreaM2: cfg.F("caves.sink_min_area_m2"), PathWavelengthM: Wavelength, Seed: Seed,
+            LakeSpacingM: lakeSpacing, ChamberRadiusM: chamberRadius));
+        BuildDolines(
+            graph, area, sinkSpacing,
+            cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,
+            cavesCfg.Contains("doline_depth_ratio") ? cfg.F("caves.doline_depth_ratio") : 0.0);
 
         // --- 3. 캡슐 목록: 층 통로와 수직굴(그물), 그 뒤에 입구 굴
         var aL = new List<double>(Network.SegA);
@@ -1186,6 +1351,17 @@ public sealed class HeroVolume
             double riverGap = has ? Math.Max(l[c] - hw[c], 0.0) : FarM;
             waterDist[c] = Math.Min(lakeDist[c], riverGap);
             m[c] = Smoothstep01((waterDist[c] - WaterCalmM) / WaterCalmM);
+        }
+        if (_dolineOf.Length > 0)
+        {
+            // 싱크홀 둘레의 꺼진 땅. 물가(WaterCalmM 안)에서는 꺼뜨리지 않아 강바닥과 호숫가가 그대로입니다.
+            Parallelism.For(0, cN, c =>
+            {
+                if (m[c] > 0.0)
+                {
+                    zSurface[c] -= m[c] * DolineDepthAt(x[c], y[c]);
+                }
+            });
         }
         return new ColumnValues
         {
