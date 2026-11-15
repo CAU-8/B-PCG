@@ -168,6 +168,75 @@ public sealed class CaveNetworkTests
     }
 
     [Fact]
+    public void LakeChambersSitOnFlowingPassagesAndKeepTheirSpacing()
+    {
+        int[] sinks = [Cell(3, 20), Cell(12, 22), Cell(21, 18)];
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World(sinks, 2.0e5);
+        const double spacing = 150.0;
+        const double chamber = 6.0;
+        CaveNetwork plain = CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params);
+        CaveNetwork net = CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params with { LakeSpacingM = spacing, ChamberRadiusM = chamber });
+        // 방을 두지 않으면 방 조각이 없고, 방을 두어도 원래 통로와 수직굴은 그대로입니다.
+        Assert.Empty(plain.Lakes);
+        Assert.DoesNotContain(true, plain.SegIsChamber);
+        Assert.Equal(plain.SegA, net.SegA.Take(plain.SegA.Length));
+        Assert.Equal(plain.SegRadius, net.SegRadius.Take(plain.NSegments));
+        Assert.NotEmpty(net.Lakes);
+        int spring = Cell(N / 2, 0);
+        int nHalves = 0;
+        for (int i = 0; i < net.Lakes.Length; i++)
+        {
+            int c = net.Lakes[i];
+            // 방은 위에서 물이 들어오고 아래로 나가는 통로 칸에 놓입니다. 싱크홀 칸과 샘 칸에는 놓지 않습니다.
+            Assert.True(net.Flow[c] > 0.0 && net.Parent[c] >= 0);
+            Assert.DoesNotContain(c, sinks);
+            Assert.NotEqual(spring, c);
+            int nUp = Enumerable.Range(0, N * N).Count(u => net.Parent[u] == c && net.Flow[u] > 0.0);
+            Assert.True(nUp >= 1, $"방 칸 {c} 로 들어오는 통로가 없습니다");
+            nHalves += 1 + nUp;
+            // 물 높이는 그 칸의 아래층 높이 그대로입니다.
+            Assert.Equal(levels[c], net.LakeXyz[(i * 3) + 2]);
+            for (int j = i + 1; j < net.Lakes.Length; j++)
+            {
+                int d = net.Lakes[j];
+                double ex = g.Pos[c * 3] - g.Pos[d * 3];
+                double ey = g.Pos[(c * 3) + 1] - g.Pos[(d * 3) + 1];
+                Assert.True((ex * ex) + (ey * ey) > spacing * spacing, $"방 {c} 와 {d} 가 {spacing} m 안에 있습니다");
+            }
+        }
+        // 방 조각은 방 칸에서 이웃 통로 칸까지의 절반씩입니다: 방마다 하류 쪽 1개 + 상류 쪽 통로 수.
+        int[] rooms = Enumerable.Range(0, net.NSegments).Where(e => net.SegIsChamber[e]).ToArray();
+        Assert.Equal(nHalves, rooms.Length);
+        Assert.Equal(Enumerable.Range(plain.NSegments, rooms.Length), rooms);
+        foreach (int e in rooms)
+        {
+            Assert.Equal(chamber, net.SegRadius[e]);
+            Assert.False(net.SegIsShaft[e]);
+            // 방의 가운데는 물 높이보다 반지름의 0.2 배(1.2 m) 아래입니다. 조각의 첫 끝이 방 칸입니다.
+            int i = Enumerable.Range(0, net.Lakes.Length).Single(
+                k => net.SegA[e * 3] == net.LakeXyz[k * 3] && net.SegA[(e * 3) + 1] == net.LakeXyz[(k * 3) + 1]);
+            Assert.Equal(net.LakeXyz[(i * 3) + 2] + (CaveNetwork.ChamberLift * chamber), net.SegA[(e * 3) + 2], 9);
+        }
+    }
+
+    [Fact]
+    public void NoLakeChamberWhereTheCoverIsThinOrThePassageIsAsWide()
+    {
+        int[] sinks = [Cell(3, 20), Cell(12, 22), Cell(21, 18)];
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World(sinks, 2.0e5);
+        // 지표가 물 높이보다 60 m 위입니다. 방 반지름 25 m 는 그 3 배인 75 m 가 필요해 놓을 자리가 없습니다.
+        Assert.Empty(CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params with { LakeSpacingM = 150.0, ChamberRadiusM = 25.0 }).Lakes);
+        // 방 반지름 2 m 는 통로(2 m 이상)보다 굵지 않아 놓지 않습니다.
+        Assert.Empty(CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params with { LakeSpacingM = 150.0, ChamberRadiusM = 2.0 }).Lakes);
+        ArgumentException e = Assert.Throws<ArgumentException>(() => CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params with { LakeSpacingM = -1.0, ChamberRadiusM = 6.0 }));
+        Assert.Contains("-1", e.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WrongLengthsAreRejectedWithTheReceivedLengths()
     {
         (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World([Cell(12, 22)], 2.0e5);

@@ -26,7 +26,9 @@ def test_steady_fields(bundle):
     for k in ("k_s", "s_crit", "slope", "z_m"):
         assert np.isfinite(bundle[k]).all(), k
     assert (bundle["k_s"] >= 0).all() and (bundle["s_crit"] > 0).all()  # 강이 아닌 칸의 k_s 는 0
-    assert bundle["not_steady"].mean() < 0.01
+    # 정상상태가 아닌 칸은 선상지, 산사태 둑, 흙이 메운 칸, 낮춘 칸뿐입니다.
+    # tiny 히어로는 64 × 64 칸이라, 선상지 뒤로 메운 물길 한 줄(40칸 남짓)이 1%를 넘습니다.
+    assert bundle["not_steady"].mean() < 0.02
 
 
 @pytest.mark.parametrize("level", ["planet", "hero"])

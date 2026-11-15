@@ -59,6 +59,7 @@ public static class Fields
         ["s_crit"] = new FieldInfo("surface", "m/m", "float32", "지표 암석의 임계 경사"),
         ["not_steady"] = new FieldInfo("surface", "", "bool", "후처리로 고친 칸 (정상상태 아님)"),
         ["fan"] = new FieldInfo("surface", "", "bool", "선상지"),
+        ["dam"] = new FieldInfo("surface", "", "bool", "산사태 둑 (골짜기를 막은 돌무더기)"),
         ["water_level_m"] = new FieldInfo("water", "m", "float32", "수면 h_w (물 없으면 NaN)"),
         ["is_lake"] = new FieldInfo("water", "", "bool", "호수"),
         ["is_river"] = new FieldInfo("water", "", "bool", "강"),

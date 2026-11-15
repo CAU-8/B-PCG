@@ -14,6 +14,13 @@ public static class Drainage
 {
     public const int AlignmentSteps = 6;
     public const double AlignmentTolDeg = 5.0;
+
+    /// <summary>
+    /// 격자 정렬 지수로 합격·불합격을 가리는 데 필요한 가장 적은 하천 칸 수. 방향이 무작위여도 지수는 칸이 적을수록 크게
+    /// 흔들립니다: 표준편차 = sqrt((1 − p) ÷ (p × 칸 수)), p = 2 × 5° ÷ 45° ≈ 0.22. 150칸에서 약 0.15 라, 합격선 1.3 과
+    /// 무작위 값 1 의 차이 0.3 이 그 두 배입니다. 칸이 이보다 적으면 우연히 합격선을 넘을 수 있습니다.
+    /// </summary>
+    public const long AlignmentMinCells = 150;
     public const double EdgeBand = 0.9;
 
     private const int NSlots = CellGraph.NSlots;

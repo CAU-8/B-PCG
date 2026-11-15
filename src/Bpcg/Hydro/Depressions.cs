@@ -179,6 +179,65 @@ public static class Depressions
         return nVisited;
     }
 
+    /// <summary>
+    /// 웅덩이를 흙으로 메운 지표를 구합니다 (순수 힙). 웅덩이 칸은 넘치는 칸보다 한 걸음 높은 데서 시작해, 넘치는 곳에서
+    /// 멀어질수록 거리 × 그 칸의 기울기(cellSlope)만큼 높아집니다. 강이 흙을 싣고 흐르려면 바닥에 기울기가 있어야 하기 때문입니다.
+    /// 그래서 메운 칸마다 자기보다 낮은 이웃이 하나는 있습니다 (기울기가 0 보다 클 때).
+    /// 메운 칸에서 이어지는 칸이 그 기울기 면보다 낮으면 함께 메웁니다 (메운 흙이 상류로 쐐기처럼 이어짐).
+    /// 물길 칸에 옆 칸보다 작은 기울기를 주면 물길이 옆 칸보다 낮게 메워집니다.
+    /// 메운 칸과 이어지지 않은 칸은 바꾸지 않습니다. 방문한 칸 수를 돌려줍니다.
+    /// </summary>
+    internal static int FillAlluvialKernel(
+        double[] z, int[] nbr, double[] dist, int nSlot, bool[] isOutlet, double[] cellSlope, double[] output, bool[] raised)
+    {
+        int n = z.Length;
+        bool[] visited = new bool[n];
+        double[] hz = new double[n];
+        long[] hi = new long[n];
+        int size = 0;
+        int nVisited = 0;
+        for (int c = 0; c < n; c++)
+        {
+            if (isOutlet[c])
+            {
+                output[c] = z[c];
+                visited[c] = true;
+                nVisited++;
+                size = HeapPush(hz, hi, size, z[c], c);
+            }
+        }
+        while (size > 0)
+        {
+            long c = hi[0];
+            size = HeapPop(hz, hi, size);
+            double zc = output[c];
+            for (int s = 0; s < nSlot; s++)
+            {
+                int k = nbr[(c * nSlot) + s];
+                if (k < 0 || visited[k])
+                {
+                    continue;
+                }
+                visited[k] = true;
+                nVisited++;
+                // 한 걸음 = 기울기 × 이웃까지의 거리. 메운 칸에서 넘어가면 한 걸음 높은 면보다 낮은 칸을,
+                // 메우지 않은 칸에서 넘어가면 그 칸보다 낮은 칸(웅덩이의 첫 칸)을 한 걸음 높은 데까지 메웁니다.
+                double step = cellSlope[k] * dist[(c * nSlot) + s];
+                if (z[k] < (raised[c] ? zc + step : zc))
+                {
+                    output[k] = zc + step;
+                    raised[k] = true;
+                }
+                else
+                {
+                    output[k] = z[k];
+                }
+                size = HeapPush(hz, hi, size, output[k], k);
+            }
+        }
+        return nVisited;
+    }
+
     /// <summary>입력 검사 (_check_inputs). 반환: 이웃 슬롯 수 K.</summary>
     internal static int CheckInputs(double[] z, int[] nbr, bool[] isOutlet)
     {
@@ -227,6 +286,54 @@ public static class Depressions
             throw new ArgumentException($"출구와 이어지지 않은 칸이 {z.Length - nVisited}개 있습니다");
         }
         return output;
+    }
+
+    /// <summary>
+    /// 웅덩이를 흙으로 메운 지표 (fill_alluvial). 웅덩이 칸은 넘치는 칸보다 한 걸음 높은 데서 시작해 넘치는 곳에서 멀어질수록
+    /// 거리 × slope [m/m] 만큼 높아지는 완만한 평지가 됩니다. dist: (N, K) 이웃까지의 거리 [m].
+    /// 반환: (메운 고도 [m], 메운 칸). 웅덩이와 이어지지 않은 칸은 z 그대로입니다.
+    /// </summary>
+    public static (double[] ZFill, bool[] Raised) FillAlluvial(double[] z, int[] nbr, double[] dist, bool[] isOutlet, double slope)
+    {
+        if (!(double.IsFinite(slope) && slope >= 0.0))
+        {
+            throw new ArgumentException($"slope 는 0 이상의 유한한 값이어야 합니다: {slope}");
+        }
+        double[] cellSlope = new double[z.Length];
+        Array.Fill(cellSlope, slope);
+        return FillAlluvial(z, nbr, dist, isOutlet, cellSlope);
+    }
+
+    /// <summary>
+    /// 웅덩이를 흙으로 메운 지표. 위와 같되 기울기를 칸마다 줍니다. cellSlope: (N,) 그 칸이 메워질 때 아랫칸보다
+    /// 높아지는 기울기 [m/m] (0 이상).
+    /// </summary>
+    public static (double[] ZFill, bool[] Raised) FillAlluvial(double[] z, int[] nbr, double[] dist, bool[] isOutlet, double[] cellSlope)
+    {
+        int nSlot = CheckInputs(z, nbr, isOutlet);
+        if (dist.Length != nbr.Length)
+        {
+            throw new ArgumentException($"dist 는 nbr 와 같은 (N, K) 모양이어야 합니다. 받은 길이: dist {dist.Length}, nbr {nbr.Length}");
+        }
+        if (cellSlope.Length != z.Length)
+        {
+            throw new ArgumentException($"cellSlope 는 z 와 같은 (N,) 이어야 합니다. 받은 길이: cellSlope {cellSlope.Length}, z {z.Length}");
+        }
+        foreach (double v in cellSlope)
+        {
+            if (!(double.IsFinite(v) && v >= 0.0))
+            {
+                throw new ArgumentException($"cellSlope 는 0 이상의 유한한 값이어야 합니다. 받은 값 {v}");
+            }
+        }
+        double[] output = new double[z.Length];
+        bool[] raised = new bool[z.Length];
+        int nVisited = FillAlluvialKernel(z, nbr, dist, nSlot, isOutlet, cellSlope, output, raised);
+        if (nVisited != z.Length)
+        {
+            throw new ArgumentException($"출구와 이어지지 않은 칸이 {z.Length - nVisited}개 있습니다");
+        }
+        return (output, raised);
     }
 
     /// <summary>

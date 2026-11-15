@@ -203,10 +203,12 @@ public static class Finder
             dOcean = Enumerable.Repeat(double.PositiveInfinity, g.NCells).ToArray();
         }
         double latMax = NpMath.Radians(MaxLatDeg);
+        // 호수 칸은 물에 잠긴 땅이라 히어로 중심으로 쓰지 않습니다.
+        bool[]? lake = planet.Fields.Contains("is_lake") ? planet.Fields.Get<bool>("is_lake") : null;
         bool[] o = new bool[g.NCells];
         Parallelism.For(0, o.Length, c =>
         {
-            o[c] = !ocean[c] && Math.Abs(lat[c]) <= latMax && dOcean[c] > margin;
+            o[c] = !ocean[c] && !(lake is not null && lake[c]) && Math.Abs(lat[c]) <= latMax && dOcean[c] > margin;
         });
         return o;
     }
@@ -421,6 +423,10 @@ public static class Finder
         if (planet.Fields.Get<bool>("is_ocean")[cell])
         {
             why = "바다 위입니다";
+        }
+        else if (planet.Fields.Contains("is_lake") && planet.Fields.Get<bool>("is_lake")[cell])
+        {
+            why = "호수 위입니다";
         }
         else if (Math.Abs(SiteFromCell(planet, cell, cfg).LatDeg) > MaxLatDeg)
         {
