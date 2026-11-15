@@ -201,13 +201,13 @@ def test_bake_of_a_bundle_without_newer_keys_says_how_to_fix(csharp_cli, cave_ru
     old_hero = tmp_path / "hero"
     shutil.copytree(cave_run / "hero", old_hero)
     manifest = json.loads((old_hero / "manifest.json").read_text(encoding="utf-8"))
-    del manifest["config"]["caves"]["rarity_wavelength_m"]
+    del manifest["config"]["caves"]["sink_spacing_m"]
     (old_hero / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
     )
     proc = run_cli("bake", "--hero", old_hero, "--out", tmp_path / "out", "--no-globe", check=False)
     assert proc.returncode == 1
-    assert "caves.rarity_wavelength_m" in proc.stderr
+    assert "caves.sink_spacing_m" in proc.stderr
     assert "다시 돌려" in proc.stderr and "Unhandled exception" not in proc.stderr
 
 

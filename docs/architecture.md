@@ -295,6 +295,7 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
 4. **석회암 2단 동굴(`Subsurface/Caves.cs`)**: 동굴은 아무 데나 뚫지 않습니다. 층 높이의 암석이 물에 녹는 암석(석회암·대리암, `Rocks.Soluble`)이고 지표 아래 300 m(`groundwater.max_depth_m`) 안인 자리에만 둡니다.
    - **아래층 동굴(`cave_level_0_m`)**: 아래 지하수면 높이에 둡니다. 그래서 물에 잠깁니다.
    - **위층 동굴(`cave_level_1_m`)**: 가장 가까운 큰 물의 수면 + 0.35 × 골짜기 깊이에 둡니다(`caves.incision_fraction`). 골짜기 깊이는 강 둘레 1.5 km(`caves.valley_window_m`) 안에서 가장 높은 땅과 강 수면의 높이 차입니다. 예를 들어 강 수면이 140 m, 골짜기 깊이가 300 m이면 $140 + 0.35 \times 300 = 245\text{ m}$입니다. 강이 골짜기를 더 파 내려가기 전의 옛 강 높이를 흉내 낸 값이라 물이 빠진 마른 층이고, 0.35는 이 프로젝트가 정한 값입니다.
+   - **통로(`Subsurface/CaveNetwork.cs`)**: 층 안에서 통로가 지나는 자리는 3D 파일을 만들 때 정합니다. 통로는 싱크홀(석회암 지표에서 빗물이 모여 땅속으로 들어가는 구멍)에서 샘(땅속의 물이 지표로 나오는 자리)까지 물이 흐르는 길이고, 하류로 갈수록 합쳐지며 굵어집니다([pipeline.md](pipeline.md) 10장 4번).
 
 ---
 
@@ -314,11 +315,11 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
 
 #### ② 회랑 선택과 3D 재질 부피 굽기 (`Bake/Corridor.cs`, `Volume/Sample.cs`)
 
-히어로 유역(`L2`)이 완성되면, 그 안에서 $6\text{ km} \times 1\text{ km}$ 직사각형 띠인 회랑을 고릅니다(`Corridor.ChooseCorridor`). 선상지 꼭짓점(없으면 유량이 가장 큰 강 칸)을 지나는 본류를 따라 시작점을 옮겨 보며, 점수가 가장 높은 직사각형을 고릅니다. 점수는 지표 암석이 고루 섞인 정도, 경사가 고루 섞인 정도, 동굴, 강의 네 항(각 0~1)을 더한 값입니다([pipeline.md](pipeline.md) 11장).
+히어로 유역(`L2`)이 완성되면, 그 안에서 $6\text{ km} \times 1\text{ km}$ 직사각형 띠인 회랑을 고릅니다(`Corridor.ChooseCorridor`). 선상지 꼭짓점(없으면 유량이 가장 큰 강 칸)을 지나는 본류와 그 지류 위에 시작점을 놓아 보며, 점수가 가장 높은 직사각형을 고릅니다. 점수는 지표 암석이 고루 섞인 정도, 경사가 고루 섞인 정도, 동굴, 강의 네 항(각 0~1)을 더한 값입니다([pipeline.md](pipeline.md) 11장).
 
 그다음 회랑 영역을 2 m 간격으로 읽어 지표면 높이맵(`heightmap.bin`, $501 \times 3001$ 표본)과 수면(`water.bin`), 지하수면(`water_table.bin`, `water_table_lower.bin`)을 굽습니다. 25 m 격자가 그리지 못하는 50 m보다 짧은 거칠기는 보기용 높이맵 `heightmap_detail.bin`에 따로 더합니다(`Detail.AddFractalDetail`). 물에서 6 m 안(`detail.water_margin_m`)에는 더하지 않고, `heightmap.bin`은 바꾸지 않습니다. 이 거칠기는 솔버 결과가 아닙니다. 동굴 벽은 메시 파일 `caves.glb`로 굽습니다. 지표로 열린 입구와도 회랑 가장자리와도 이어지지 않는 조각은 지웁니다.
 
-마지막으로 `Corridor.BakeStrata`가 `HeroVolume.EvaluateGrid`(`Volume/Sample.cs`)로 회랑의 땅속을 읽어, 상자마다 무엇이 있는지 바이트 번호로 기록합니다(`strata.u8`). 상자는 수평 4 m, 수직 2 m입니다. 지표를 따라 아래로 306 m(300 m + 동굴 통로 반지름 3 m의 2배)까지 153층을 굽습니다. `laptop` 프로필에서는 긴 쪽 1,501개($6000 / 4 + 1$) × 짧은 쪽 251개 × 153층입니다.
+마지막으로 `Corridor.BakeStrata`가 `HeroVolume.EvaluateGridCoarse`(`Volume/Sample.cs`)로 회랑의 땅속을 읽어, 상자마다 무엇이 있는지 바이트 번호로 기록합니다(`strata.u8`). 상자는 수평 4 m, 수직 2 m입니다. 상자가 가는 동굴 통로(반지름 2 m)보다 커서, 통로가 토막 나지 않도록 통로를 반지름 2.24 m 이상으로 보고 칠합니다. 지표를 따라 아래로 306 m(300 m + 동굴 통로 반지름 3 m의 2배)까지 153층을 굽습니다. `laptop` 프로필에서는 긴 쪽 1,501개($6000 / 4 + 1$) × 짧은 쪽 251개 × 153층입니다.
 
 ```text
 3D 샘플 판정 규칙 (HeroVolume)과 strata.u8 의 코드: 점 (x, y, z)에 무엇이 있는가?

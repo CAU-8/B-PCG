@@ -216,7 +216,7 @@ public static class Runs
     }
 
     // 굽기가 읽는 설정 키 가운데, 그 키가 생기기 전의 코드로 만든 히어로 묶음에는 없는 키.
-    private static readonly string[] BakeKeysMissingInOlderBundles = ["caves.rarity_wavelength_m", "caves.rarity_threshold"];
+    private static readonly string[] BakeKeysMissingInOlderBundles = ["caves.sink_spacing_m", "caves.sink_min_area_m2", "caves.full_size_area_m2"];
 
     /// <summary>
     /// 굽기는 히어로 묶음에 저장된 설정을 씁니다. 묶음을 만든 코드가 지금 코드보다 오래되어 굽기가 읽는 키가 없으면,

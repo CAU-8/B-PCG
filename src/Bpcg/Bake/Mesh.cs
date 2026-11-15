@@ -103,44 +103,13 @@ public static class Mesh
     /// <summary>수평 상자 안 동굴이 있을 수 있는 높이 구간들 (cave_bands).</summary>
     public static List<(double Lo, double Hi)> CaveBands(HeroVolume volume, (double XMin, double XMax, double YMin, double YMax) bbox, double padM)
     {
-        double dx = volume.Dx;
-        double r = volume.RPass;
-        int i0 = Math.Max((int)Math.Floor(((bbox.XMin - volume.X0) / dx) - 0.5) - 1, 0);
-        int i1 = Math.Min((int)Math.Ceiling(((bbox.XMax - volume.X0) / dx) - 0.5) + 1, volume.Nx - 1);
-        int j0 = Math.Max((int)Math.Floor(((volume.Y0 - bbox.YMax) / dx) - 0.5) - 1, 0);
-        int j1 = Math.Min((int)Math.Ceiling(((volume.Y0 - bbox.YMin) / dx) - 0.5) + 1, volume.Ny - 1);
+        // 동굴은 조각(층 통로, 수직굴, 입구 굴)으로만 이루어지므로, 상자와 겹치는 조각의 높이 범위만 모읍니다.
         var iv = new List<(double, double)>();
-        int n = volume.Ny * volume.Nx;
-        if (i0 <= i1 && j0 <= j1)
-        {
-            for (int k = 0; k < volume.NLevels; k++)
-            {
-                double mn = double.PositiveInfinity;
-                double mx = double.NegativeInfinity;
-                bool any = false;
-                for (int j = j0; j <= j1; j++)
-                {
-                    for (int i = i0; i <= i1; i++)
-                    {
-                        double v = volume.CaveLevels[(k * n) + (j * volume.Nx) + i];
-                        if (double.IsFinite(v))
-                        {
-                            any = true;
-                            mn = Math.Min(mn, v);
-                            mx = Math.Max(mx, v);
-                        }
-                    }
-                }
-                if (any)
-                {
-                    iv.Add((mn - r - padM, mx + r + padM));
-                }
-            }
-        }
         double[] a = volume.CapA;
         double[] b = volume.CapB;
         for (int e = 0; e < volume.NCapsules; e++)
         {
+            double r = volume.CapR[e];
             double loX = Math.Min(a[e * 3], b[e * 3]) - r;
             double hiX = Math.Max(a[e * 3], b[e * 3]) + r;
             double loY = Math.Min(a[(e * 3) + 1], b[(e * 3) + 1]) - r;

@@ -174,7 +174,7 @@ public static class Corridor
     private static readonly double[] SlopeClassEdges = [0.1, 0.35, 0.65];
     private const int ScoreClasses = 4;          // 고루 섞인 정도를 잴 때 '충분히 다양함'으로 보는 종류 수
     private const double EnoughEntrances = 3.0;  // 통로에 닿는 동굴 입구가 이만큼이면 동굴 항의 입구 몫이 가득 참
-    private const double EnoughCaveZone = 0.2;   // 회랑 넓이 가운데 통로가 있는 동굴 구역이 이만큼이면 구역 몫이 가득 참
+    private const double EnoughPassagePerLength = 1.0;  // 회랑 안의 동굴 통로 길이가 회랑 길이의 이 배수이면 통로 몫이 가득 참
     private const double RockShareMin = 0.02;    // 암석 종류 수를 셀 때 넓이 몫의 아래 한계
     // 직사각형을 폭 방향으로 옮겨 보는 자리 (회랑 폭의 배수). 0 이면 시작점이 폭의 한가운데, ±0.4 면 가장자리 가까이에 놓입니다.
     private static readonly double[] LateralOffsets = [0.0, -0.25, 0.25, -0.4, 0.4];
@@ -210,11 +210,12 @@ public static class Corridor
     /// <remarks>
     /// 점수 = 지표 암석이 고루 섞인 정도 + 경사가 고루 섞인 정도 + 동굴 + 강 (각 0~1, <see cref="Choice"/>).
     /// 네 항목을 더하는 이유: 동굴 입구 수만으로 고르면 회랑이 석회암 언덕 한가운데에 놓여, 6 km 를 걸어도
-    /// 암석 한 종류와 같은 모양의 비탈만 보입니다. caveZone (N,) 은 칸마다 동굴 통로의 굵기 비율(HeroVolume.CaveRarity)이고,
-    /// 주지 않으면 동굴 층이 있는 칸을 모두 동굴 구역으로 봅니다. openEntrance (N,) 는 입구 굴을 실제로 판 칸
-    /// (HeroVolume.EntranceOpen)이고, 주지 않으면 히어로 묶음의 입구 후보 칸(cave_entrance)을 모두 입구로 셉니다.
+    /// 암석 한 종류와 같은 모양의 비탈만 보입니다. passageM (N,) 은 칸마다 그 칸을 지나는 동굴 통로의 길이 [m]
+    /// (HeroVolume.PassageM)이고, 주지 않으면 동굴 층이 있는 칸마다 칸 간격만큼의 통로가 있다고 봅니다.
+    /// openEntrance (N,) 는 지표에서 동굴로 들어갈 수 있는 칸(입구 굴을 판 칸과 싱크홀 칸)이고,
+    /// 주지 않으면 히어로 묶음의 입구 후보 칸(cave_entrance)을 모두 입구로 셉니다.
     /// </remarks>
-    public static Choice ChooseCorridor(HeroState heroState, Config cfg, double[]? caveZone = null, bool[]? openEntrance = null)
+    public static Choice ChooseCorridor(HeroState heroState, Config cfg, double[]? passageM = null, bool[]? openEntrance = null)
     {
         CellGraph graph = heroState.Graph;
         FieldSet f = heroState.Fields;
@@ -248,29 +249,39 @@ public static class Corridor
             }
             for (int c = 0; c < ent.Length; c++)
             {
-                ent[c] &= openEntrance[c];
+                ent[c] = openEntrance[c];
             }
         }
         byte[] rockId = (byte[])FieldSet.CastTo(f["surface_rock"], typeof(byte));
         double[] slopeAll = f.GetFloat64("slope");
-        // 동굴 구역 칸: 동굴 층이 하나라도 있고 통로가 제 굵기의 절반 이상인 칸.
+        // 칸마다의 동굴 통로 길이 [m]. 통로 그물을 받지 않았으면 동굴 층이 있는 칸마다 칸 간격만큼으로 어림합니다.
         int nLevels = (int)cfg.I("caves.levels");
-        bool[] zone = new bool[xc.Length];
-        if (caveZone is not null && caveZone.Length != xc.Length)
+        double[] caveLen = new double[xc.Length];
+        if (passageM is not null)
         {
-            throw new ArgumentException($"caveZone 은 칸 수 ({xc.Length},) 와 같은 길이여야 합니다. 받은 길이 {caveZone.Length}");
-        }
-        for (int k = 0; k < nLevels; k++)
-        {
-            string name = $"cave_level_{k}_m";
-            if (!f.Contains(name))
+            if (passageM.Length != xc.Length)
             {
-                continue;
+                throw new ArgumentException($"passageM 은 칸 수 ({xc.Length},) 와 같은 길이여야 합니다. 받은 길이 {passageM.Length}");
             }
-            double[] lv = f.GetFloat64(name);
-            for (int c = 0; c < zone.Length; c++)
+            Array.Copy(passageM, caveLen, caveLen.Length);
+        }
+        else
+        {
+            for (int k = 0; k < nLevels; k++)
             {
-                zone[c] |= double.IsFinite(lv[c]) && (caveZone is null || caveZone[c] >= 0.5);
+                string name = $"cave_level_{k}_m";
+                if (!f.Contains(name))
+                {
+                    continue;
+                }
+                double[] lv = f.GetFloat64(name);
+                for (int c = 0; c < caveLen.Length; c++)
+                {
+                    if (double.IsFinite(lv[c]))
+                    {
+                        caveLen[c] = dx;
+                    }
+                }
             }
         }
 
@@ -406,11 +417,11 @@ public static class Corridor
         int nAnchor = anchorCell.Count;
         // 시작점 후보마다 직사각형을 여러 모양으로 놓아 봅니다: 길게 뻗는 방향 둘(동서, 남북) × 뻗는 쪽 둘 × 옆으로 옮긴 자리 다섯.
         // 본류가 뻗는 방향 하나만 보면, 강을 따라가면서 암석 경계도 지나는 자리를 놓칩니다.
-        // 직사각형마다 점수의 재료(입구 수, 줄기 칸 수, 강이 있는 조각 수, 암석·경사·동굴 구역의 칸 수)를 따로 구한 뒤,
+        // 직사각형마다 점수의 재료(입구 수, 줄기 칸 수, 강이 있는 조각 수, 암석·경사의 칸 수, 동굴 통로 길이)를 따로 구한 뒤,
         // 후보 순서, 모양 순서대로 점수가 가장 큰 직사각형을 고릅니다. 서로 독립이라 병렬로 구해도 고르는 결과가 같습니다.
         int nVar = 4 * LateralOffsets.Length;
         var evals = new (string Axis, double Sign, (double, double, double, double) Rect, double L, double Wd, long NEnt, long NStem,
-            long[] Rocks, long[] Slopes, long NZone, long NCells, long NRiverSlices)[nAnchor * nVar];
+            long[] Rocks, long[] Slopes, double Passage, long NCells, long NRiverSlices)[nAnchor * nVar];
         Parallelism.ForTasks(nAnchor, ci =>
         {
             double vx = anchorVx[ci];
@@ -461,7 +472,7 @@ public static class Corridor
                 int jLo = Math.Max((int)Math.Floor((hiY - rect.Item4) / dx) - 1, 0);
                 int jHi = Math.Min((int)Math.Ceiling((hiY - rect.Item3) / dx) + 1, ny - 1);
                 long nEnt = 0;
-                long nZone = 0;
+                double passage = 0.0;
                 long nCells = 0;
                 long nStem = 0;
                 long[] rocks = new long[Rocks.NRocks];
@@ -479,7 +490,7 @@ public static class Corridor
                         }
                         nCells++;
                         nEnt += ent[c] ? 1 : 0;
-                        nZone += zone[c] ? 1 : 0;
+                        passage += caveLen[c];
                         if (isRiver[c])
                         {
                             sliceHasRiver[axis == "east" ? ii - iLo : jj - jLo] = true;
@@ -495,7 +506,7 @@ public static class Corridor
                     }
                 }
                 long nRiverSlices = sliceHasRiver.Count(b => b);
-                evals[(ci * nVar) + v] = (axis, sign, rect, l, wd, nEnt, nStem, rocks, slopes, nZone, nCells, nRiverSlices);
+                evals[(ci * nVar) + v] = (axis, sign, rect, l, wd, nEnt, nStem, rocks, slopes, passage, nCells, nRiverSlices);
             }
         });
         (double, double, long)? bestKey = null;
@@ -504,11 +515,11 @@ public static class Corridor
         {
             int a = e / nVar;
             (string axis, double sign, (double, double, double, double) rect, double l, double wd, long nEnt, long nStem,
-                long[] rocks, long[] slopes, long nZone, long nCells, long nRiverSlices) = evals[e];
+                long[] rocks, long[] slopes, double passage, long nCells, long nRiverSlices) = evals[e];
             double rockDiv = Evenness(rocks);
             double slopeDiv = Evenness(slopes);
-            double zoneShare = nCells > 0 ? (double)nZone / nCells : 0.0;
-            double caves = (0.5 * Math.Min(nEnt / EnoughEntrances, 1.0)) + (0.5 * Math.Min(zoneShare / EnoughCaveZone, 1.0));
+            // 동굴 항목: 지표에서 들어갈 수 있는 곳의 수와, 회랑 안 통로 길이를 회랑 길이와 비교한 값을 반씩 봅니다.
+            double caves = (0.5 * Math.Min(nEnt / EnoughEntrances, 1.0)) + (0.5 * Math.Min(passage / (EnoughPassagePerLength * l), 1.0));
             // 강 항목: 강이 회랑 길이의 얼마를 따라가는지. 강이 회랑을 가로질러 지나가기만 하면 조각 한두 개만 셉니다.
             double stem = Math.Min(nRiverSlices * dx / l, 1.0);
             double score = rockDiv + slopeDiv + caves + stem;
@@ -654,11 +665,12 @@ public static class Corridor
             });
             double[] sx = cx[s..e];
             double[] sy = cy[s..e];
-            Dictionary<string, Array> ev = volume.EvaluateGrid(sx, sy, up, nz, double.PositiveInfinity, "material", "water");
+            // 재질 부피의 칸(가로 StrataDxM, 세로 StrataDzM)은 가는 통로보다 크므로, 통로가 토막 나지 않게 칠합니다.
+            Dictionary<string, Array> ev = volume.EvaluateGridCoarse(sx, sy, up, nz, StrataDxM, StrataDzM, "material", "water");
             byte[] m = (byte[])ev["material"];
             bool[] w = (bool[])ev["water"];
             // 층리: 기반암 칸이 제 지층의 바닥에서 얼마나 높은지로 띠 번호를 정합니다 (맨 아래 기반암은 윗면에서 잰 깊이).
-            double[] sb = volume.Columns(sx, sy, withCaveDistance: false).StrataBottom;
+            double[] sb = volume.Columns(sx, sy).StrataBottom;
             Parallelism.For(0, m.Length, q =>
             {
                 byte id = w[q] ? StrataWater : m[q];
@@ -802,11 +814,17 @@ public static class Corridor
         sec["volume"] = Seconds(t);
         t = Stopwatch.GetTimestamp();
         (double[] hx, double[] hy) = vol.CellCenters();
-        Choice cor = ChooseCorridor(heroState, cfg, vol.CaveRarity(hx, hy), vol.EntranceOpen);
+        // 지표에서 동굴로 들어갈 수 있는 칸: 입구 굴을 판 칸과 싱크홀 칸.
+        bool[] openings = new bool[vol.EntranceOpen.Length];
+        for (int c = 0; c < openings.Length; c++)
+        {
+            openings[c] = vol.EntranceOpen[c] || vol.SinkOpen[c];
+        }
+        Choice cor = ChooseCorridor(heroState, cfg, vol.PassageM, openings);
         (double XMin, double XMax, double YMin, double YMax) rect = cor.Rect;
         sec["choose"] = Seconds(t);
         string apex = cor.ApexKind switch { "fan" => "선상지 꼭짓점", "river" => "출구 쪽 큰 강", _ => cor.ApexKind };
-        log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} (본류 기준점: {apex}), 동굴 입구 칸 {LogText.N(cor.NEntranceCells)}개, 지표 암석 {cor.NRocks}종, 점수 {cor.Score:F2}");
+        log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} (본류 기준점: {apex}), 동굴 입구와 싱크홀 {LogText.N(cor.NEntranceCells)}곳, 지표 암석 {cor.NRocks}종, 점수 {cor.Score:F2}");
 
         // --- 높이맵 (회랑 지표)
         t = Stopwatch.GetTimestamp();
@@ -930,7 +948,7 @@ public static class Corridor
         // --- 입구 위치 (엔진 좌표)
         var entIn = new List<object?>();
         var entOut = new List<object?>();
-        for (int e = 0; e < vol.NCapsules; e++)
+        foreach (int e in vol.EntranceCapsules)
         {
             double mx = 0.5 * (vol.CapA[e * 3] + vol.CapB[e * 3]);
             double my = 0.5 * (vol.CapA[(e * 3) + 1] + vol.CapB[(e * 3) + 1]);
@@ -949,7 +967,7 @@ public static class Corridor
             ["count"] = (long)entIn.Count,
             ["inside"] = entIn,
             ["outside"] = entOut,
-            ["rule"] = "inside = 통로 한가운데 끝, outside = 산비탈 밖 공중 끝 (같은 동굴 층 높이)",
+            ["rule"] = "inside = 통로가 시작하는 샘 칸, outside = 산비탈 밖 공중 끝 (같은 동굴 층 높이)",
         }, maxArray: null);
 
         var fileNames = new List<string>
@@ -1001,7 +1019,12 @@ public static class Corridor
         caves["n_entrance_candidates"] = vol.NEntranceCandidates;
         caves["n_unopened_entrances"] = vol.NUnopened;
         caves["n_entrances_without_passage"] = vol.NNoPassage;
+        caves["n_entrances_dug"] = (long)vol.EntranceCapsules.Length;
         caves["n_entrances"] = (long)entIn.Count;
+        caves["n_sinkholes"] = (long)vol.Network.Sinks.Length;
+        caves["n_sinkholes_in_corridor"] = (long)vol.Network.Sinks.Count(
+            c => hx[c] >= rect.XMin && hx[c] <= rect.XMax && hy[c] >= rect.YMin && hy[c] <= rect.YMax);
+        caves["passage_km"] = vol.PassageM.Sum() / 1000.0;
         caves["entrances_file"] = "entrances.json";
         var manifest = new OrderedDictionary<string, object?>
         {
