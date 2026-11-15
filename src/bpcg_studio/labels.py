@@ -51,6 +51,20 @@ def bool_cats(no: str, yes: str, color: str) -> list[dict]:
     return _cats((0, no, NONE_COLOR), (1, yes, color))
 
 
+# 바이옴 번호 → 한국어 이름·색 (생성기는 C# 의 src/Bpcg/Planet/Biomes.cs, 번호와 값이 같아야 함)
+BIOME_KO = (
+    "바다", "빙원", "툰드라", "북방림", "온대 활엽수림",
+    "초원", "관목지", "사막", "사바나", "열대우림",
+)  # fmt: skip
+BIOME_COLOR_RGB = (
+    (44, 93, 138), (238, 243, 247), (169, 179, 154), (47, 94, 69), (63, 143, 58),
+    (185, 196, 106), (168, 154, 104), (227, 201, 138), (200, 180, 74), (22, 99, 43),
+)  # fmt: skip
+BIOME_CATS = [
+    {"value": i, "label": BIOME_KO[i], "color": hex_color(BIOME_COLOR_RGB[i])}
+    for i in range(len(BIOME_KO))
+]
+
 ROCK_CATS = [
     {"value": i, "label": f"{ROCK_KO[i]} ({ROCK_NAMES[i]})", "color": hex_color(ROCK_COLOR_RGB[i])}
     for i in range(N_ROCKS)
@@ -330,6 +344,18 @@ FIELD_TEXT: dict[str, dict[str, Any]] = {
         "설정에서 적도는 약 2 m/yr, 위도 50° 근처는 약 1.2 m/yr 로 젖고, 위도 30° 근처와 극은 약 "
         "0.3 m/yr 로 마르며, 이 띠를 노이즈로 흔듭니다. 진할수록 많습니다. 산이 비를 막는 효과는 "
         "아직 없습니다.",
+    },
+    "biome": {
+        "label": "바이옴",
+        "group": "기후",
+        "kind": "categorical",
+        "categories": BIOME_CATS,
+        "read": "기후대마다 다른 식물 군락입니다. 연평균 기온 띠(빙원 −10 °C 아래, "
+        "툰드라 −5 °C 아래, 북방림 5 °C 아래, 온대 20 °C 아래, 그 위 열대)와, 강수를 "
+        "잠재 증발산으로 나눈 건조 지수(0.5 아래는 초원·관목지·사막)로 고릅니다. 높은 "
+        "산은 둘레보다 추운 바이옴이어야 맞고, 사막은 적도와 중위도 사이(위도 20~30° "
+        "안팎) 비가 적은 띠에 모여야 맞습니다. 경계가 위도선과 나란한 띠로만 보이는 것은 "
+        "바람과 비그늘이 아직 없기 때문입니다.",
     },
     "temperature_c": {
         "label": "연평균 기온",

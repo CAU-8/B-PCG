@@ -48,6 +48,7 @@ FIELDS: dict[str, FieldInfo] = {
     "precip_m_per_yr": _f("climate", "m/yr", "float32", "연강수량"),
     "temperature_c": _f("climate", "°C", "float32", "연평균 기온 (최종 고도 반영)"),
     "pet_m_per_yr": _f("climate", "m/yr", "float32", "잠재 증발산"),
+    "biome": _f("climate", "", "uint8", "바이옴 번호 (Biomes: 0 바다, 1 빙원 … 9 열대우림)"),
     "runoff_m_per_yr": _f("climate", "m/yr", "float32", "Budyko 유출"),
     "runoff_eff_m_per_yr": _f("climate", "m/yr", "float32", "침식에 쓰는 유출 (바닥값 적용)"),
     # --- 사슬 2: 지질 (geology/)

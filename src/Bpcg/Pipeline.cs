@@ -482,6 +482,7 @@ public static class Pipeline
         output["fan"] = fan;
         output["dam"] = dam;
         output["temperature_c"] = temp;
+        output["biome"] = Biomes.Classify(temp, p, ocean, cfg);
         output.Update(wb);
         output["surface_rock"] = rock;
         output.Update(soil);

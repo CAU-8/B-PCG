@@ -40,6 +40,7 @@ public static class Fields
         ["precip_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "연강수량"),
         ["temperature_c"] = new FieldInfo("climate", "°C", "float32", "연평균 기온 (최종 고도 반영)"),
         ["pet_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "잠재 증발산"),
+        ["biome"] = new FieldInfo("climate", "", "uint8", "바이옴 번호 (Biomes: 0 바다, 1 빙원 … 9 열대우림)"),
         ["runoff_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "Budyko 유출"),
         ["runoff_eff_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "침식에 쓰는 유출 (바닥값 적용)"),
         ["template_id"] = new FieldInfo("geology", "", "uint8", "0 탄산염 탁상지, 1 습곡충상대, 2 기반암 + 화산호"),

@@ -7,6 +7,7 @@ using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.IO;
 using Bpcg.Numerics;
+using Bpcg.Planet;
 
 namespace Bpcg.Bake;
 
@@ -1039,6 +1040,20 @@ public static class Globe
                     c["key"] = Rocks.RockNames[id];
                     c["soluble"] = Rocks.Soluble[id];
                 }
+            }
+            output.Add((e, arr));
+        }
+        if (fields.Contains("biome"))
+        {
+            byte[] bio = (byte[])FieldSet.CastTo(fields["biome"], typeof(byte));
+            var cats = Enumerable.Range(0, Biomes.Count)
+                .Select(k => (k, Biomes.Names[k], new[] { (int)Biomes.ColorRgb[k * 3], Biomes.ColorRgb[(k * 3) + 1], Biomes.ColorRgb[(k * 3) + 2] }))
+                .ToArray();
+            (OrderedDictionary<string, object?> e, Array arr) = Categorical(
+                "biome", rs.Pick(bio), "biome", cats, AreaFraction(bio.Select(v => (long)v).ToArray(), area, Biomes.Count), baseFmt);
+            foreach (OrderedDictionary<string, object?> c in ((List<object?>)e["categories"]!).Cast<OrderedDictionary<string, object?>>())
+            {
+                c["key"] = Biomes.Keys[(long)c["id"]!];
             }
             output.Add((e, arr));
         }

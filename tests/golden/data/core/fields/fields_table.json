@@ -137,6 +137,13 @@
         "잠재 증발산"
       ],
       [
+        "biome",
+        "climate",
+        "",
+        "uint8",
+        "바이옴 번호 (Biomes: 0 바다, 1 빙원 … 9 열대우림)"
+      ],
+      [
         "runoff_m_per_yr",
         "climate",
         "m/yr",
