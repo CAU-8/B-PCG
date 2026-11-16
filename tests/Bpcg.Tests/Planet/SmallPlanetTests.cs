@@ -82,6 +82,80 @@ public sealed class SmallPlanetTests
         Assert.Contains("0 보다 커야", e.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void 바다가_덮는_비율을_주면_이어진_바다의_넓이가_그_비율이_된다()
+    {
+        // 남쪽이 낮은 구: 고도가 z 좌표에 비례합니다. 북극 둘레에는 바다와 이어지지 않은 깊은 구덩이를 둡니다.
+        CellGraph graph = Graph.SphereGraph(16, 1_000.0);
+        int n = graph.NCells;
+        double[] z = new double[n];
+        double pit = 0.0;
+        double total = 0.0;
+        for (int c = 0; c < n; c++)
+        {
+            double up = graph.Pos[(3 * c) + 2] / 1_000.0;
+            bool inPit = up > 0.97;
+            z[c] = inPit ? -5_000.0 : 1_000.0 * up;
+            total += graph.Area[c];
+            pit += inPit ? graph.Area[c] : 0.0;
+        }
+        Assert.InRange(pit / total, 0.005, 0.05);
+
+        foreach (double want in new[] { 0.3, 0.5, 0.66 })
+        {
+            double h = Bpcg.Planet.Ocean.SeaLevelForFraction(graph, z, want);
+            bool[] ocean = Bpcg.Planet.Ocean.OceanMask(graph, z, h);
+            double covered = Enumerable.Range(0, n).Where(c => ocean[c]).Sum(c => graph.Area[c]) / total;
+            // 바다는 바라는 비율 이상이고, 칸 한 줄(전체의 2% 안쪽)보다 더 넘치지 않습니다.
+            Assert.InRange(covered, want - 1.0e-9, want + 0.02);
+            // 북극의 구덩이는 해수면보다 낮지만 바다와 이어지지 않아 바다가 아닙니다.
+            Assert.DoesNotContain(Enumerable.Range(0, n), c => ocean[c] && z[c] == -5_000.0);
+        }
+        ArgumentException e = Assert.Throws<ArgumentException>(() => Bpcg.Planet.Ocean.SeaLevelForFraction(graph, z, 1.0));
+        Assert.Contains("ocean.target_fraction", e.Message, StringComparison.Ordinal);
+        Assert.Contains("1", e.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => Bpcg.Planet.Ocean.SeaLevelForFraction(graph, z, 0.0));
+    }
+
+    [Fact]
+    public void 작은_행성은_바다_비율로_해수면을_정하고_지구는_물의_부피로_정한다()
+    {
+        Assert.True(Bpcg.Planet.Materials.UsesOceanFraction(Config.LoadConfig("small10", "tiny")));
+        Assert.False(Bpcg.Planet.Materials.UsesOceanFraction(Config.LoadConfig("earth", "tiny")));
+        Assert.False(Bpcg.Planet.Materials.UsesOceanFraction(Config.LoadConfig("mars", "tiny")));
+
+        PlanetState small = Pipeline.GeneratePlanet(Small10(), null);
+        Assert.InRange(1.0 - LandFraction(small), 0.66, 0.665);
+        // 해수면이 오르다가 낮은 분지 하나가 바다와 이어지면 바다가 한꺼번에 넓어집니다. 그래서 바라는 비율보다 조금 넘칠 수 있습니다.
+        PlanetState half = Pipeline.GeneratePlanet(Small10(("ocean.target_fraction", 0.5)), null);
+        Assert.InRange(1.0 - LandFraction(half), 0.5, 0.53);
+    }
+
+    [Fact]
+    public void 작은_행성의_점수표는_길이_합격선을_설정에서_읽고_경사_법칙을_행성_단계_설정으로_셈한다()
+    {
+        Config cfg = Small10();
+        OrderedDictionary<string, double> th = Bpcg.Metrics.Scorecard.Thresholds(cfg);
+        Assert.Equal(10.0, th["bimodal_bin_m"]);
+        Assert.Equal(25.0, th["bimodal_smooth_m"]);
+        Assert.Equal(100.0, th["bimodal_min_separation_m"]);
+        // 지구 설정에는 [metrics] 절이 없어 기본값을 씁니다.
+        OrderedDictionary<string, double> earth = Bpcg.Metrics.Scorecard.Thresholds(Config.LoadConfig("earth", "tiny"));
+        Assert.Equal(100.0, earth["bimodal_bin_m"]);
+        Assert.Equal(250.0, earth["bimodal_smooth_m"]);
+        Assert.Equal(1_000.0, earth["bimodal_min_separation_m"]);
+
+        PlanetState small = Pipeline.GeneratePlanet(cfg, null);
+        OrderedDictionary<string, object?> card = Pipeline.Score(cfg, planetFields: small.Fields, planetGraph: small.Graph);
+        var law = (OrderedDictionary<string, object?>)card["planet.law_consistency"]!;
+        // 행성 단계는 퇴적 항을 끄고 풀었습니다. 같은 설정으로 다시 셈하면 경사가 법칙과 소수 여섯째 자리까지 맞습니다.
+        // 히어로 단계의 값(퇴적 항 켬)으로 셈하면 칸이 작은 이 행성에서는 수십 % 어긋나게 나옵니다.
+        Assert.True((double)law["value"]! < 1.0e-6, $"행성 단계 경사 법칙의 어긋남 가운데값이 {law["value"]} 입니다. 1e-6 보다 작아야 합니다.");
+        Assert.Equal(true, law["pass"]);
+        var sea = (OrderedDictionary<string, object?>)card["planet.ocean_fraction"]!;
+        Assert.Equal("forced", sea["kind"]);
+    }
+
     /// <summary>육지 칸 가운데 융기가 음수(가라앉는 땅)인 칸의 비율.</summary>
     private static double SinkingLandFraction(PlanetState planet)
     {

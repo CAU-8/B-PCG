@@ -110,6 +110,62 @@ public static class Ocean
         return h;
     }
 
+    /// <summary>
+    /// 바다가 행성 넓이의 <paramref name="fraction"/> 을 덮게 되는 해수면 h [m]. 물의 부피 대신 바다가 덮는 비율로 해수면을 정할 때 씁니다.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 바다는 해수면보다 낮은 칸 가운데 가장 큰 덩어리입니다(<see cref="OceanMask"/>). 해수면을 올리면 바다가 넓어지기만 하므로,
+    /// 가장 낮은 칸과 가장 높은 칸 사이를 반씩 좁혀 가며(이분법) 바다의 넓이 비율이 처음으로 <paramref name="fraction"/> 이상이 되는 높이를 찾습니다.
+    /// 구간이 1 mm 보다 좁아지면 멈춥니다. 예: 바다 비율이 해수면 −250 m 에서 0.64, −200 m 에서 0.67 이고 바라는 비율이 0.66 이면,
+    /// 다음에는 −225 m 를 보고, 거기서 0.655 면 −225 m 와 −200 m 사이를 다시 반으로 나눕니다.
+    /// </para>
+    /// <para>
+    /// 물의 부피로 정하는 방법(<see cref="SeaLevel"/>)은 행성 크기가 바뀔 때마다 부피를 다시 맞춰야 합니다. 비율은 행성 크기와 상관없이 같은 뜻입니다.
+    /// 해수면 아래지만 바다와 이어지지 않은 낮은 분지는 바다로 세지 않습니다.
+    /// </para>
+    /// </remarks>
+    public static double SeaLevelForFraction(CellGraph graph, double[] zPlatform, double fraction)
+    {
+        CheckZArea(zPlatform, graph.Area);
+        if (!(fraction > 0.0 && fraction < 1.0))
+        {
+            throw new ArgumentException($"ocean.target_fraction 은 0 보다 크고 1 보다 작아야 합니다: {fraction}");
+        }
+        double lo = double.PositiveInfinity;
+        double hi = double.NegativeInfinity;
+        foreach (double v in zPlatform)
+        {
+            lo = Math.Min(lo, v);
+            hi = Math.Max(hi, v);
+        }
+        // hi 는 모든 칸이 잠기는 높이(비율 1), lo 는 아무 칸도 잠기지 않는 높이(비율 0)에서 시작합니다.
+        hi += 1.0;
+        double total = NpReduce.Sum(graph.Area);
+        for (int it = 0; it < MaxBisection && hi - lo > 1.0e-3; it++)
+        {
+            double mid = 0.5 * (lo + hi);
+            bool[] mask = OceanMask(graph, zPlatform, mid);
+            double covered = 0.0;
+            for (int c = 0; c < mask.Length; c++)
+            {
+                if (mask[c])
+                {
+                    covered += graph.Area[c];
+                }
+            }
+            if (covered / total < fraction)
+            {
+                lo = mid;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+        return hi;
+    }
+
     /// <summary>mask 칸들의 연결 성분 번호 (밖은 −1) 와 성분 수 (_label_components). 작은 셀 번호부터 번호를 붙입니다.</summary>
     internal static (long[] Labels, int NLab) LabelComponents(bool[] mask, int[] nbr)
     {
