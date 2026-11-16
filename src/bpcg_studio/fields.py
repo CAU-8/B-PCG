@@ -54,6 +54,18 @@ FIELDS: dict[str, FieldInfo] = {
     # --- 사슬 2: 지질 (geology/)
     "template_id": _f("geology", "", "uint8", "0 탄산염 탁상지, 1 습곡충상대, 2 기반암 + 화산호"),
     "fold_phase": _f("geology", "rad", "float32", "습곡 위상"),
+    "prospect_lode": _f(
+        "geology",
+        "",
+        "float32",
+        "원래 광맥(구리·금) 가능성 0~1: 섭입대 위쪽 판의 화산호 띠에서 높음",
+    ),
+    "prospect_placer": _f(
+        "geology",
+        "",
+        "float32",
+        "사금 가능성 0~1: 상류에 원래 광맥이 있고 강물이 느려지는 강 칸에서 높음",
+    ),
     "surface_rock": _f("geology", "", "uint8", "지표에 드러난 암석 번호 (geology.rocks)"),
     "strata_bottom_m": _f("geology", "m", "float32", "(N, L) 층 바닥 고도, 위층부터"),
     "strata_rock": _f("geology", "", "uint8", "(N, L+1) 층 암석 번호, 마지막은 기반암"),

@@ -669,6 +669,8 @@ public static class Pipeline
         fields.Update(st.Fields);
         st.Diag["strength_limit"] = limitDiag;
         sec["stages"] = Seconds(t);
+        // 광상 가능성 값: 판과 물길이 다 정해진 뒤에 셈합니다. 판의 값(화산호까지 거리 등)이 있어야 하므로 행성 단계에만 있습니다.
+        fields.Update(Prospects.Compute(l0, fields, cfgL0));
         Fields.CheckFields(fields.Names);
 
         t = Stopwatch.GetTimestamp();

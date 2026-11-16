@@ -172,6 +172,20 @@
         "습곡 위상"
       ],
       [
+        "prospect_lode",
+        "geology",
+        "",
+        "float32",
+        "원래 광맥(구리·금) 가능성 0~1: 섭입대 위쪽 판의 화산호 띠에서 높음"
+      ],
+      [
+        "prospect_placer",
+        "geology",
+        "",
+        "float32",
+        "사금 가능성 0~1: 상류에 원래 광맥이 있고 강물이 느려지는 강 칸에서 높음"
+      ],
+      [
         "surface_rock",
         "geology",
         "",

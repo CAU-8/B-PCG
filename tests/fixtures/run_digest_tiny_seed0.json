@@ -73,6 +73,8 @@
   "planet/climate/runoff_m_per_yr.npy": "2e8b46459cf510e9d6f09ba500008b1893902a949a02710070a2d303e0c804f3",
   "planet/climate/temperature_c.npy": "bda904d8dcabd44a2fcd1ee49c617aa4ce2e572345c46c80444a805f91a92717",
   "planet/geology/fold_phase.npy": "066bbefc63e54ef9e40f99770e622c8d20b030305ffef3e3e4e2d1e60084200f",
+  "planet/geology/prospect_lode.npy": "c189935c11c57d37917ede83ae3a64a0c4b62e0b9148b77190c507411a3fa975",
+  "planet/geology/prospect_placer.npy": "ca07e6d6e527f2b5194379e9c1989f7596c1993b0bb4003e0ce169703f17654e",
   "planet/geology/strata_bottom_m.npy": "e2883dfc9ea59bcd8833d84120ab4ba998bea0a196087642de05482090f5725c",
   "planet/geology/strata_rock.npy": "1b46aa8b5d4eb67981a0c178ec906ce5d6bd239d7831fdf6a87025e4bffea688",
   "planet/geology/surface_rock.npy": "f77b0203e20bb2dcc0255d9ddccc4d72ac7cda6b1e0d31ab307f1356acc99a11",

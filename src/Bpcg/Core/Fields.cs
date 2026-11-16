@@ -45,6 +45,8 @@ public static class Fields
         ["runoff_eff_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "침식에 쓰는 유출 (바닥값 적용)"),
         ["template_id"] = new FieldInfo("geology", "", "uint8", "0 탄산염 탁상지, 1 습곡충상대, 2 기반암 + 화산호"),
         ["fold_phase"] = new FieldInfo("geology", "rad", "float32", "습곡 위상"),
+        ["prospect_lode"] = new FieldInfo("geology", "", "float32", "원래 광맥(구리·금) 가능성 0~1: 섭입대 위쪽 판의 화산호 띠에서 높음"),
+        ["prospect_placer"] = new FieldInfo("geology", "", "float32", "사금 가능성 0~1: 상류에 원래 광맥이 있고 강물이 느려지는 강 칸에서 높음"),
         ["surface_rock"] = new FieldInfo("geology", "", "uint8", "지표에 드러난 암석 번호 (geology.rocks)"),
         ["strata_bottom_m"] = new FieldInfo("geology", "m", "float32", "(N, L) 층 바닥 고도, 위층부터"),
         ["strata_rock"] = new FieldInfo("geology", "", "uint8", "(N, L+1) 층 암석 번호, 마지막은 기반암"),
