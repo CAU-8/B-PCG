@@ -119,6 +119,7 @@ public static class Model
     public static readonly int NLayers = NTemplateLayers + NBasementSplits;
 
     public const double ArcBeltFraction = 0.4;
+    /// <summary>화산호 띠와 습곡충상대 사이에 비워 두는 거리 (m). 설정 <c>geology.arc_fold_gap_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double ArcFoldGapM = 50_000.0;
     public const double FoldNoiseWeight = 0.5;
     private const long FoldNoiseStream = 5201;
@@ -184,13 +185,14 @@ public static class Model
         double[] dArc = FieldSet.ToFloat64(Field(fields, "dist_arc_m", n));
         double foldW = cfg.F("geology.fold_belt_width_m");
         double arcHalf = ArcBeltFraction * cfg.F("geology.arc_belt_width_m");
+        double arcFoldGap = cfg.FOr("geology.arc_fold_gap_m", ArcFoldGapM);
         byte[] output = new byte[n];
         for (int c = 0; c < n; c++)
         {
             bool upper = side[c] == 1;
             bool isArc = upper && Math.Abs(dist[c] - dArc[c]) < arcHalf;
             bool isFold = (kind[c] == 3 && dist[c] < foldW)
-                || (upper && dist[c] > dArc[c] + ArcFoldGapM && dist[c] < foldW);
+                || (upper && dist[c] > dArc[c] + arcFoldGap && dist[c] < foldW);
             if (isFold)
             {
                 output[c] = FoldThrust;

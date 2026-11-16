@@ -176,7 +176,7 @@ def test_rejects_missing_inputs(csharp_cli, tmp_path):
         ),
         (["all", "--profile", "tiny", "--set", "planet.name=mars"], "덮어쓸 수 없습니다"),
         (["all", "--profile", "preview"], "쓸 수 있는 이름은 lab, laptop, tiny 입니다"),
-        (["planet", "--planet", "venus"], "쓸 수 있는 이름은 earth, mars 입니다"),
+        (["planet", "--planet", "venus"], "쓸 수 있는 이름은 earth, mars, small10 입니다"),
     ]
     for args, message in cases:
         proc = csharp_cli(*args, check=False)

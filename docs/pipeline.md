@@ -301,7 +301,7 @@ g = 4/3·π·G·ρ·R
         - 예: 40 Myr 바닥은 d = 2,500 + 350 × √40 ≈ 4,714 m, 100 Myr 바닥은 d = 6,400 − 3,200·e^(−100/62.8) ≈ 5,749 m입니다.
     - 해구: 섭입판 쪽(side −1)의 해양 칸에 −`trench_depth_m`·exp(−(δ_conv/`trench_width_m`)²)를 더합니다. 변위(m)이므로 속도와 섞지 않습니다(설계도 5장 7번).
         - 예: 지구 설정(3,000 m, 40 km)에서 해구 축의 40 Myr 바닥은 −4,714 − 3,000 ≈ −7,714 m입니다.
-    - 전이: 대륙-해양 경계 양쪽 50 km에서 두 값을 smoothstep으로 섞습니다.
+    - 전이: 대륙-해양 경계 양쪽 `crust.transition_half_width_m`(설정에 없으면 50 km)에서 두 값을 smoothstep으로 섞습니다.
 - 각 식의 C# 함수는 `Crust.AiryElevationM`, `Crust.OceanDepthM`, `Crust.TrenchOffsetM`입니다.
 
 ### 4.3 해수면 `src/Bpcg/Planet/Ocean.cs`
@@ -339,7 +339,7 @@ g = 4/3·π·G·ρ·R
 - **충돌(kind 3).** U += `collision_factor`·γ·exp(−(δ_conv/w_c)²)입니다. w_c = `collision_width_m`이고, 없으면 1.5w입니다.
     - 예: 지구 설정(0.04)에서 수렴 속도 5 cm/yr면 충돌 경계 위 융기는 2 mm/yr입니다.
 - **꼬리 자르기.** 산맥 성분이 1e-9 m/yr(1 m/Myr의 1/1000)보다 작으면 0으로 둡니다. 가우스 꼬리의 1e-300 같은 값이 뒤 단계 거듭제곱에서 0으로 사라져 NaN을 만들기 때문입니다.
-- **대륙 열곡.** 대륙이 갈라지는 곳은 가라앉습니다. 대륙 칸이고 δ_div < 50 km이면 U += `rift_subsidence_m_per_yr`·exp(−(δ_div/30 km)²)입니다. δ_div는 발산 경계까지 거리입니다. 지구 설정 −1.0e-4 m/yr면 열곡 축은 1년에 0.1 mm 가라앉습니다.
+- **대륙 열곡.** 대륙이 갈라지는 곳은 가라앉습니다. 대륙 칸이고 δ_div < d_max이면 U += `rift_subsidence_m_per_yr`·exp(−(δ_div/w)²)입니다. δ_div는 발산 경계까지 거리입니다. d_max는 `uplift.rift_max_dist_m`(설정에 없으면 50 km), w는 `uplift.rift_width_m`(설정에 없으면 30 km)입니다. 두 길이가 행성보다 크면 대륙 전체가 가라앉으므로, 작은 행성 설정은 이 둘을 줄여 적습니다(13장). 지구 설정 −1.0e-4 m/yr면 열곡 축은 1년에 0.1 mm 가라앉습니다.
 - **노이즈.** 산맥 성분에 (1 + 0.25·fbm3)을 곱합니다.
 - **깎인 두께.** 산이 자라는 동안 깎여 사라진 암석의 두께입니다. 클수록 깊은 지층이 지표에 드러납니다.
     - `exhumation_m` = clip(max(U, 0)·`orogen_duration_myr`·1e6, 0, `exhumation_cap_m`)입니다(설계도 5장 8번).
@@ -451,7 +451,7 @@ g = 4/3·π·G·ρ·R
 **`Model.AssignTemplate(fields, cfg)`(Python 판 `assign_template`).** 칸마다 아래 규칙으로 번호를 정합니다. 2와 1이 둘 다 맞으면 2입니다.
 
 - 2: side +1이고 |δ_conv − d_arc| < 0.4·`arc_belt_width_m`인 칸
-- 1: kind 3이고 δ_conv < `fold_belt_width_m`인 칸, 또는 side +1이고 d_arc + 50 km < δ_conv < `fold_belt_width_m`인 칸
+- 1: kind 3이고 δ_conv < `fold_belt_width_m`인 칸, 또는 side +1이고 d_arc + `geology.arc_fold_gap_m`(설정에 없으면 50 km) < δ_conv < `fold_belt_width_m`인 칸
 - 0: 나머지
 
 예: 지구 설정(`arc_belt_width_m` 250 km, `fold_belt_width_m` 400 km)에서 d_arc가 약 200 km면, 해구에서 약 100~300 km 떨어진 위판 칸이 2입니다. 1의 위판 조건(약 250~400 km)과 겹치는 250~300 km도 2이므로, 위판에서 1은 약 300~400 km입니다.
@@ -946,7 +946,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 
 | 파일 | 함수 | 약속 |
 |---|---|---|
-| `hero/Finder.cs` | `Finder.FindHero(planet, cfg) -> HeroSite` | L0 육지 칸에 점수를 매기고 가장 높은 칸을 고릅니다. 점수 = 0.3·융기 기울기(정규화) + 0.4·지표 탄산염 + 0.15·기복(정규화) + 0.15·200 km 안 건조 칸 비율. 동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다. 위도 55° 넘으면 0점. 행성 설정의 `hero.site_lat_lon_deg`에 [위도, 경도]를 넣으면 점수와 상관없이 그 자리에서 가장 가까운 L0 칸을 고릅니다. 그 칸이 바다이거나, 위도 55°를 넘거나, 해안에서 히어로 반대각선 + L0 칸 2개 안이면 `RunError`로 멈추고 가장 가까운 후보 칸의 위도·경도를 알려 줍니다(`Finder.RequestedSite`, `Finder.UnitFromLatLon`). `HeroSite`: 중심 단위 벡터 `CenterUnit`, 동·북 단위 벡터 `East`·`North`, L0 칸 `L0Cell`, 점수 `Score`와 내역 `Parts`, 위경도 `LatDeg`·`LonDeg` |
+| `hero/Finder.cs` | `Finder.FindHero(planet, cfg) -> HeroSite` | L0 육지 칸에 점수를 매기고 가장 높은 칸을 고릅니다. 점수 = 0.3·융기 기울기(정규화) + 0.4·지표 탄산염 + 0.15·기복(정규화) + 0.15·`hero.dry_radius_m`(설정에 없으면 200 km) 안 건조 칸 비율. 동굴이 보이려면 탄산염이 있어야 하므로 탄산염을 가장 무겁게 둡니다. 위도 55° 넘으면 0점. 행성 설정의 `hero.site_lat_lon_deg`에 [위도, 경도]를 넣으면 점수와 상관없이 그 자리에서 가장 가까운 L0 칸을 고릅니다. 그 칸이 바다이거나, 위도 55°를 넘거나, 해안에서 히어로 반대각선 + L0 칸 2개 안이면 `RunError`로 멈추고 가장 가까운 후보 칸의 위도·경도를 알려 줍니다(`Finder.RequestedSite`, `Finder.UnitFromLatLon`). `HeroSite`: 중심 단위 벡터 `CenterUnit`, 동·북 단위 벡터 `East`·`North`, L0 칸 `L0Cell`, 점수 `Score`와 내역 `Parts`, 위경도 `LatDeg`·`LonDeg` |
 | `hero/Domain.cs` | `Domain.HeroGraph(site, cfg) -> (Graph, UnitPoints)` | 접평면 평면 격자(한 변 `profile.hero.size_m`, 간격 `spacing_m`, 노드 흔들기). 국소 (동, 북)를 구면 점으로 바꿔 L0 값을 표본합니다. 영역은 이 두 값으로 늘리고 줄입니다(`--set profile.hero.size_m=40000.0`). 한 변은 간격의 가장 가까운 정수배로 맞추고(실제 값은 `diag['grid']`), 칸 수가 5000²를 넘으면 오류입니다. 영역이 클수록 바다에서 먼 후보 칸이 필요하고, 회랑은 영역 안으로 줄여 맞춥니다. 거친 격자 한 변이 16칸보다 작으면 먼저 풀기를 건너뜁니다 |
 | `hero/Refine.cs` | `Refine.RefineHero(planet, site, cfg) -> HeroState` | L0 값 보간(U, 유출, 기온, 강수, 깎인 두께, 습곡 위상, 템플릿은 nearest) → 지질 기둥 → 경계조건 → 2~4단계를 같은 함수로 |
 | `hero/Flat.cs` | `Flat.FlatHero(cfg) -> HeroState` | L0 없이 가짜 경계조건: 남북 방향 섭입 단면 U(y) = 0.1 mm/yr + 2 mm/yr·exp(−((y − 0.3L)/0.25L)²), 템플릿 1, 유출 0.5 m/yr, 기온 15 °C, 출구는 남쪽 가장자리 가운데 5칸(z = 200 m) |
@@ -1203,10 +1203,29 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 | `uv run bpcg hero --flat --out out/flat` | 평면 히어로 (가짜 경계조건) |
 | `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
 | `uv run bpcg all --profile tiny --out out/tiny` | 전부 한 번 |
+| `uv run bpcg planet --planet small10 --profile laptop --out out/small10` | 반지름 10 km 작은 행성의 1~4단계 (아래 '작은 행성 설정') |
 
 C#의 입구 함수는 `src/Bpcg/Pipeline.cs`의 `Pipeline.GeneratePlanet(cfg)`, `Pipeline.GenerateHero(cfg, planet = null)`입니다(Python 판 `bpcg/pipeline.py`의 `generate_planet(cfg)`, `generate_hero(cfg, planet=None)`). 명령줄과 엔진이 함께 쓰는 실행 순서는 `src/Bpcg/Runs.cs`(`Runs.All` 등)에 있습니다.
 
 굽기는 `Pipeline`에 함수가 없습니다. `Runs.RunBake(heroDir, outDir, engineDir, log)`가 히어로 묶음을 읽어 `Corridor.BakeCorridor`를 부릅니다. 옛 문서의 `bake(hero, cfg, out_dir, engine_dir)`는 Python 판 코드에도 없었습니다([csharp_port.md](csharp_port.md) 6장 pipeline·cli).
+
+### 작은 행성 설정 `configs/planets/small10.toml`
+
+**왜 필요한가.** 지구 크기 행성은 걸어 다닐 해상도(25 m 칸)로 행성 전체를 계산할 수 없습니다. 반지름을 10 km로 줄이면 laptop 프로필의 행성 지도 격자(면마다 512칸)가 칸 한 변 약 31 m가 되어, 행성 전체가 한 번의 계산으로 히어로 유역과 비슷한 해상도가 됩니다. 이 행성 위를 걷는 게임(b-pcg-survival 저장소)이 이 설정을 씁니다.
+
+**반지름만 바꾸면 생기는 문제.** 판 규모의 길이가 행성보다 커집니다. 예: 산맥이 솟는 띠의 폭(`uplift.orogen_width_m`)은 지구 설정에서 80 km인데, 반지름 10 km 행성의 둘레는 63 km입니다. 그대로 두면 행성 전체가 한 산맥이 됩니다. 그래서 `small10.toml`은 판 규모의 수평 길이를 지구 값의 약 0.0063배(반지름 비율 10 ÷ 6,371의 4배)로, 높이 값을 0.1배로 줄여 적습니다. 반지름 비율 그대로 줄이면 띠가 칸 서너 개 폭밖에 되지 않기 때문에 4배를 곱했습니다.
+
+**코드에 지구 크기로 두었던 길이 다섯 개.** 아래 값은 설정 키로 읽고, 설정에 키가 없으면 지구 크기 기본값을 씁니다(`Config.FOr`). `earth.toml`과 `mars.toml`에는 이 키가 없으므로 두 행성의 결과는 그대로입니다.
+
+| 설정 키 | 정하는 값 | 설정에 없을 때 | `small10.toml` |
+|---|---|---|---|
+| `uplift.rift_max_dist_m` | 열곡 축에서 이 거리 안의 대륙 칸만 가라앉힘 | 50 km | 310 m |
+| `uplift.rift_width_m` | 열곡 침강이 퍼지는 가우스 폭 | 30 km | 190 m |
+| `crust.transition_half_width_m` | 대륙과 바다의 높이를 섞는 띠의 반폭 | 50 km | 310 m |
+| `geology.arc_fold_gap_m` | 화산호 띠와 습곡충상대 사이에 비워 두는 거리 | 50 km | 310 m |
+| `hero.dry_radius_m` | 히어로 유역 후보 칸 둘레에서 건조한 땅의 비율을 재는 반지름 | 200 km | 1,250 m |
+
+**쓸 수 있는 범위.** 이 설정은 행성 단계(`bpcg planet`)까지만 돌립니다. 히어로 유역의 크기는 프로필이 정하는데, laptop 프로필의 한 변 32 km는 이 행성의 둘레(63 km)에 비해 너무 큽니다. 이 행성의 지형 통계는 지구와 비교하는 근거로 쓰지 않습니다.
 
 ## 14. 아직 해결하지 못한 문제 (설계도 5장 18번 포함)
 
