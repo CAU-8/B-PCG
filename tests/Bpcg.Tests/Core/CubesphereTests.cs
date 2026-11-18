@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Bpcg.Core;
 using Xunit;
@@ -62,6 +63,41 @@ public sealed class CubesphereTests
         foreach (int n in new[] { 1, 3, 16, 32 })
         {
             Compare.Equal(g.Out($"cell_n{n}").AsLong(), Cubesphere.CellOf(p, n), $"cell_of n={n}");
+        }
+    }
+
+    [Fact]
+    public void CellOfOnePointMatchesTheArrayVersion()
+    {
+        // 해시로 뽑은 점 3,000개와, 면이 갈리는 자리(모서리와 꼭짓점 방향)의 점. 좌표가 모두 0 인 점은 방향이 없어 뺍니다.
+        var p = new List<double>();
+        for (int k = 0; k < 3_000; k++)
+        {
+            p.Add((2.0 * Hashing.HashUnit(11, k, 1)) - 1.0);
+            p.Add((2.0 * Hashing.HashUnit(11, k, 2)) - 1.0);
+            p.Add((2.0 * Hashing.HashUnit(11, k, 3)) - 1.0);
+        }
+        foreach (double x in new[] { -1.0, 0.0, 1.0 })
+        {
+            foreach (double y in new[] { -1.0, 0.0, 1.0 })
+            {
+                foreach (double z in new[] { -1.0, 0.0, 1.0 })
+                {
+                    if (x != 0.0 || y != 0.0 || z != 0.0)
+                    {
+                        p.AddRange([x, y, z]);
+                    }
+                }
+            }
+        }
+        double[] points = [.. p];
+        foreach (int n in new[] { 1, 3, 16, 31, 512 })
+        {
+            long[] cells = Cubesphere.CellOf(points, n);
+            for (int k = 0; k < cells.Length; k++)
+            {
+                Assert.Equal(cells[k], Cubesphere.CellOf(points[3 * k], points[(3 * k) + 1], points[(3 * k) + 2], n));
+            }
         }
     }
 

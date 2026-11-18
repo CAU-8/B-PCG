@@ -89,6 +89,36 @@ FIELDS: dict[str, FieldInfo] = {
     "is_river": _f("water", "", "bool", "강"),
     "river_width_m": _f("water", "m", "float32", "강 폭 (강 아니면 0)"),
     "river_depth_m": _f("water", "m", "float32", "강 깊이 (강 아니면 0)"),
+    # --- 바다 (Planet/SeaFields.cs, 행성 단계에만 있음)
+    "sea_temp_c": _f(
+        "water",
+        "°C",
+        "float32",
+        "바다 물의 연평균 온도: 해수면 높이의 기온, −1.8 °C 아래로 내려가지 않음 (뭍은 NaN)",
+    ),
+    "sea_ice": _f("water", "", "bool", "바다 얼음: 바다 물의 온도가 −1.5 °C 아래인 바다 칸"),
+    "river_plume": _f(
+        "water", "", "float32", "강물 퍼짐 0~1: 강어귀에서 나온 강물이 바다로 퍼진 정도 (뭍은 0)"
+    ),
+    "wave_exposure": _f(
+        "water",
+        "",
+        "float32",
+        "파도 받이 0~1: 열여섯 방향으로 바다가 트인 거리의 평균 ÷ 재는 거리 (뭍은 0)",
+    ),
+    "seabed": _f(
+        "water",
+        "",
+        "uint8",
+        "바다 밑 바닥 종류 (SeaFields: 0 뭍, 1 펄, 2 모래, 3 자갈, 4 바위, 5 석회 모래)",
+    ),
+    "coast_kind": _f(
+        "water",
+        "",
+        "uint8",
+        "해안 종류, 바다와 닿은 뭍 칸만 (SeaFields: 0 해안 아님, 1 모래 해변, 2 자갈 해변, "
+        "3 바위 해안, 4 갯벌, 5 흰 모래 해변)",
+    ),
     # --- 사슬 3: 땅속 (subsurface/)
     "soil_thickness_m": _f("subsurface", "m", "float32", "흙 두께"),
     "alluvium_m": _f("subsurface", "m", "float32", "충적층(퇴적층) 두께"),
