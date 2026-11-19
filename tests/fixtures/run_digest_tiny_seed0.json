@@ -117,9 +117,15 @@
   "planet/surface/slope.npy": "330ae89ffdbc7ba2d9da25a50216172731c66022d5d442720b6e5db59d7b6d3a",
   "planet/surface/z_m.npy": "e4351a1187913205cb7b310322634a126a1201340833cabe3f7f0a096995fde3",
   "planet/surface/z_mean_m.npy": "545616b9824e3d0cbe0f8f33ba153df5b7340b83942e12b999fd320e7b2e54aa",
+  "planet/water/coast_kind.npy": "edcb0c34662e9b5c53c32e8cb1d0497ed4960de7e6fb50ce12b32d0340c56d4a",
   "planet/water/is_lake.npy": "60314a899f904acbe19dca0392d5bdf3e57e356540bfb41774770503ba8603d3",
   "planet/water/is_river.npy": "2918f992b9854ea9b47cc13a55bcaf633186fc5524341f33649f5f278003b7dd",
   "planet/water/river_depth_m.npy": "9835763df267e056c70e738c1f8684da9077114ecdfeab060228d137fa4cccde",
+  "planet/water/river_plume.npy": "b2b3ef2d36c448816e805416d4c9459d4d588d0be04c453d2cee1e60fd296ad8",
   "planet/water/river_width_m.npy": "b6bab3f8d5fe16b7fc45d10ba3a120142a9e9f4cb4f4e6feadc4dbd7e574c130",
-  "planet/water/water_level_m.npy": "c824553f300270624f050a88b2f4f5ede4a20ffa43619131aa072250b62771e8"
+  "planet/water/sea_ice.npy": "d245b3abf86778b43cbdab8d7510223aeac4c0892b8e7014043f04103a952021",
+  "planet/water/sea_temp_c.npy": "f9d3d2c95f51c2eef6b129fa4044a16dafb6fe6aff7a970ef98fcd14dc254880",
+  "planet/water/seabed.npy": "816943c3ce17819cf7a0bc3f334b8ab29901e616facd557ccf18b0efdb0fe018",
+  "planet/water/water_level_m.npy": "c824553f300270624f050a88b2f4f5ede4a20ffa43619131aa072250b62771e8",
+  "planet/water/wave_exposure.npy": "ff8c5675843e2661228307024d44a274316b852ba134c52b11f0134d284cc998"
 }
