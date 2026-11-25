@@ -293,15 +293,20 @@ def test_progress_scales_missing_history_stages():
 
 
 def test_progress_config_error_gets_its_own_warning():
+    # 히어로 영역 설정이 틀리면 명령줄이 오류 글 한 줄과 난 곳을 찍고 멈춥니다.
+    # 평면 히어로로 바꾸지 않습니다.
     tr = ProgressTracker()
     tr.start(0.0)
-    tr.feed(
-        "[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: profile.hero 는 "
-        "spacing_m > 0, size_m ≥ 3·spacing_m 이어야 합니다: 50.0, 25.0",
-        1.0,
-    )
-    (w,) = tr.snapshot(1.0)["warnings"]
-    assert "영역 설정" in w["message"] and "줄이거나" not in w["message"]
+    tr.feed("profile.hero 는 spacing_m > 0, size_m ≥ 3·spacing_m 이어야 합니다: 50.0, 25.0", 1.0)
+    tr.feed("  (오류가 난 곳: Bpcg.Hero.Domain.HeroGridSize)", 1.0)
+    domain, where = tr.snapshot(1.0)["warnings"]
+    assert "영역 설정" in domain["message"] and "줄이거나" not in domain["message"]
+    assert "설정 값이나 입력 파일" in where["message"]
+    big = ProgressTracker()
+    big.start(0.0)
+    big.feed("히어로 2000² = 4,000,000 칸은 상한 1600² 를 넘습니다. profile.hero.size_m 을 …", 2.0)
+    (w,) = big.snapshot(2.0)["warnings"]
+    assert "영역 설정" in w["message"]
 
 
 def test_progress_warns_when_solver_does_not_converge():
@@ -435,7 +440,6 @@ def test_generate_always_builds_console_first(monkeypatch, tmp_path, built):
     dll = tmp_path / "Bpcg.Cli.dll"
     if built:
         dll.touch()
-    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
     monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": False})
@@ -451,7 +455,6 @@ def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
 
     dll = tmp_path / "Bpcg.Cli.dll"
     dll.touch()
-    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
     monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": True, "flat": flat})
@@ -463,6 +466,37 @@ def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
         assert len(commands) == 2
     else:
         assert commands[-1] == ["dotnet", str(dll), "figures", "results", str(run_dir)]
+
+
+def test_stop_all_stops_running_children(tmp_path):
+    """스튜디오 서버를 끌 때 도는 실행의 자식 프로세스도 멈춥니다(남겨 두면 서버 없이 계속 돎)."""
+    jm = JobManager(out_dir=tmp_path)
+    _stub(jm, "import time; print('[행성] 시작: x', flush=True); time.sleep(30)")
+    job = jm.start({"profile": "tiny", "figures": False})
+    deadline = time.time() + 30
+    while job.proc is None and time.time() < deadline:
+        time.sleep(0.05)
+    pid = job.proc.pid
+    assert jm.stop_all() == 1
+    _wait(job, 30)
+    assert job.status == "cancelled" and not pid_alive(pid)
+    assert jm.stop_all() == 0
+
+
+def test_validate_request_rejects_values_that_cannot_become_a_command(tmp_path):
+    """검사를 통과한 값으로 명령을 만들다 멈추면 빈 실행 폴더만 남습니다. 검사에서 미리 막습니다."""
+    for bad in ([16, None], ["a", 1], [16, {"x": 1}], [True, 1.0], [16, float("nan")]):
+        with pytest.raises(JobError) as e:
+            validate_request({"profile": "tiny", "overrides": {"hero.site_lat_lon_deg": bad}})
+        assert "hero.site_lat_lon_deg" in str(e.value.details) or "hero.site_lat_lon_deg" in str(
+            e.value
+        )
+    spec = validate_request(
+        {"profile": "tiny", "overrides": {"hero.site_lat_lon_deg": [8.39, -0.92]}}
+    )
+    assert spec["overrides"]["hero.site_lat_lon_deg"] == [8.39, -0.92]
+    with pytest.raises(JobError):
+        validate_request({"profile": "tiny", "seed": 1e999})
 
 
 def test_validate_request_reports_bad_keys():
@@ -645,6 +679,40 @@ def test_install_corridor_refuses_incomplete_corridor(runs, tmp_path):
     (broken / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
     with pytest.raises(gd.GodotError, match="올바르지"):
         gd.install_corridor(broken, baked)
+
+
+def test_install_copies_only_data_files_into_the_engine(runs, tmp_path):
+    """engine/ 은 Godot 프로젝트라, 남의 실행 폴더에 섞인 코드 파일이 엔진으로 들어가면 실행됩니다.
+
+    회랑은 manifest 의 이름이 자료 파일 종류가 아니면 멈추고, 지구본은 globe.json 이 적은 .bin 만
+    옮깁니다.
+    """
+    out, _ = runs
+    run = tmp_path / "run"
+    shutil.copytree(out / "tiny" / "corridor", run / "corridor")
+    shutil.copytree(out / "tiny" / "globe", run / "globe")
+    (run / "corridor" / "Evil.cs").write_text("class Evil {}", encoding="utf-8")
+    (run / "globe" / "Other.cs").write_text("class Other {}", encoding="utf-8")
+    (run / "globe" / "x.gdextension").write_text("[configuration]", encoding="utf-8")
+    baked = tmp_path / "baked"
+    gd.install_corridor(run / "corridor", baked, run_key="x")
+    copied = {p.name for p in baked.rglob("*") if p.is_file()}
+    assert "Evil.cs" not in copied and "Other.cs" not in copied and "x.gdextension" not in copied
+    assert (baked / "globe" / "globe.json").is_file()
+    assert {p.name for p in (baked / "globe").iterdir()} == set(gd.globe_files(run / "globe"))
+
+    man = json.loads((run / "corridor" / "manifest.json").read_text(encoding="utf-8"))
+    man["files"] = man["files"] + ["Evil.cs"]
+    (run / "corridor" / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+    with pytest.raises(gd.GodotError, match="굽기가 쓰는 종류"):
+        gd.install_corridor(run / "corridor", tmp_path / "baked2")
+    assert not (tmp_path / "baked2").exists() or not any((tmp_path / "baked2").rglob("*.cs"))
+
+    meta = json.loads((run / "globe" / "globe.json").read_text(encoding="utf-8"))
+    meta["fields"][0]["file"] = "../../engine/Scripts/Main.cs"
+    (run / "globe" / "globe.json").write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(gd.GodotError, match="지구본 파일 이름이 올바르지"):
+        gd.globe_files(run / "globe")
 
 
 # ---------------------------------------------------------------- 리뷰에서 나온 회귀 검사
@@ -924,6 +992,7 @@ def test_job_manager_reports_failed_subprocess(tmp_path):
     st = jm.job_state(job.id)
     assert st["status"] == "failed" and st["returncode"] == 3
     assert "종료 코드 3" in st["error"] and st["progress"]["state"] == "failed"
+    assert st["error"].startswith("생성 파이프라인이 종료 코드 3")
     assert jm.active() is None
 
 
@@ -1080,6 +1149,15 @@ def test_server_security_headers_and_contract(runs, tmp_path):
         assert _raw_post(port, "/api/validate", ok_body, evil)[0] == 403
         cross = {"Sec-Fetch-Site": "cross-site", "Content-Length": n}
         assert _raw_post(port, "/api/validate", ok_body, cross)[0] == 403
+        # GET 도 다른 사이트에서 온 요청이면 /api/ 는 막습니다 (빌드·그림 그리기를 시킬 수 있음).
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        conn.request("GET", "/api/runs", headers={"Sec-Fetch-Site": "cross-site"})
+        assert conn.getresponse().status == 403
+        conn.close()
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        conn.request("GET", "/api/runs", headers={"Sec-Fetch-Site": "same-origin"})
+        assert conn.getresponse().status == 200
+        conn.close()
         # 본문 길이가 음수·글자이면 400 (예전에는 음수면 1 MB 상한 없이 연결 끝까지 읽고 200)
         status, body = _raw_post(port, "/api/validate", ok_body, {"Content-Length": "-1"})
         assert status == 400 and "Content-Length" in body["error"]

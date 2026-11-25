@@ -12,8 +12,9 @@ namespace Bpcg.Subsurface;
 /// <param name="LostM3PerYr">사라지는 물의 합 [m³/yr].</param>
 /// <param name="Passes">다시 계산한 횟수.</param>
 /// <param name="Big">(N,) 큰 물: 바다, 호수, 통로가 다 삼키지 못하는 강. 석회암 지하수면의 기준입니다.</param>
+/// <param name="Settled">물을 다시 모으는 횟수(최대 6번) 안에 솟는 자리가 더 바뀌지 않았는지. false 면 사라진 물과 솟은 물의 합이 다를 수 있습니다.</param>
 public sealed record KarstStreamResult(
-    double[] Exchange, double[] Discharge, int NSinks, int NSprings, double LostM3PerYr, int Passes, bool[] Big);
+    double[] Exchange, double[] Discharge, int NSinks, int NSprings, double LostM3PerYr, int Passes, bool[] Big, bool Settled = true);
 
 /// <summary>
 /// 석회암 땅에서 땅속으로 사라지는 개울 (docs/pipeline.md 8.5). 석회암 지대의 작은 개울은 어느 자리에서 바닥의 구멍으로
@@ -140,6 +141,7 @@ public static class KarstStreams
         double[] q = new double[n];
         double[] loss = new double[n];
         int passes = 0;
+        bool settled = false;
         for (int pass = 0; pass < MaxFlowPasses; pass++)
         {
             passes = pass + 1;
@@ -181,8 +183,11 @@ public static class KarstStreams
             }
             if (same)
             {
+                settled = true;
                 break;
             }
+            // 마지막 번에는 rise 를 바꾸지 않습니다. 돌려주는 유량(q)이 이번 번의 rise 로 모은 값이라, 주고받는 물(exchange)도
+            // 같은 rise 와 짝지어야 칸마다 물수지가 맞습니다. 대신 사라진 물과 솟은 물의 합이 맞지 않을 수 있어 Settled 로 알립니다.
             if (pass < MaxFlowPasses - 1)
             {
                 rise = riseNew;
@@ -202,6 +207,6 @@ public static class KarstStreams
         {
             return null;
         }
-        return new KarstStreamResult(exchange, q, nSinks, nSprings, lost, passes, big);
+        return new KarstStreamResult(exchange, q, nSinks, nSprings, lost, passes, big, settled);
     }
 }

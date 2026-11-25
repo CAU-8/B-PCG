@@ -131,10 +131,18 @@ public sealed class StrataVolume
         return Data[(((row * Layers) + layer) * Cols) + col];
     }
 
+    /// <summary>굽기가 층리의 어두운 띠에 붙이는 이름 꼬리 (src/Bpcg/Bake/Corridor.cs 의 범례: '&lt;암석&gt;_dark_bed').</summary>
+    public const string DarkBedSuffix = "_dark_bed";
+
     /// <summary>재질 번호의 한국어 이름 (모르면 "번호 N").</summary>
     public string NameOf(int id)
     {
         string english = Names.GetValueOrDefault(id, "");
+        // 층리의 어두운 띠는 번호와 색만 다른 같은 암석입니다. 꼬리를 떼고 암석 이름으로 보여 줍니다.
+        if (english.EndsWith(DarkBedSuffix, StringComparison.Ordinal))
+        {
+            english = english[..^DarkBedSuffix.Length];
+        }
         return KoreanNames.TryGetValue(english, out string? korean) ? korean : $"번호 {id}";
     }
 

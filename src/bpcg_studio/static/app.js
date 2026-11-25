@@ -964,7 +964,7 @@ function renderProgress() {
 // ---------------------------------------------------------------- 개요 탭
 const PHASE_COLOR = { planet: "var(--planet)", hero: "var(--hero)", corridor: "var(--bake)" };
 const PHASE_TEXT = { planet: "행성", hero: "히어로", corridor: "굽기" };
-// 0..1 비율로 나오는 점수표 항목 ('기준 100%' 와 견주기 쉽게 퍼센트도 붙임)
+// 0..1 비율로 나오는 점수표 항목 ('기준 100%' 와 비교하기 쉽게 퍼센트도 붙임)
 const FRACTION_SCORES = new Set(["ocean_fraction", "gw_surface_fraction", "river_reach_fraction", "rock_consistency", "cave_in_soluble", "flat_fraction"]);
 
 function renderOverview() {
@@ -991,7 +991,8 @@ function renderOverview() {
       { class: "card" },
       h("div", { class: "card-head" }, h("h2", null, s.name), h("span", { class: "hint mono" }, s.path)),
       h("dl", { class: "facts" }, s.facts.map((f) => h("div", null, h("dt", null, f.label), h("dd", null, f.value)))),
-      h("p", { class: "hint" }, `설정 해시 ${s.config_digest || "—"} · git ${s.git_commit ? s.git_commit.slice(0, 8) : "—"}`),
+      h("p", { class: "hint" }, `설정 해시 ${s.config_digest || "—"} · git ${s.git_commit ? s.git_commit.slice(0, 8) : "—"}`
+        + (s.git_dirty ? " (이 커밋에 아직 커밋하지 않은 코드·설정 변경을 더해 만든 결과)" : "")),
     ),
   );
 
@@ -1011,7 +1012,7 @@ function renderOverview() {
     "div",
     { class: "card" },
     h("h3", null, `기본값에서 바꾼 설정 (${changedDiffs.length}개)`),
-    h("p", { class: "explain" }, "이 실행이 쓴 설정(결과 폴더 manifest.json 의 config)을 지금 configs/ 의 기본값과 견줍니다. 그래서 실행 뒤에 기본값 파일을 고쳤으면, 값을 바꾸지 않은 실행에도 차이가 보입니다."),
+    h("p", { class: "explain" }, "이 실행이 쓴 설정(결과 폴더 manifest.json 의 config)을 지금 configs/ 의 기본값과 비교합니다. 그래서 실행 뒤에 기본값 파일을 고쳤으면, 값을 바꾸지 않은 실행에도 차이가 보입니다."),
   );
   if (changedDiffs.length) {
     diffCard.append(
@@ -1083,7 +1084,7 @@ function renderOverview() {
   for (const [name, label] of [["planet", "행성 L0"], ["hero", "히어로 L2"]]) {
     const x = sv[name];
     // 지각 세기 한계의 첫 풀이: 융기를 줄일 칸을 고르려고 행성을 먼저 한 번 풉니다. 여기서
-    // 수렴하지 않으면 덜 풀린 지형으로 융기를 줄인 것이라 따로 한 줄로 보여 줍니다.
+    // 수렴하지 않으면 덜 풀렸을 수 있는 지형으로 융기를 줄였으므로 따로 한 줄로 보여 줍니다.
     const sl = name === "planet" && s.stages && s.stages.planet ? s.stages.planet.strength_limit : null;
     if (sl && sl.applied !== false && sl.first_pass_iterations != null) {
       const bits = [];
@@ -1132,7 +1133,7 @@ function renderOverview() {
       h("b", null, "방향을 묶은 칸"),
       "(고정 칸)은 반복마다 물길 방향이 이쪽저쪽 뒤집혀 옛 방향에 묶어 둔 칸 수입니다. 많으면 그 지역(대개 임계 경사에 닿은 산비탈)의 물길이 자리를 잡지 못했다는 뜻입니다. ",
       h("b", null, "지각 세기 한계 첫 풀이"),
-      "는 평균 높이가 한계(기본 5,500 m)에 가까운 곳의 융기를 줄이려고, 줄일 칸을 고르기 전에 행성을 먼저 한 번 푼 것입니다. 여기서 수렴하지 못하면 덜 풀린 지형을 보고 융기를 줄였다는 뜻이라, 산맥 높이를 볼 때 함께 봅니다.",
+      "는 평균 높이가 한계(기본 5,500 m)에 가까운 곳의 융기를 줄이려고, 줄일 칸을 고르기 전에 행성을 먼저 한 번 푼 것입니다. 여기서 수렴하지 못하면 덜 풀렸을 수 있는 지형을 보고 융기를 줄였다는 뜻이라, 산맥 높이를 볼 때 함께 봅니다.",
     ),
   );
   const chartBox = h("div", { class: "two" });
@@ -1189,7 +1190,7 @@ function renderOverview() {
       h("b", null, "검사(check)"),
       "는 꼭 지켜야 하는 규칙입니다(예: 거꾸로 흐르는 강 0칸). ",
       h("b", null, "결과(emergent)"),
-      "는 입력에 없던 성질이 결과로 나온 값이라 지구 값과 견주고, '지구답다'는 근거로는 이것만 씁니다. ",
+      "는 입력에 없던 성질이 결과로 나온 값이라 지구 값과 비교하고, '지구답다'는 근거로는 이것만 씁니다. ",
       h("b", null, "반쯤 입력(forced)"),
       "은 입력이 거의 정하는 값이라 맞아도 근거가 되지 않습니다. 판정: ",
       h("span", { class: "pill ok" }, "통과"),

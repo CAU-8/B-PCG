@@ -88,7 +88,7 @@ public static class Fields
         {
             string list = "[" + string.Join(", ", unknown.Select(u => "'" + u + "'")) + "]";
             throw new ArgumentException(
-                $"FIELDS 에 없는 필드 이름: {list} (bpcg/core/fields.py 에 먼저 적으세요)");
+                $"FIELDS 에 없는 필드 이름: {list} (src/Bpcg/Core/Fields.cs 의 All 표와 src/bpcg_studio/fields.py 에 먼저 적으세요)");
         }
     }
 

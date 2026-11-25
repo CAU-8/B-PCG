@@ -231,9 +231,17 @@ public static class Caves
         double tol = cfg.F("caves.entrance_tolerance_m");
         double spacing = cfg.F("caves.entrance_spacing_m");
         double maxDepth = cfg.F("groundwater.max_depth_m");
-        if (!(levels >= 1 && levels <= MaxLevels))
+        // 층마다 필드 cave_level_<k>_m 가 있어야 저장할 수 있습니다. 지금 필드 표에는 0층과 1층뿐입니다.
+        int supported = 0;
+        while (supported < MaxLevels && Fields.All.ContainsKey(LevelFieldName(supported)))
         {
-            throw new ArgumentException($"caves.levels 는 1..{MaxLevels} 이어야 합니다: {levels}");
+            supported++;
+        }
+        if (!(levels >= 1 && levels <= supported))
+        {
+            throw new ArgumentException(
+                $"caves.levels 는 1..{supported} 이어야 합니다: {levels}. 층을 더 두려면 src/Bpcg/Core/Fields.cs 에 "
+                + $"{LevelFieldName(supported)} 필드를 먼저 더하세요");
         }
         if (!(fK >= 0.0 && r > 0.0 && tol >= 0.0 && spacing >= 0.0))
         {

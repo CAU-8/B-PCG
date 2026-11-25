@@ -1290,6 +1290,7 @@ public static class Globe
 
         t = Stopwatch.GetTimestamp();
         var sizes = new OrderedDictionary<string, object?>();
+        Bundle.InvalidateIndex(outDir, GlobeJson);
         foreach ((OrderedDictionary<string, object?> e, Array arr) in entries.Concat(ovEntries).Zip(arrays.Concat(ovArrays)))
         {
             string file = (string)e["file"]!;
@@ -1326,6 +1327,7 @@ public static class Globe
             ["format_version"] = (long)FormatVersion,
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = Bundle.GitCommit(),
+            ["git_dirty"] = Bundle.GitDirty(),
             ["config_digest"] = cfg?.Digest(),
             ["seed"] = cfg is null ? null : cfg.I("planet.seed"),
             ["profile"] = cfg?.Sec("profile").Get("name"),

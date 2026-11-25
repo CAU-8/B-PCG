@@ -216,8 +216,8 @@ public static class Corridor
     /// 회랑 직사각형을 고릅니다 (choose_corridor). 본류(유역에서 가장 큰 강 줄기)와 지류 위에 후보 직사각형을 놓고 점수가 가장 높은 후보를 고릅니다.
     /// </summary>
     /// <remarks>
-    /// 점수 = 지표 암석이 고루 섞인 정도 + 경사가 고루 섞인 정도 + 동굴 + 강 (각 0~1, <see cref="Choice"/>).
-    /// 네 항목을 더하는 이유: 동굴 입구 수만으로 고르면 회랑이 석회암 언덕 한가운데에 놓여, 6 km 를 걸어도
+    /// 점수 = 지표 암석이 고루 섞인 정도 + 경사가 고루 섞인 정도 + 동굴 + 강 + 호수 (각 0~1, <see cref="Choice"/>).
+    /// 여러 항목을 더하는 이유: 동굴 입구 수만으로 고르면 회랑이 석회암 언덕 한가운데에 놓여, 6 km 를 걸어도
     /// 암석 한 종류와 같은 모양의 비탈만 보입니다. passageM (N,) 은 칸마다 그 칸을 지나는 동굴 통로의 길이 [m]
     /// (HeroVolume.PassageM)이고, 주지 않으면 동굴 층이 있는 칸마다 칸 간격만큼의 통로가 있다고 봅니다.
     /// openEntrance (N,) 는 지표에서 동굴로 들어갈 수 있는 칸(입구 굴을 판 칸과 싱크홀 칸)이고,
@@ -828,6 +828,12 @@ public static class Corridor
         long t = Stopwatch.GetTimestamp();
         var vol = new HeroVolume(heroState, cfg);
         sec["volume"] = Seconds(t);
+        if (vol.Network.NStreamSinksWithoutCave > 0)
+        {
+            int nStream = vol.Network.SinkIsStream.Count(b => b) + vol.Network.NStreamSinksWithoutCave;
+            log?.Invoke($"[굽기] 땅속으로 사라지는 개울 {LogText.N(nStream)}곳 가운데 {LogText.N(vol.Network.NStreamSinksWithoutCave)}곳은 "
+                + "아래에 샘까지 이어지는 동굴 층이 없어 싱크홀과 통로를 두지 않았습니다 (지표에서만 개울이 사라짐)");
+        }
         t = Stopwatch.GetTimestamp();
         // 지표에서 동굴로 들어갈 수 있는 칸: 입구 굴을 판 칸과 싱크홀 칸.
         bool[] openings = new bool[vol.EntranceOpen.Length];
@@ -855,6 +861,7 @@ public static class Corridor
         var frame = new EngineFrame(cx, cy, Math.Floor(surf.Min()));
         double[] origin = [xs[0] - cx, -frame.YOffset, -(ys[0] - cy)];
         var files = new OrderedDictionary<string, object?>();
+        Bundle.InvalidateIndex(outDir, "manifest.json");
         files["heightmap"] = Heightmap.WriteHeightmap(Path.Combine(outDir, "heightmap"), surf, nrow, ncol, voxel, origin);
         sec["heightmap"] = Seconds(t);
         log?.Invoke($"[굽기] 높이맵 {ncol} × {nrow} 표본 (간격 {PyFormat.General(voxel)} m), {(double)sec["heightmap"]!:F2} s");
@@ -909,8 +916,9 @@ public static class Corridor
             {
                 (surfD, dmeta) = Detail.AddFractalDetail(surf, gx, gy, nrow, ncol, voxel, wet, vol, cfg, mouth);
             }
-            catch (ArgumentException e)
+            catch (EmptyDetailBandException e)
             {
+                // 더할 파장이 없는 경우만 건너뜁니다. 그 밖의 오류(NaN 높이 등)는 코드 결함이라 숨기지 않고 굽기를 멈춥니다.
                 log?.Invoke($"[굽기] 프랙탈 디테일을 건너뜁니다: {e.Message}");
                 det = null;
             }
@@ -1051,6 +1059,7 @@ public static class Corridor
         caves["n_springs"] = (long)net.NSprings;
         caves["n_bank_springs"] = (long)vol.NBankSprings;
         caves["n_stream_sinks"] = (long)net.SinkIsStream.Count(b => b);
+        caves["n_stream_sinks_without_cave"] = (long)net.NStreamSinksWithoutCave;
         caves["sink_discharge_m3_per_s"] = net.SinkDischarge.Sum() / Constants.SecondsPerYear;
         caves["lower_level_km"] = net.LowerLevelM / 1000.0;
         caves["flooded_km"] = net.FloodedM / 1000.0;
@@ -1098,6 +1107,7 @@ public static class Corridor
             ["format"] = "bpcg-corridor",
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = Bundle.GitCommit(),
+            ["git_dirty"] = Bundle.GitDirty(),
             ["config_digest"] = cfg.Digest(),
             ["seed"] = cfg.I("planet.seed"),
             ["profile"] = cfg.Sec("profile").Get("name"),

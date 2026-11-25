@@ -1246,7 +1246,9 @@ public sealed class HeroVolume
                 DischargeM3PerYr: fields.Contains("discharge_m3_per_yr") ? fields.GetFloat64("discharge_m3_per_yr") : null,
                 Receiver: rcv,
                 UpliftMPerYr: fields.Contains("uplift_m_per_yr") ? fields.GetFloat64("uplift_m_per_yr") : null,
-                BedZ: bedZ, DipSin: dipSin, StreamLossM3PerYr: streamLoss));
+                BedZ: bedZ, DipSin: dipSin, StreamLossM3PerYr: streamLoss,
+                GroundAtNodes: cells => SurfaceHeight(
+                    Array.ConvertAll(cells, c => graph.Pos[c * 3]), Array.ConvertAll(cells, c => graph.Pos[(c * 3) + 1]))));
         BuildDolines(
             graph, area, sinkSpacing,
             cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,

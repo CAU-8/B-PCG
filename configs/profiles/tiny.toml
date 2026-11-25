@@ -5,7 +5,7 @@ coarse_n_per_face = 16
 l0_n_per_face = 32             # 행성 지도(L0) 칸 약 310 km, 6,144칸
 
 [hero]
-max_flow_iterations = 400      # 히어로는 칸이 많아 반복이 더 필요 (1280² 칸에서 약 450~600회)
+max_flow_iterations = 400      # 히어로 솔버가 멈추는 반복 수: tiny(64² 칸) 시드 0 에서 30번 (2026-11-26)
 spacing_m = 100.0
 size_m = 6_400.0               # 한 변 6.4 km, 64 × 64칸
 

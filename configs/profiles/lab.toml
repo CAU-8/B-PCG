@@ -5,7 +5,7 @@ coarse_n_per_face = 256        # 칸 약 39 km
 l0_n_per_face = 1024           # 행성 지도(L0) 칸 약 9.8 km, 629만 칸 (보고용)
 
 [hero]
-max_flow_iterations = 1000      # 히어로는 칸이 많아 반복이 더 필요 (1280² 칸에서 약 450~600회)
+max_flow_iterations = 1000      # 히어로 솔버가 멈추는 반복 수: lab(1600² 칸)은 아직 재지 않음. laptop(1280² 칸)은 124~349번
 spacing_m = 25.0
 size_m = 40_000.0              # 한 변 40 km, 1600 × 1600칸
 

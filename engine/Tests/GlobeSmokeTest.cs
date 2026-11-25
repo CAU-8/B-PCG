@@ -10,7 +10,8 @@ namespace Bpcg.Engine.Tests;
 /// 지구본 연기 검사(smoke test). 화면 없이(--headless) 지구본 장면을 열어 핵심 경로를 봅니다.
 /// </summary>
 /// <remarks>
-/// 실행: <c>godot --headless --path . res://Tests/globe_smoke.tscn -- --baked-dir=&lt;폴더&gt; [--expect-globe]</c>.
+/// 실행 (engine 폴더에서): <c>HOME=$(mktemp -d) godot --headless --path . res://Tests/globe_smoke.tscn -- --baked-dir=&lt;폴더&gt; [--expect-globe]</c>.
+/// HOME 을 임시 폴더로 바꾸지 않으면 내 Godot 편집기 설정과 user:// 를 덮어씁니다 (engine/README.md 의 '검사').
 /// 성공하면 'BPCG_GLOBE_OK' 를 찍고 Quit(0), 실패하면 'BPCG_GLOBE_FAIL: &lt;이유&gt;' 를 찍고 Quit(1) 합니다.
 /// 자료가 없으면 알림 화면이 뜨고 멈추지 않는지만 보고 'BPCG_GLOBE_OK (no data)' 를 찍습니다.
 /// 자료가 있으면 면 메시, 면 경계, 모든 필드 고르기(텍스처 색·알파, 점), 방향 ↔ 칸 왕복, .bin 값과 ValueAt,

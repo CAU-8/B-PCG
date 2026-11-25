@@ -5,11 +5,13 @@ tiny 프로필로 전체를 몇 초 안에 돌립니다.
 
 import json
 import shutil
+import subprocess
 
 import numpy as np
-from bundles import load_bundle, read_json, run_cli
+from bundles import CONFIGS, ROOT, cli_env, load_bundle, read_json, run_cli
 
 from bpcg_studio.cli import main as bpcg_main
+from bpcg_studio.csharp import cli_command
 
 CORRIDOR_FILES = (
     "heightmap.bin",
@@ -209,6 +211,98 @@ def test_bake_of_a_bundle_without_newer_keys_says_how_to_fix(csharp_cli, cave_ru
     assert proc.returncode == 1
     assert "caves.sink_spacing_m" in proc.stderr
     assert "다시 돌려" in proc.stderr and "Unhandled exception" not in proc.stderr
+
+
+def test_subcommand_help_lists_commands_and_options(csharp_cli):
+    """bpcg compare --help 와 bpcg figures --help 도 오류 없이 명령과 옵션을 모두 보여 줍니다."""
+    cases = (
+        (["compare", "--help"], ("methods", "run", "list", "render", "--json", "--config", "--out",
+                                 "--seeds", "--only", "--param", "--force", "--set", "--seed",
+                                 "--method", "--scale", "--stage")),
+        (["compare", "run", "-h"], ("--param", "--force")),
+        (["compare", "help"], ("render",)),
+        (["figures", "--help"], ("results", "cubesphere", "--out", "--etopo", "--n", "--R")),
+        (["figures", "results", "-h"], ("--etopo",)),
+    )  # fmt: skip
+    for args, words in cases:
+        proc = csharp_cli(*args)
+        assert proc.stdout.startswith(f"usage: bpcg {args[0]}"), args
+        for word in words:
+            assert f"\n  {word} " in proc.stdout, (args, word)
+
+
+def test_bad_setting_values_stop_with_a_message_not_a_stack_trace(csharp_cli, tmp_path):
+    """범위를 벗어난 설정 값은 스택 추적 대신 메시지와 종료 코드 1 로 멈춥니다.
+
+    마지막 두 사례는 칸마다 나눠 도는 반복 안에서 나는 오류입니다. 스레드 수가 달라도 같은 메시지가
+    한 번만 나와야 합니다 (.NET 의 Parallel 은 그대로 두면 오류를 스레드 수만큼 모아서 던짐).
+    """
+    cases = [
+        (["landscape.theta=-3"], "theta 는 0 이상이어야 합니다: -3"),
+        (
+            ["plates.continental_area_fraction=1.5"],
+            "continental_area_fraction 은 0~1 이어야 합니다",
+        ),
+        (["profile.compute.numba_threads=-1"], "numba_threads 는 0 이상이어야 합니다: -1"),
+        (["climate.pet_base_m_per_yr=0"], "잠재 증발산이 0 이하입니다"),
+        (
+            ["climate.pet_base_m_per_yr=0", "profile.compute.numba_threads=1"],
+            "잠재 증발산이 0 이하입니다",
+        ),
+    ]
+    for sets, message in cases:
+        args = [x for item in sets for x in ("--set", item)]
+        proc = csharp_cli("all", "--profile", "tiny", "--out", tmp_path / "bad", *args, check=False)
+        assert proc.returncode == 1, (sets, proc.stderr)
+        assert proc.stderr.count(message) == 1, (sets, proc.stderr)
+        assert "오류가 난 곳: Bpcg." in proc.stderr, (sets, proc.stderr)
+        assert "Unhandled exception" not in proc.stderr, sets
+        assert "AggregateException" not in proc.stderr, sets
+
+
+def test_hero_setting_error_is_reported_not_replaced_by_flat_hero(csharp_cli, tmp_path):
+    """히어로 단계의 설정 오류를 '자리를 못 찾음'으로 보고 평면 히어로로 바꾸지 않습니다."""
+    run = tmp_path / "run"
+    proc = csharp_cli(
+        "all", "--profile", "tiny", "--out", run, "--set", "profile.hero.spacing_m=0", check=False
+    )
+    assert proc.returncode == 1
+    assert "profile.hero 는 spacing_m > 0" in proc.stderr
+    assert "평면 히어로" not in proc.stdout
+    assert (run / "planet" / "manifest.json").is_file()
+    assert not (run / "hero").exists()
+
+
+def test_flag_given_a_value_is_rejected(csharp_cli, tmp_path):
+    """--flat=false 를 --flat 으로 읽어 끄려던 옵션을 켜지 않습니다."""
+    run = tmp_path / "run"
+    for flag in ("--flat=false", "--engine=0"):
+        proc = csharp_cli("all", "--profile", "tiny", "--out", run, flag, check=False)
+        assert proc.returncode == 2, flag
+        assert "값을 받지 않는 옵션입니다" in proc.stderr and flag.split("=")[0] in proc.stderr
+        assert not run.exists(), flag
+    proc = csharp_cli("bake", "--hero", tmp_path, "--no-globe=false", check=False)
+    assert proc.returncode == 2 and "--no-globe" in proc.stderr
+
+
+def test_planet_toml_path_runs_into_a_folder_named_after_the_file(csharp_cli, tmp_path):
+    """--planet 에 TOML 경로를 주고 --out 을 빼면, 실행 폴더는 out/<파일 이름> 입니다."""
+    toml = tmp_path / "myworld.toml"
+    shutil.copy(CONFIGS / "planets" / "earth.toml", toml)
+    out = tmp_path / "out"
+    proc = subprocess.run(
+        cli_command(["planet", "--planet", str(toml), "--profile", "tiny"]),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=cli_env() | {"BPCG_OUT": str(out)},
+        timeout=600,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert (out / "myworld" / "planet" / "manifest.json").is_file()
+    assert toml.is_file()
 
 
 def test_python_entry_forwards_to_csharp(csharp_cli, tmp_path, capfd):

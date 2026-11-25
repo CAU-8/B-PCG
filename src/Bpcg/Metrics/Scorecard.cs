@@ -34,7 +34,7 @@ public static class Scorecard
 
     public static readonly (double Lo, double Hi) EarthHackRange = (0.49, 0.6);
     // 지하수면이 지표 0.5 m 안인 전 지구 육지 비율 (Fan 2013 보충자료 6절: 0.25 m 안 16.3%, 1 m 안 21.6%, 사막 포함 평균).
-    // 본문의 22~32% 는 1~3 m 문턱이라 0.5 m 문턱과 견주지 않습니다.
+    // 본문의 22~32% 는 1~3 m 문턱이라 0.5 m 문턱과 비교하지 않습니다.
     public static readonly (double Lo, double Hi) EarthGwSurfaceRange = (0.16, 0.22);
 
     /// <summary>합격선 dict. cfg 에 [metrics] 절이 있으면 같은 키를 덮어씁니다.</summary>
@@ -360,17 +360,17 @@ public static class Scorecard
         });
 
         // 행성 지도(L0) 칸은 한 변 약 19.5 km 라 거의 모든 육지 칸이 물길(지하수가 빠지는 곳)이고, 그 칸의 지하수면은
-        // 수면이나 지표와 같습니다. 그래서 행성 값은 칸 크기가 정하는 값이라 forced 로 두고 지구와 견주지 않습니다.
+        // 수면이나 지표와 같습니다. 그래서 행성 값은 칸 크기가 정하는 값이라 forced 로 두고 지구와 비교하지 않습니다.
         bool sphereLevel = l.Graph is not null && l.Graph.Kind == "sphere";
         Run(jobs, $"{p}.gw_surface_fraction", sphereLevel ? "forced" : "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
         {
             double[] z = l.D("z_m");
             double v = Hypsometry.GwSurfaceFraction(z, l.D("water_table_m"), l.Land(z.Length), th["gw_surface_tol_m"], l.Graph?.Area);
             string note = $"z − z_gw ≤ {G(th["gw_surface_tol_m"])} m 인 육지 면적 비율. 지구 "
-                + $"{PyFormat.Repr(EarthGwSurfaceRange.Lo)}~{PyFormat.Repr(EarthGwSurfaceRange.Hi)} (Fan 2013, 0.5 m 문턱, 전 지구 평균)";
+                + $"{PyFormat.Repr(EarthGwSurfaceRange.Lo)}(0.25 m 안)~{PyFormat.Repr(EarthGwSurfaceRange.Hi)}(1 m 안) (Fan 2013 보충자료의 전 지구 모델 추정, 우리 0.5 m 문턱은 그 사이)";
             if (sphereLevel)
             {
-                note += ". 행성 칸은 거의 모두 물길 칸이라 칸 크기가 정하는 값이고, 지구와 견주지 않습니다";
+                note += ". 행성 칸은 거의 모두 물길 칸이라 칸 크기가 정하는 값이고, 지구와 비교하지 않습니다";
             }
             return (FiniteOrNull(v), null, note);
         });
@@ -613,7 +613,15 @@ public static class Scorecard
         {
             bool c = (bool)l.Diag["converged"]!;
             l.Diag.TryGetValue("iterations", out object? it);
-            return (c, c, it is not null ? $"반복 {it}회" : "솔버 진단값");
+            string note = it is not null ? $"반복 {it}회" : "솔버 진단값";
+            // 행성은 산 높이 한계를 정하려고 솔버를 먼저 한 번 풉니다. 합격·불합격은 최종 풀이로 가리고, 첫 풀이가
+            // 반복 상한에 닿았으면 글로 알립니다 (최종 지형은 정상상태지만, 줄인 융기가 반복 상한에 따라 달라짐).
+            if (l.Diag.TryGetValue("first_pass_converged", out object? fp) && fp is false)
+            {
+                l.Diag.TryGetValue("first_pass_iterations", out object? fpi);
+                note += $". 지각 세기 한계의 첫 풀이는 반복 {fpi}회에서 수렴 못 함 (융기를 줄일 칸을 고른 지형이 덜 풀렸을 수 있음)";
+            }
+            return (c, c, note);
         });
     }
 

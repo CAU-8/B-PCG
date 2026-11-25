@@ -8,7 +8,7 @@ namespace Bpcg.Engine;
 /// </summary>
 /// <remarks>
 /// 노클립(기본): 땅과 동굴 벽을 뚫고 바라보는 방향으로 납니다. WASD 로 움직이고, Space·E 로 오르고,
-/// Q·Ctrl 로 내립니다. Shift 를 누르면 FastMultiplier 배 빠르고, 마우스 휠로 속력을 바꿉니다.
+/// Q·Ctrl 로 내립니다. Shift 를 누르면 FastMultiplier 배 빠르고, 마우스 휠이나 트랙패드 두 손가락 스크롤로 속력을 바꿉니다.
 /// 걷기: WASD 로 걷고 Space 로 뜁니다. 중력은 프로젝트 설정(physics/3d/default_gravity)을 따릅니다.
 /// 화면을 누르면 마우스로 둘러보고, Esc 로 마우스를 놓습니다.
 /// </remarks>
@@ -30,7 +30,7 @@ public partial class Player : CharacterBody3D
     [Export]
     public float JumpSpeedMS { get; set; } = 4.5f;
 
-    /// <summary>나는 속력 (m/s). 마우스 휠로 FlySpeedStep 배씩 바꿉니다.</summary>
+    /// <summary>나는 속력 (m/s). 마우스 휠 한 칸(트랙패드는 그만큼의 스크롤)에 FlySpeedStep 배씩 바꿉니다.</summary>
     [Export]
     public float FlySpeedMS { get; set; } = 25.0f;
 
@@ -94,6 +94,12 @@ public partial class Player : CharacterBody3D
             {
                 Input.MouseMode = Input.MouseModeEnum.Captured;
             }
+        }
+        else if (@event is InputEventPanGesture pan && Noclip)
+        {
+            // 맥의 트랙패드와 매직 마우스는 두 손가락 스크롤을 휠 단추가 아니라 이 사건으로 보냅니다 (지구본 카메라와 같음).
+            // 휠을 위로 한 칸 돌린 것이 Delta.Y = −1 에 해당합니다. 사건이 잘게 여러 번 오므로 그만큼씩 곱합니다.
+            FlySpeedMS = Math.Clamp(FlySpeedMS * MathF.Pow(FlySpeedStep, -pan.Delta.Y), FlySpeedMinMS, FlySpeedMaxMS);
         }
         else if (@event.IsActionPressed("ui_cancel"))
         {

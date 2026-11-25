@@ -79,15 +79,46 @@ public static class Golden
                 return new GoldenCase(module, name, arrays, meta, root);
             }
         }
-        if (!CommittedCases.Value.Contains($"{module}/{name}"))
+        if (LargeCases.Contains($"{module}/{name}"))
         {
             // 커밋하지 않은 큰 사례: 포팅 때 만든 out/golden 이 있는 기계에서만 돕니다 (새로 만들 수 없음).
             Assert.Skip($"큰 golden 사례 {module}/{name} 가 없어 건너뜁니다. {Hint}");
         }
-        throw new FileNotFoundException($"golden 사례 {module}/{name} 가 없습니다. {Hint}");
+        // 커밋한 사례도 큰 사례도 아닌 이름은 오타이거나 바뀐 이름입니다. 건너뛰면 그 시험이 영영 돌지 않으므로 실패로 둡니다.
+        string known = CommittedCases.Value.Contains($"{module}/{name}") ? "커밋한 사례인데 파일이 없습니다" : "사례 목록에 없는 이름입니다";
+        throw new FileNotFoundException($"golden 사례 {module}/{name} 가 없습니다 ({known}). {Hint}");
     }
 
-    /// <summary>커밋한 작은 사례 이름 (tests/golden/data/manifest.json 의 cases). 이것이 없으면 실패입니다.</summary>
+    /// <summary>
+    /// 커밋하지 않은 큰 사례 이름. 파일이 없으면 시험을 건너뜁니다. 이 목록에 없는 이름은 파일이 없을 때 실패합니다
+    /// (이름을 잘못 적은 시험이 조용히 건너뛰어지지 않게).
+    /// </summary>
+    private static readonly HashSet<string> LargeCases = new(StringComparer.Ordinal)
+    {
+        "core/cubesphere/cross_face_pairs_n64",
+        "core/cubesphere/grid_n16_r9964050",
+        "core/cubesphere/grid_n32_r6371000",
+        "core/cubesphere/grid_n33_r6371000",
+        "core/cubesphere/neighbor_table_n32",
+        "core/cubesphere/neighbor_table_n33",
+        "core/distance/flat64_1000",
+        "core/distance/flat64_inf",
+        "core/distance/sphere32_3sp",
+        "core/distance/sphere32_inf",
+        "core/distance/sphere32_zero",
+        "core/graph/flat_64x64_j1.0_s1738104521",
+        "core/graph/sphere_n16_j0.4_s5",
+        "core/graph/sphere_n32_j1.0_s0",
+        "core/resample/ghost_stencil_n32_l1",
+        "core/resample/ghost_stencil_n33_l3",
+        "core/resample/resample_16_to_32",
+        "core/resample/sample_sphere_n16",
+        "hydro/flat64",
+        "hydro/sphere32",
+        "planet/transfer_c16_f32",
+    };
+
+    /// <summary>커밋한 작은 사례 이름 (tests/golden/data/manifest.json 의 cases). 오류 글에서 원인을 구분하는 데 씁니다.</summary>
     private static readonly Lazy<HashSet<string>> CommittedCases = new(() =>
     {
         var names = new HashSet<string>(StringComparer.Ordinal);

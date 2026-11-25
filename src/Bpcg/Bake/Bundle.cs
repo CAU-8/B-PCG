@@ -35,11 +35,20 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
     public List<long[]>? Rivers { get; } = rivers;
 
     /// <summary>저장소의 현재 git 커밋 해시. git 이 없거나 저장소가 아니면 null (git_commit).</summary>
-    public static string? GitCommit()
+    public static string? GitCommit() => Git("rev-parse HEAD") is string s && s.Length > 0 ? s : null;
+
+    /// <summary>
+    /// 결과를 바꿀 수 있는 파일(src/, configs/)에 커밋하지 않은 변경이 있는지 (git_dirty). git 이 없으면 null.
+    /// 커밋 해시만 적으면, 고치던 코드로 만든 결과와 그 커밋으로 만든 결과를 목차만 보고 가릴 수 없습니다.
+    /// </summary>
+    public static bool? GitDirty() => Git("status --porcelain -- src configs") is string s ? s.Length > 0 : null;
+
+    // git 명령 하나를 저장소 맨 위에서 돌린 표준 출력 (앞뒤 빈칸 뺌). git 이 없거나 실패하면 null.
+    private static string? Git(string arguments)
     {
         try
         {
-            var psi = new ProcessStartInfo("git", "rev-parse HEAD")
+            var psi = new ProcessStartInfo("git", arguments)
             {
                 WorkingDirectory = Paths.Root,
                 RedirectStandardOutput = true,
@@ -57,7 +66,7 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
                 p.Kill();
                 return null;
             }
-            return p.ExitCode == 0 && output.Length > 0 ? output : null;
+            return p.ExitCode == 0 ? output : null;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
@@ -188,6 +197,20 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
         File.Move(tmp, path, true);
     }
 
+    /// <summary>
+    /// 같은 폴더에 결과를 다시 쓰기 직전에, 옛 목차 파일(manifest.json 등)을 지웁니다.
+    /// 자료 파일을 쓰다가 프로그램이 멈추면 옛 목차와 새 자료가 섞인 폴더가 남는데, 목차의 시드·설정은 옛 것이라
+    /// 읽는 쪽이 알아채지 못합니다. 목차가 없으면 읽는 쪽이 "목차가 없습니다"로 멈춥니다. 목차는 맨 끝에 다시 씁니다.
+    /// </summary>
+    public static void InvalidateIndex(string dir, string indexFile)
+    {
+        string path = Path.Combine(dir, indexFile);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>obj 를 jsonable 로 바꿔 들여쓰기 2 의 UTF-8 JSON 으로 씁니다 (write_json).</summary>
     public static void WriteJson(string path, object? obj, int? maxArray = JsonArrayMax)
     {
@@ -255,6 +278,7 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
     {
         Core.Fields.CheckFields(fields.Names);
         Directory.CreateDirectory(path);
+        InvalidateIndex(path, ManifestFile);
         int n = graph.NCells;
         var entries = new List<object?>();
         foreach (string name in fields.Names.OrderBy(k => k, PyJson.CodePointComparer.Instance))
@@ -319,6 +343,7 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
             ["kind"] = kind,
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = GitCommit(),
+            ["git_dirty"] = GitDirty(),
             ["config_digest"] = cfg?.Digest(),
             ["seed"] = cfg is null ? null : cfg.I("planet.seed"),
             ["profile"] = cfg?.Sec("profile").Get("name"),

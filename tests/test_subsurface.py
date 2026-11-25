@@ -63,10 +63,11 @@ def test_water_table(bundle, cfg):
     assert (wt[~land] == 0).all()
     assert np.allclose(wt[lake], f["water_level_m"][lake], atol=1e-3)  # 호수에서는 수면
     # 아래 지하수면(막는 층 아래 녹는 암석의 물 높이)은 맨 위 지하수면보다 높지 않고,
-    # 물 칸에서는 같음
+    # 바다·호수 칸에서는 같음. 강 칸은 같지 않을 수 있습니다: 석회암 지하수면보다 높이 떠 있는
+    # 작은 개울 아래에서는 아래 지하수면이 석회암 지하수면입니다(docs/pipeline.md 8.3·8.5).
     lower = f["water_table_lower_m"].astype(np.float64)
     assert np.isfinite(lower).all() and (lower <= wt + 1e-3).all()
-    wet = lake | f["is_river"] | ~land
+    wet = lake | ~land
     assert np.allclose(lower[wet], wt[wet], atol=1e-3)
 
 

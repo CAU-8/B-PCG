@@ -549,7 +549,15 @@ public static class Pipeline
 
         // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
         t = Stopwatch.GetTimestamp();
-        FieldSet caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, wb.Get<double>("valley_depth_m"), columns, cfg);
+        // 위층 높이 = 기준 물의 수면 + k·f_k·골짜기 깊이. 히어로에서는 수면(baseLevel)을 가장 가까운 큰 물(karst.Big)에서
+        // 가져오므로, 골짜기 깊이도 같은 큰 물의 값을 씁니다. 필드 valley_depth_m 은 가장 가까운 강(크기와 상관없음)의
+        // 값이라, 그대로 쓰면 수면과 골짜기 깊이가 서로 다른 강에서 와서 '마른 옛 강 높이'가 가까운 개울보다 낮아집니다.
+        double[] valleyDepth = wb.Get<double>("valley_depth_m");
+        if (karst?.Big is bool[] bigWater && Array.IndexOf(bigWater, true) >= 0)
+        {
+            (_, _, valleyDepth) = Distance.NearestSourceValues(graph, bigWater, valleyDepth);
+        }
+        FieldSet caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, valleyDepth, columns, cfg);
         sec["caves"] = Seconds(t);
 
         t = Stopwatch.GetTimestamp();
@@ -654,6 +662,7 @@ public static class Pipeline
                 ["n_springs"] = karst is null ? 0L : (long)karst.NSprings,
                 ["lost_m3_per_yr"] = karst is null ? 0.0 : karst.LostM3PerYr,
                 ["passes"] = karst is null ? 0L : (long)karst.Passes,
+                ["settled"] = karst is null || karst.Settled,
             },
             ["caves"] = cavesDiag,
             ["z_land_max_m"] = anyLand ? zLandMax : double.NaN,
@@ -661,7 +670,8 @@ public static class Pipeline
         string caveText = string.Join("·", caveCells.Select((kv, k) => $"{LogText.CaveLevel(k)} {LogText.N((long)kv.Value!)}칸"));
         string karstText = karst is null
             ? ""
-            : $"땅속으로 사라지는 개울 {LogText.N(karst.NSinks)}곳(모두 {karst.LostM3PerYr / Constants.SecondsPerYear:F1} m³/s, 다시 솟는 샘 {LogText.N(karst.NSprings)}곳), ";
+            : $"땅속으로 사라지는 개울 {LogText.N(karst.NSinks)}곳(모두 {karst.LostM3PerYr / Constants.SecondsPerYear:F1} m³/s, 다시 솟는 샘 {LogText.N(karst.NSprings)}곳"
+                + (karst.Settled ? "" : $", 물을 {karst.Passes}번 다시 모아도 자리를 못 잡아 사라진 물과 솟은 물의 합이 다를 수 있음") + "), ";
         Say(log, $"[4단계] 강 칸 {LogText.N(isRiver.Count(b => b))}개(강 구간 {LogText.N(rivers.Count)}개), 호수 칸 {LogText.N(isLake.Count(b => b))}개, "
             + $"{karstText}동굴 {caveText}, 2~4단계 {(double)sec["total"]!:F2} s");
         return new StageResult(output, rivers, apexes, res, diag);
@@ -728,7 +738,12 @@ public static class Pipeline
             ["reduced_cells"] = reduced,
             ["seconds"] = Seconds(t),
         };
-        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: 첫 풀이의 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
+        // 첫 풀이가 반복 상한에 닿아 멈추면, 융기를 줄일 칸을 덜 풀렸을 수 있는 지형으로 고른 셈입니다. 최종 풀이의 수렴과 따로 알립니다
+        // (스튜디오 progress.py 의 WARNINGS 가 '첫 풀이 … 수렴 못 함' 을 읽습니다).
+        string firstPass = res.Converged
+            ? $"첫 풀이 반복 {res.Iterations}번, 수렴함"
+            : $"첫 풀이 반복 {res.Iterations}번, 반복 상한까지 수렴 못 함";
+        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: {firstPass}, 첫 풀이의 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
             + $"융기를 줄인 칸 {LogText.N(reduced)}개, {(double)diag["seconds"]!:F1} s");
         return (u2, res.Z, diag);
     }
@@ -788,12 +803,17 @@ public static class Pipeline
 
         t = Stopwatch.GetTimestamp();
         var sd = (OrderedDictionary<string, object?>)st.Diag["solver"]!;
+        var planetDiag = new Dictionary<string, object?> { ["converged"] = sd["converged"], ["iterations"] = sd["iterations"] };
+        if (limitDiag.TryGetValue("first_pass_converged", out object? fpc))
+        {
+            planetDiag["first_pass_converged"] = fpc;
+            planetDiag["first_pass_iterations"] = limitDiag["first_pass_iterations"];
+        }
+        // 점수표의 법칙 검사(law_consistency)는 솔버가 푼 설정으로 다시 계산해야 맞습니다. L0 은 cfgL0
+        // (landscape.deposition_g 를 deposition_g_l0 으로 바꾼 설정)로 풀었으므로 같은 설정을 넘깁니다.
         OrderedDictionary<string, object?> card = Score(
-            cfg, planetFields: fields, planetGraph: l0,
-            diag: new Dictionary<string, IReadOnlyDictionary<string, object?>>
-            {
-                ["planet"] = new Dictionary<string, object?> { ["converged"] = sd["converged"], ["iterations"] = sd["iterations"] },
-            });
+            cfgL0, planetFields: fields, planetGraph: l0,
+            diag: new Dictionary<string, IReadOnlyDictionary<string, object?>> { ["planet"] = planetDiag });
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = ScorecardSummary(card);

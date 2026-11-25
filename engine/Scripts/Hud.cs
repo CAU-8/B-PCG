@@ -21,7 +21,7 @@ public partial class Hud : CanvasLayer
 
     public const string HelpText = """
         [V] 날기 ↔ 걷기    [WASD] 이동    [Space·E] 위로 (걷기에서는 Space로 뛰기)    [Q·Ctrl] 아래로
-        [Shift] 5배 빨리 날기    [휠] 나는 속력 바꾸기    [화면 클릭] 마우스로 둘러보기    [Esc] 마우스 놓기 (단추 누를 때)
+        [Shift] 5배 빨리 날기    [휠·트랙패드 스크롤] 나는 속력 바꾸기    [화면 클릭] 마우스로 둘러보기    [Esc] 마우스 놓기 (단추 누를 때)
         {layer_keys}
         [X] 단면 칼 켜기·끄기 (눈앞의 땅을 잘라 지층 보기)    [ [ · ] ] 단면 당기기·밀기
         [T] 다음 동굴 입구로 가기    [Shift+T] 이전 입구    [G] 땅 색: 자연색 ↔ 지질도    [F] 손전등

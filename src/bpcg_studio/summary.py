@@ -50,10 +50,10 @@ SCORE_TEXT: dict[str, dict[str, str]] = {
     "gw_surface_fraction": {
         "label": "지하수가 땅 겉에 닿는 육지 비율",
         "meaning": "지하수면이 땅 겉에서 0.5 m 안까지 올라온 육지의 넓이 비율입니다(습지·강가 "
-        "같은 땅). 행성 지도는 칸이 커서 거의 모든 칸이 물길이라 지구와 견주지 않습니다(forced). "
+        "같은 땅). 행성 지도는 칸이 커서 거의 모든 칸이 물길이라 지구와 비교하지 않습니다(forced). "
         "가파른 산지 유역은 지구 평균보다 낮게 나오는 것이 맞습니다.",
-        "earth": "0.16~0.22, 열 칸 가운데 두 칸 안팎 (Fan 2013 보충자료, 0.5 m 문턱의 "
-        "전 지구 평균)",
+        "earth": "0.16(0.25 m 안)~0.22(1 m 안), 열 칸 가운데 두 칸 안팎 (Fan 2013 보충자료의 "
+        "전 지구 모델 추정. 우리 0.5 m 문턱은 그 사이)",
     },
     "river_reach_fraction": {
         "label": "강이 바다·호수·출구에 닿는 비율",
@@ -163,6 +163,7 @@ SECONDS_LABELS: dict[str, str] = {
     "surface_rock": "지표 암석",
     "soil": "흙",
     "groundwater": "지하수면",
+    "karst_streams": "땅속으로 사라지는 개울",
     "caves": "동굴 층",
     "rivers": "강 구간 나누기",
     "sample": "히어로 격자 만들고 행성 값 옮기기",
@@ -479,6 +480,8 @@ def run_summary(run_dir: Path, key: str) -> dict[str, Any]:
         "profile": prof_name,
         "config_digest": (pm or hm or {}).get("config_digest"),
         "git_commit": (pm or hm or {}).get("git_commit"),
+        # 커밋하지 않은 코드·설정으로 만든 결과인지 (생성기가 이 키를 쓰기 전의 결과는 None).
+        "git_dirty": (pm or hm or {}).get("git_dirty"),
         "config_flat": flat_config(config) if config else {},
         "diff": diff,
         "diff_missing": diff_missing,
@@ -558,9 +561,10 @@ def _warnings(
             ntxt = f"({n:,}칸)" if isinstance(n, int) else ""
             add(
                 f"{name} 지각 세기 한계의 첫 풀이가 반복 상한({sl.get('first_pass_iterations')}회) "
-                f"안에 수렴하지 않았습니다{ztxt}. 그래서 덜 풀린 지형을 보고 융기를 줄일 칸을 "
-                f"골랐습니다{ntxt}. 산맥 높이가 이상하면 landscape.max_flow_iterations 를 늘려 "
-                "다시 돌립니다. '솔버 수렴' 표의 행성 반복 수는 두 번째 풀이의 것입니다."
+                f"안에 수렴하지 않았습니다{ztxt}. 그래서 덜 풀렸을 수 있는 지형을 보고 "
+                f"융기를 줄일 칸을 골랐습니다{ntxt}. 산맥 높이가 이상하면 "
+                "landscape.max_flow_iterations 를 늘려 "
+                "다시 돌립니다. '솔버 수렴' 표의 행성 반복 수는 두 번째 풀이의 반복 수입니다."
             )
     if failed:
         names = ", ".join(

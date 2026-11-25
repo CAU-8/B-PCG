@@ -195,10 +195,15 @@ def _coerce(key: str, old: Any, new: Any) -> Any:
             if old and len(new) != len(old):
                 raise ValueError(f"'{key}' 는 원소 {len(old)}개 리스트여야 합니다: {new!r}")
             if not old:
+                # 기본값이 빈 리스트인 키(지금은 hero.site_lat_lon_deg 하나)는 원소 형을 비교할
+                # 기준이 없습니다. C# 쪽도 수 리스트만 읽으므로 유한한 수만 받습니다.
+                # null·글자·표가 섞이면 실행 명령을 만들다 멈추고 빈 실행 폴더만 남기 때문입니다.
+                out = []
                 for i, v in enumerate(new):
-                    if isinstance(v, float):
-                        _finite(f"{key}[{i}]", v)
-                return list(new)
+                    if isinstance(v, bool) or not isinstance(v, int | float):
+                        raise ValueError(f"'{key}[{i}]' 는 수여야 합니다: {v!r}")
+                    out.append(_finite(f"{key}[{i}]", float(v)) if isinstance(v, float) else v)
+                return out
             pairs = enumerate(zip(old, new, strict=True))
             return [_coerce(f"{key}[{i}]", o, v) for i, (o, v) in pairs]
     raise ValueError(f"'{key}' 는 {_kind(old)} 값이어야 합니다: {new!r} (지금 값: {old!r})")

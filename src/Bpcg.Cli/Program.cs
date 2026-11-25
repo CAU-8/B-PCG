@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using Bpcg.Core;
+using Bpcg.IO;
 
 namespace Bpcg.Cli;
 
@@ -30,6 +33,12 @@ public static class Program
 
         public string Profile { get; set; } = "laptop";
 
+        /// <summary>--planet 을 명령줄에 적었는지 (hero --from 이 묶음의 값과 비교할 때 씀).</summary>
+        public bool PlanetGiven { get; set; }
+
+        /// <summary>--profile 을 명령줄에 적었는지.</summary>
+        public bool ProfileGiven { get; set; }
+
         public string? Out { get; set; }
 
         public long? Seed { get; set; }
@@ -54,6 +63,9 @@ public static class Program
         ["bake"] = ["--hero", "--out", "--engine", "--seed", "--set", "--no-globe"],
         ["all"] = ["--planet", "--profile", "--out", "--seed", "--set", "--flat", "--engine"],
     };
+
+    // 값을 받지 않는 옵션 (있으면 켜짐).
+    private static readonly HashSet<string> Flags = ["--flat", "--engine", "--no-globe"];
 
     private const string Usage = "usage: bpcg {planet,hero,bake,all,compare,figures} ...";
 
@@ -118,6 +130,13 @@ public static class Program
             {
                 throw new CliExit($"{Usage}\nbpcg {a.Command}: error: unrecognized arguments: {argv[i]}", 2);
             }
+            if (inline is not null && Flags.Contains(tok))
+            {
+                // --flat=false 를 --flat 으로 읽으면 끄려던 옵션이 켜집니다. 값을 붙인 꼴은 받지 않습니다.
+                throw new CliExit(
+                    $"{Usage}\nbpcg {a.Command}: error: argument {tok}: 값을 받지 않는 옵션입니다 (받은 값 '{inline}'). "
+                    + $"켜려면 {tok} 만 쓰고, 끄려면 옵션을 빼세요", 2);
+            }
             string Value()
             {
                 if (inline is not null)
@@ -135,9 +154,11 @@ public static class Program
             {
                 case "--planet":
                     a.Planet = Value();
+                    a.PlanetGiven = true;
                     break;
                 case "--profile":
                     a.Profile = Value();
+                    a.ProfileGiven = true;
                     break;
                 case "--out":
                     a.Out = Value();
@@ -224,7 +245,12 @@ public static class Program
         throw new CliExit($"{flag} {name}: {label} 파일이 없습니다 ({path}). 쓸 수 있는 이름은 {string.Join(", ", names)} 입니다");
     }
 
-    private static string OutDir(Args args) => args.Out ?? Path.Combine(Paths.Out, args.Planet);
+    // --planet 에 TOML 경로를 준 경우에는 파일 이름(확장자 뺌)을 실행 폴더 이름으로 씁니다.
+    // 경로를 그대로 붙이면 Path.Combine 이 앞의 out 폴더를 버려, TOML 파일 자체가 실행 폴더가 됩니다.
+    private static string OutDir(Args args) => args.Out ?? Path.Combine(Paths.Out, PlanetRunName(args.Planet));
+
+    internal static string PlanetRunName(string planet) =>
+        planet.EndsWith(".toml", StringComparison.Ordinal) ? Path.GetFileNameWithoutExtension(planet) : planet;
 
     private static string Parent(string path)
     {
@@ -283,11 +309,41 @@ public static class Program
             throw new CliExit("hero 는 --from <행성 묶음 폴더> 나 --flat 중 하나가 필요합니다");
         }
         string planetDir = PlanetBundleDir(args.FromDir);
+        CheckFromBundle(args, planetDir);
         Config cfg = Runs.HeroConfig(planetDir, Say, args.Seed, args.Set.Count > 0 ? args.Set : null);
         string runDir = args.Out ?? Parent(planetDir);
         Pipeline.ApplyThreads(cfg);
         Runs.RunHero(cfg, runDir, planetDir, flat: false, Say);
         return 0;
+    }
+
+    // hero --from 은 행성 묶음의 설정으로 히어로를 만듭니다. 명령줄의 --planet·--profile·--seed 가 묶음과 다르면, 묶음 값이
+    // 조용히 이기거나(행성·프로필) 행성과 다른 시드로 히어로만 다시 흔들게(시드) 됩니다. 그래서 다르면 멈추고 알립니다.
+    private static void CheckFromBundle(Args args, string planetDir)
+    {
+        Config bundle = Bpcg.Bake.Bundle.ConfigFromManifest(Bpcg.Bake.Bundle.ReadManifest(planetDir));
+        var problems = new List<string>();
+        string bundlePlanet = bundle.Sec("planet").Get("name") as string ?? "";
+        string bundleProfile = bundle.Sec("profile").Get("name") as string ?? "";
+        if (args.PlanetGiven && PlanetRunName(args.Planet) != bundlePlanet)
+        {
+            problems.Add($"--planet {args.Planet} (묶음은 {bundlePlanet})");
+        }
+        if (args.ProfileGiven && Path.GetFileNameWithoutExtension(args.Profile) != bundleProfile)
+        {
+            problems.Add($"--profile {args.Profile} (묶음은 {bundleProfile})");
+        }
+        long bundleSeed = bundle.I("planet.seed");
+        if (args.Seed is long seed && seed != bundleSeed)
+        {
+            problems.Add($"--seed {seed} (묶음은 {bundleSeed})");
+        }
+        if (problems.Count > 0)
+        {
+            throw new CliExit(
+                $"hero --from 은 행성 묶음({planetDir})의 행성·프로필·시드로 히어로를 만듭니다. 명령줄 값이 묶음과 다릅니다: "
+                + string.Join(", ", problems) + ". 이 옵션을 빼거나 묶음과 같은 값을 주세요. 다른 행성·프로필·시드로 만들려면 bpcg all 을 쓰세요");
+        }
     }
 
     private static int CmdBake(Args args)
@@ -319,9 +375,34 @@ public static class Program
         return 0;
     }
 
+    // 윈도우 콘솔은 기본 코드 페이지(한국어 윈도우는 CP949)로 글자를 씁니다. 스튜디오와 시험은 기록 줄을
+    // UTF-8 로 읽으므로, 그대로 두면 한글 기록 줄이 깨져 진행률과 경고를 읽지 못합니다. 그래서 UTF-8 로 맞춥니다.
+    private static void UseUtf8Output()
+    {
+        try
+        {
+            Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            // 콘솔이 인코딩 바꾸기를 받지 않으면 원래 인코딩으로 씁니다.
+        }
+    }
+
+    // 설정 값이나 입력 파일이 틀려서 나는 예외. 스택 추적 대신 메시지 한 줄과 난 곳을 보여 줍니다.
+    // 그 밖의 예외(널 참조, 배열 범위 등)는 코드 결함이므로 스택 추적이 그대로 나가게 둡니다.
+    private static bool IsInputError(Exception e) =>
+        e is ArgumentException or InvalidDataException or InvalidOperationException or KeyNotFoundException
+            or FormatException or TomlDecodeException or JsonException or IOException or UnauthorizedAccessException;
+
+    // 예외가 난 함수 이름 (예: Bpcg.Landscape.Solver.ReadLawParams). 알 수 없으면 예외 형 이름.
+    private static string Where(Exception e) =>
+        e.TargetSite is { DeclaringType: { } t } m ? $"{t.FullName}.{m.Name}" : e.GetType().Name;
+
     /// <summary>명령줄 입구. 반환: 종료 코드.</summary>
     public static int Main(string[] argv)
     {
+        UseUtf8Output();
         try
         {
             if (argv.Length > 0 && argv[0] == "compare")
@@ -350,6 +431,12 @@ public static class Program
         {
             Console.Error.WriteLine(e.Message);
             return e.Code;
+        }
+        catch (Exception e) when (IsInputError(e))
+        {
+            Console.Error.WriteLine(e.Message);
+            Console.Error.WriteLine($"  (오류가 난 곳: {Where(e)})");
+            return 1;
         }
     }
 }

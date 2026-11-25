@@ -10,8 +10,9 @@ namespace Bpcg.Engine.Tests;
 /// 엔진 연기 검사(smoke test). 화면 없이(--headless) 돌려 회랑 장면의 핵심 경로가 살아 있는지 봅니다.
 /// </summary>
 /// <remarks>
-/// 실행 (csharp/Bpcg.Engine 에서, 처음 한 번과 코드를 바꾼 뒤에는 dotnet build 와 --import 를 먼저):
-/// <c>godot --headless --path . res://Tests/smoke.tscn -- [--baked-dir=&lt;폴더&gt;] [--expect-baked]</c>.
+/// 실행 (engine 폴더에서, 처음 한 번과 코드를 바꾼 뒤에는 dotnet build 와 --import 를 먼저):
+/// <c>HOME=$(mktemp -d) godot --headless --path . res://Tests/smoke.tscn -- [--baked-dir=&lt;폴더&gt;] [--expect-baked]</c>.
+/// HOME 을 임시 폴더로 바꾸지 않으면 내 Godot 편집기 설정과 user:// 를 덮어씁니다 (engine/README.md 의 '검사').
 /// Godot 는 스크립트 오류가 있어도 종료 코드 0 으로 끝나므로, 성공하면 'BPCG_SMOKE_OK' 를 찍고 Quit(0),
 /// 실패하면 'BPCG_SMOKE_FAIL: &lt;이유&gt;' 를 찍고 Quit(1) 합니다. 구운 묶음이 있으면 레이어 불러오기와
 /// 보이기·숨기기, 단면, 프랙탈 디테일도 검사합니다. --expect-baked 를 주면 묶음이 없을 때 실패합니다.
@@ -485,6 +486,14 @@ public partial class SmokeTest : Node
             || baked.Strata.Cols != Json.I(st[2]))
         {
             return Fail("재질 부피를 읽지 못했거나 크기가 다릅니다");
+        }
+        // 화면의 "… 속" 글은 범례 이름을 한국어로 바꿔 씁니다. 범례의 모든 번호에 이름이 있어야 "번호 19 속" 같은 글이 안 뜹니다.
+        foreach (int id in baked.Strata.Names.Keys)
+        {
+            if (baked.Strata.NameOf(id).StartsWith("번호 ", StringComparison.Ordinal))
+            {
+                return Fail($"재질 번호 {id} ({baked.Strata.Names[id]}) 의 한국어 이름이 없습니다");
+            }
         }
         // 지표 10 m 아래 표본은 재질 부피의 값이어야 합니다 (255 공기, 254 물 포함).
         Vector3 c = terrain.Heightmap!.Center();

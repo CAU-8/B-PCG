@@ -396,7 +396,7 @@ public partial class StartMenu : Control
             Step = 1,
             Value = 0,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TooltipText = "같은 시드면 어느 컴퓨터에서든 같은 행성이 나옵니다. 다른 행성을 보려면 번호를 바꾸세요",
+            TooltipText = "같은 시드면 같은 행성이 나옵니다(운영체제와 CPU 종류가 같은 컴퓨터끼리). 다른 행성을 보려면 번호를 바꾸세요",
         };
         grid.AddChild(_seed);
 

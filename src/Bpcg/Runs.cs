@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using Bpcg.Bake;
 using Bpcg.Core;
+using Bpcg.Hero;
 
 namespace Bpcg;
 
@@ -299,8 +300,10 @@ public static class Runs
             {
                 (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, planet, log, Stopwatch.GetTimestamp());
             }
-            catch (ArgumentException e)
+            catch (NoHeroSiteException e)
             {
+                // 자리가 없을 때만 바꿉니다. 설정 값 오류나 코드 결함으로 난 예외까지 잡으면,
+                // 오류가 알려지지 않고 행성과 상관없는 평면 히어로가 결과로 나갑니다.
                 log($"[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: {e.Message}");
                 (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, log, Stopwatch.GetTimestamp());
             }

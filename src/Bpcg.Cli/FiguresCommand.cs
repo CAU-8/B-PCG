@@ -17,6 +17,27 @@ public static class FiguresCommand
 {
     public const string Usage = "usage: bpcg figures {results,cubesphere} ...";
 
+    /// <summary>bpcg figures --help 가 보여 주는 사용법. 옵션 이름은 <see cref="Allowed"/> 와 같아야 합니다 (시험이 봅니다).</summary>
+    public const string Help = Usage + """
+
+
+        생성 결과를 그림(PNG)으로 그립니다.
+
+        명령
+          results <실행 폴더>  bpcg all 이 만든 실행 폴더의 결과 그림 9장과 summary.json 을 씁니다
+          cubesphere           큐브스피어 격자(정육면체 여섯 면을 부풀린 공 모양 격자)를 그립니다
+
+        옵션
+          --out <경로>     results: 그림을 쓸 폴더 (기본 <실행 폴더>/figures). cubesphere: PNG 파일 경로 (기본 out/cubesphere_n<칸 수>.png)
+          --etopo <파일>   results: 고도 분포를 비교할 ETOPO 2022 파일 (기본 data/pilot/etopo 아래 파일, 없으면 지구 곡선 없이 그림)
+          --n <정수>       cubesphere: 면 한 변의 칸 수 (기본 16)
+          --R <실수>       cubesphere: 반지름 (기본 15)
+
+        예
+          uv run bpcg figures results out/earth
+          uv run bpcg figures cubesphere --n 16
+        """;
+
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         ["results"] = ["--out", "--etopo"],
@@ -120,6 +141,11 @@ public static class FiguresCommand
     /// <summary>argv 는 figures 다음부터. 반환: 종료 코드.</summary>
     public static int Dispatch(string[] argv)
     {
+        if (CompareCommand.WantsHelp(argv))
+        {
+            Say(Help);
+            return 0;
+        }
         Args a = Parse(argv);
         if (a.Command == "results")
         {

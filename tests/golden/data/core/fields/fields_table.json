@@ -404,6 +404,6 @@
       "water",
       "subsurface"
     ],
-    "check_error": "FIELDS 에 없는 필드 이름: ['Aa', 'a', 'zz'] (bpcg/core/fields.py 에 먼저 적으세요)"
+    "check_error": "FIELDS 에 없는 필드 이름: ['Aa', 'a', 'zz'] (src/Bpcg/Core/Fields.cs 의 All 표와 src/bpcg_studio/fields.py 에 먼저 적으세요)"
   }
 }

@@ -22,7 +22,7 @@ ThreadingHTTPServer 만 쓰고, 화면(static/)도 바깥 자원(CDN·글꼴) �
 | POST /api/godot/launch | 회랑 복사 → 가져오기 → 실행 {run, mode: play|editor} |
 | /compare, /api/compare/* | 방법 비교 화면 (compare_api.py 의 표) |
 
-v= 는 브라우저 캐시를 가르는 값이라 서버는 읽지 않습니다(늘 지금 파일을 보냄).
+v= 는 브라우저 캐시를 구분하는 값이라 서버는 읽지 않습니다(늘 지금 파일을 보냄).
 
 다른 웹 페이지가 이 서버로 실행을 시작하지 못하게:
 - Host 머리글이 127.0.0.1/localhost 가 아니면 막습니다 (DNS 리바인딩).
@@ -36,8 +36,10 @@ v= 는 브라우저 캐시를 가르는 값이라 서버는 읽지 않습니다(
 찍습니다.
 """
 
+import contextlib
 import json
 import math
+import signal
 import socket
 import sys
 import threading
@@ -231,6 +233,13 @@ def make_handler(app: Studio, port: int) -> type[BaseHTTPRequestHandler]:
             if not self._host_ok():
                 return
             url = urlparse(self.path)
+            # /api/ 의 GET 도 빌드·그림 그리기 같은 무거운 일을 시킬 수 있습니다.
+            # 브라우저가 다른 사이트의 페이지에서 보낸 요청이라고 알려 주면
+            # (Sec-Fetch-Site: cross-site) 받지 않습니다.
+            site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+            if url.path.startswith("/api/") and site == "cross-site":
+                self._error(403, "다른 웹 페이지에서 온 요청은 받지 않습니다")
+                return
             q = parse_qs(url.query)
             try:
                 self._route_get(url.path, q)
@@ -460,9 +469,24 @@ def serve(port: int = 8765, open_browser: bool = True) -> None:
     print(f"[스튜디오] {url} 에서 듣습니다 (끄려면 Ctrl+C)", flush=True)
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
+    # 끄라는 신호(SIGTERM: 작업 관리자, 미리 보기 도구)도 Ctrl+C 처럼 받아, 도는 실행을 멈추고
+    # 끕니다.
+    def _stop(signum, frame):
+        raise KeyboardInterrupt
+
+    with contextlib.suppress(ValueError, OSError, AttributeError):
+        signal.signal(signal.SIGTERM, _stop)
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         print("\n[스튜디오] 끕니다", flush=True)
     finally:
+        app = getattr(server, "studio", None)
+        if app is not None:
+            n = app.jobs.stop_all()
+            with contextlib.suppress(JobError):  # 도는 비교 실행이 없으면 JobError
+                app.compare.cancel()
+            if n:
+                print(f"[스튜디오] 도는 실행 {n}개를 멈췄습니다", flush=True)
         server.server_close()

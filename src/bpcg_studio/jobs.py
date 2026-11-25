@@ -19,6 +19,7 @@
 """
 
 import collections
+import contextlib
 import json
 import math
 import os
@@ -33,7 +34,7 @@ from typing import Any
 
 from bpcg_studio.bundle import write_json
 from bpcg_studio.config import Config, checked_overrides, load_config
-from bpcg_studio.csharp import CLI_DLL, CSharpError, build_command, cli_command
+from bpcg_studio.csharp import CSharpError, build_command, cli_command
 from bpcg_studio.names import run_folder_name
 from bpcg_studio.params import planet_names, profile_names
 from bpcg_studio.paths import OUT, ROOT
@@ -97,7 +98,7 @@ def validate_request(req: dict) -> dict:
         )
     try:
         seed = int(req.get("seed", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise JobError("시드는 정수여야 합니다", details={"seed": "정수여야 합니다"}) from None
     if not 0 <= seed <= SEED_MAX:
         raise JobError(f"시드는 0..{SEED_MAX} 이어야 합니다", details={"seed": "범위 밖"})
@@ -502,9 +503,15 @@ class JobManager:
                     raise JobError(f"이미 도는 실행이 있습니다: {other.id}", status=409)
             job_id = self._new_id(spec)
             run_dir = self.studio_dir / job_id
+            # 명령을 먼저 만듭니다. dotnet 이 없거나 값을 명령 글자로 못 바꾸면 빈 실행 폴더를
+            # 남기지 않고 멈춥니다.
+            try:
+                commands = self.commands_for(spec, run_dir)
+            except ValueError as e:
+                raise JobError(f"실행 명령을 만들지 못했습니다: {e}", status=400) from None
             run_dir.mkdir(parents=True, exist_ok=False)
             job = Job(job_id, run_dir, spec, tracker, cost=cost)
-            job.commands = self.commands_for(spec, run_dir)
+            job.commands = commands
             self.jobs[job_id] = job
         job.save(force=True)  # 실패해도 실행 스레드가 다시 씁니다
         try:
@@ -529,6 +536,20 @@ class JobManager:
         if proc is not None and proc.poll() is None:
             proc.terminate()
         return job
+
+    def stop_all(self) -> int:
+        """도는 실행을 모두 취소합니다 (스튜디오 서버를 끌 때). 반환: 취소한 실행 수.
+
+        자식 프로세스(C# 콘솔)는 서버와 따로 돌아서, 그냥 두면 서버가 꺼진 뒤에도 코어를 다
+        쓰며 결과를 씁니다. 다음에 서버를 켜면 그 실행은 '서버가 꺼져서 멈췄습니다'로 보이는데,
+        실제로는 아직 도는 상태가 됩니다.
+        """
+        with self.lock:
+            active = [j.id for j in self.jobs.values() if j.status in ACTIVE]
+        for job_id in active:
+            with contextlib.suppress(JobError):
+                self.cancel(job_id)
+        return len(active)
 
     def get(self, job_id: str) -> Job | None:
         with self.lock:
@@ -563,15 +584,15 @@ class JobManager:
                         state, error = "cancelled", "사용자가 취소했습니다"
                         break
                     if rc != 0:
-                        what = (
-                            "C# 빌드"
-                            if cmd[1] == "build"
-                            else "파이프라인"
-                            if cmd[1] == str(CLI_DLL)
-                            else "그림 스크립트"
-                        )
+                        # 그림 명령도 C# 콘솔(같은 DLL)의 figures 이므로 세 번째 낱말로 구분합니다.
+                        if cmd[1] == "build":
+                            what = "C# 빌드가"
+                        elif len(cmd) > 2 and cmd[2] == "figures":
+                            what = "결과 그림 그리기가"
+                        else:
+                            what = "생성 파이프라인이"
                         tail = " / ".join(list(job.log)[-3:])
-                        state, error = "failed", f"{what}이 종료 코드 {rc} 로 멈췄습니다: {tail}"
+                        state, error = "failed", f"{what} 종료 코드 {rc} 로 멈췄습니다: {tail}"
                         break
         except Exception as e:  # 실행 스레드가 죽으면 실행이 '도는 중' 으로 굳으므로 모두 받음
             state, error = "failed", f"실행하지 못했습니다: {type(e).__name__}: {e}"

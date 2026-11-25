@@ -25,9 +25,10 @@ public sealed record CaveNetworkParams(
 /// <param name="BedZ">(N,) 아래층이 놓인 지층의 층리면(지층이 쌓인 면) 높이 [m] (없으면 통로가 물 높이를 그대로 따라감).</param>
 /// <param name="DipSin">(N,) 그 층리면이 기운 각의 sin (없으면 0).</param>
 /// <param name="StreamLossM3PerYr">(N,) 지표의 개울이 그 칸에서 땅속으로 사라지는 물 [m³/yr]. 0 보다 큰 칸은 솎지 않고 싱크홀로 둡니다.</param>
+/// <param name="GroundAtNodes">칸 번호 목록 → 그 칸 노드(graph.Pos) 자리의 지표 높이 [m]. 수직굴 꼭대기를 정합니다 (없으면 칸 높이 z).</param>
 public sealed record CaveNetworkFields(
     double[]? DischargeM3PerYr = null, long[]? Receiver = null, double[]? UpliftMPerYr = null, double[]? BedZ = null,
-    double[]? DipSin = null, double[]? StreamLossM3PerYr = null);
+    double[]? DipSin = null, double[]? StreamLossM3PerYr = null, Func<int[], double[]>? GroundAtNodes = null);
 
 /// <summary>
 /// 통로 그물의 모양을 잰 값. 실제 동굴 지도 34개에서 잰 범위 (Collon 외 2017, 정정 2021): 마디에 이어진 가지 수의 평균 1.75~2.57
@@ -65,6 +66,12 @@ public sealed record CaveShape(
 /// </remarks>
 public sealed class CaveNetwork
 {
+    /// <summary>
+    /// 수직굴 꼭대기를 노드 자리 지표보다 더 올리는 높이 [m]. 굽기의 프랙탈 디테일(보기용 잔무늬)이 지표를 올린 곳에서도
+    /// 구멍이 열리게 둡니다. laptop 프로필 시드 0 회랑에서 디테일이 더한 높이는 가장 큰 곳이 7.2 m 였습니다.
+    /// </summary>
+    public const double ShaftAboveGroundM = 10.0;
+
     /// <summary>
     /// 통로 반지름의 아래 한계 [m]. 동굴 메시는 2 m 칸으로 만듭니다. 반지름이 2 m 보다 작은 관은 칸 사이로 빠져
     /// 메시가 토막 나므로 이보다 가늘게 두지 않습니다. 지구의 작은 통로는 이보다 가는 것이 많습니다.
@@ -152,6 +159,12 @@ public sealed class CaveNetwork
     /// <summary>싱크홀이 지표의 개울이 사라지는 자리이면 참. Sinks 와 같은 순서.</summary>
     public bool[] SinkIsStream { get; private init; } = [];
 
+    /// <summary>
+    /// 개울이 땅속으로 사라지는 칸(StreamLossM3PerYr &gt; 0) 가운데, 아래에 샘까지 이어지는 동굴 층이 없어 싱크홀을 두지 못한 칸 수.
+    /// 이런 칸은 지표에서는 개울이 사라지지만 3D 회랑에는 구멍도 통로도 없습니다.
+    /// </summary>
+    public int NStreamSinksWithoutCave { get; private init; }
+
     /// <summary>(K·N) 층 k 의 칸 c 를 지나는 물 [m³/yr] (index k·N + c). 통로가 없으면 0.</summary>
     public double[] Flow { get; private init; } = [];
 
@@ -179,7 +192,7 @@ public sealed class CaveNetwork
     /// <summary>물이 나오는 샘 수 (통로가 닿은 샘 칸, 층마다 따로 셈).</summary>
     public int NSprings { get; private init; }
 
-    /// <summary>그물의 모양을 잰 값 (Shape). 실제 동굴 지도에서 잰 범위와 견줍니다.</summary>
+    /// <summary>그물의 모양을 잰 값 (Shape). 실제 동굴 지도에서 잰 범위와 비교합니다.</summary>
     public CaveShape Shape { get; private init; } = new(0, 0, 0, 0.0, 0.0, 0.0);
 
     public int NSegments => SegRadius.Length;
@@ -368,6 +381,7 @@ public sealed class CaveNetwork
         //        개울이 사라지는 칸은 솎지 않고 모두 둡니다. 그 둘레 sink_spacing_m 안의 다른 후보는 뺍니다.
         var forced = new List<int>();
         var candidates = new List<int>();
+        int streamWithoutCave = 0;
         for (int c = 0; c < n; c++)
         {
             if (streamLoss is not null && streamLoss[c] > 0.0)
@@ -375,6 +389,10 @@ public sealed class CaveNetwork
                 if (FeedsAnyLevel(c))
                 {
                     forced.Add(c);
+                }
+                else
+                {
+                    streamWithoutCave++;
                 }
             }
             else if (sinkAllowed[c] && drainageAreaM2[c] >= p.SinkMinAreaM2 && FeedsAnyLevel(c))
@@ -727,6 +745,12 @@ public sealed class CaveNetwork
                 }
             }
         }
+        // 수직굴은 칸의 노드(흔든 자리, pos)에 섭니다. 그 자리의 지표는 칸 중심 높이 z 와 다를 수 있어서(노드는 칸 중심에서
+        // 반 칸까지 떨어짐), 꼭대기를 z 로 잡으면 지표에 닿지 못하고 땅속에서 끝나는 수직굴이 생깁니다. 그래서 노드 자리의
+        // 지표 높이(GroundAtNodes)와 z 가운데 높은 쪽에서 시작합니다. 굽기의 프랙탈 디테일이 지표를 더 올릴 수 있어
+        // ShaftAboveGroundM 만큼 더 올립니다. 지표 위로 나온 부분은 바위가 없어 아무것도 그리지 않습니다.
+        var shaftSinks = new List<int>();
+        var shaftBottom = new List<double>();
         for (int i = 0; i < sinks.Length; i++)
         {
             int s = sinks[i];
@@ -738,14 +762,21 @@ public sealed class CaveNetwork
                     bottom = Math.Min(bottom, axis[(k * n) + s]);
                 }
             }
-            if (!double.IsFinite(bottom))
+            if (double.IsFinite(bottom))
             {
-                continue;
+                shaftSinks.Add(i);
+                shaftBottom.Add(bottom);
             }
+        }
+        double[]? ground = more.GroundAtNodes?.Invoke(shaftSinks.ConvertAll(i => sinks[i]).ToArray());
+        for (int q = 0; q < shaftSinks.Count; q++)
+        {
+            int i = shaftSinks[q];
+            int s = sinks[i];
             double r = Radius(sinkQ[i], more.UpliftMPerYr is null ? 0.0 : more.UpliftMPerYr[s], p);
-            // 수직굴은 지표 위 반지름만큼에서 시작해 지표를 뚫고, 가장 낮은 층의 통로까지 내려갑니다.
-            segA.AddRange([pos[s * 3], pos[(s * 3) + 1], z[s] + r]);
-            segB.AddRange([pos[s * 3], pos[(s * 3) + 1], bottom]);
+            double top = ground is null || !double.IsFinite(ground[q]) ? z[s] : Math.Max(z[s], ground[q]) + ShaftAboveGroundM;
+            segA.AddRange([pos[s * 3], pos[(s * 3) + 1], top + r]);
+            segB.AddRange([pos[s * 3], pos[(s * 3) + 1], shaftBottom[q]]);
             segR.Add(r);
             segShaft.Add(true);
         }
@@ -816,6 +847,7 @@ public sealed class CaveNetwork
             Sinks = sinks,
             SinkDischarge = sinkQ,
             SinkIsStream = sinkStream,
+            NStreamSinksWithoutCave = streamWithoutCave,
             Lakes = lakeCells.ToArray(),
             LakeXyz = lakeXyz.ToArray(),
             Flow = flow,

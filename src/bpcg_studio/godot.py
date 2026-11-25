@@ -51,6 +51,11 @@ BAKED = ENGINE / "baked"
 MARKER = "studio_run.json"
 GLOBE_DIR = "globe"  # 실행 폴더와 engine/baked 안의 지구본 폴더 이름
 CORRIDOR_MAYBE = ("caves.glb", "entrances.json")  # 실행에 따라 없을 수 있는 회랑 파일
+# engine/baked 로 복사해도 되는 파일 종류. 굽기는 자료 파일만 씁니다.
+# engine/ 은 Godot 프로젝트라 .cs·.gd·.gdextension 같은 파일이 섞여 들어가면 엔진이 코드로 읽어
+# 실행합니다. 남에게 받은 실행 폴더를 고를 수도 있으므로, 목록의 이름이 이 종류가 아니면 아무것도
+# 복사하지 않고 멈춥니다.
+BAKED_SUFFIXES = (".bin", ".json", ".glb", ".u8")
 IMPORT_TIMEOUT_S = 600
 VERSION_TIMEOUT_S = 60
 
@@ -118,7 +123,7 @@ def runtime_env(base: dict[str, str] | None = None) -> dict[str, str]:
 
     사용자가 이미 정한 값은 그대로 둡니다. .NET 은 옛 이름 COMPlus_* 도 읽는데 DOTNET_* 가 이기므로,
     COMPlus_* 로 정해 둔 것도 정한 것으로 봅니다. 윈도우는 환경 변수 이름의 대소문자를 가리지
-    않고 os.environ 도 이름을 대문자로 두므로, 윈도우에서는 대소문자를 무시하고 견줍니다. 그래야
+    않고 os.environ 도 이름을 대문자로 두므로, 윈도우에서는 대소문자를 무시하고 비교합니다. 그래야
     같은 변수가 두 번 들어가 사용자 값이 가려지지 않습니다.
     """
     env = dict(os.environ if base is None else base)
@@ -196,6 +201,11 @@ def corridor_files(corridor_dir: Path) -> list[str]:
     for n in names:
         if not bare_name(n):  # 경로·드라이브(D:x)·앞의 '.' 가 섞인 이름은 baked 밖을 가리킴
             raise GodotError(f"회랑 파일 이름이 올바르지 않습니다: {n!r}")
+        if not n.endswith(BAKED_SUFFIXES):
+            raise GodotError(
+                f"회랑 파일 {n!r} 은 굽기가 쓰는 종류({', '.join(BAKED_SUFFIXES)})가 아닙니다. "
+                f"engine/ 에 코드로 읽힐 수 있는 파일은 복사하지 않습니다 ({man_path})"
+            )
     if "manifest.json" not in names:
         names.append("manifest.json")
     return names
@@ -355,14 +365,45 @@ def install_globe(globe_dir: Path, dst: Path) -> bool:
         if dst.exists():
             shutil.rmtree(dst)
         return False
+    names = globe_files(src)
+    missing = [n for n in names if not (src / n).is_file()]
+    if missing:
+        raise GodotError(f"지구본 파일이 없습니다: {', '.join(missing)} ({src})")
     tmp = dst.with_name(dst.name + ".part")
     if tmp.exists():
         shutil.rmtree(tmp)
-    shutil.copytree(src, tmp)
+    tmp.mkdir(parents=True)
+    # 폴더를 통째로 복사하지 않고 globe.json 이 적은 파일만 옮깁니다 (회랑과 같은 까닭).
+    for n in names:
+        shutil.copy2(src / n, tmp / n)
     if dst.exists():
         shutil.rmtree(dst)
     os.replace(tmp, dst)
     return True
+
+
+def globe_files(globe_dir: Path) -> list[str]:
+    """globe.json 이 적은 지구본 파일(필드·겹쳐 보기·꼭짓점 .bin) + globe.json.
+
+    이름이 경로를 품거나 .bin 이 아니면 GodotError.
+    """
+    path = Path(globe_dir) / "globe.json"
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise GodotError(f"지구본 목차를 읽지 못했습니다: {path} ({e})") from None
+    entries = list(meta.get("fields") or []) + list(meta.get("overlays") or [])
+    names = [str(e.get("file", "")) for e in entries if isinstance(e, dict)]
+    corners = meta.get("corners")
+    if isinstance(corners, dict) and corners.get("file"):
+        names.append(str(corners["file"]))
+    for n in names:
+        if not bare_name(n) or not n.endswith(".bin"):
+            raise GodotError(
+                f"지구본 파일 이름이 올바르지 않습니다: {n!r} ({path}). 이름 하나에 .bin 이어야 "
+                f"합니다"
+            )
+    return sorted(set(names)) + ["globe.json"]
 
 
 # ---------------------------------------------------------------- Godot 실행

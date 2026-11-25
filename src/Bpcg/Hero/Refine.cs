@@ -85,7 +85,7 @@ public static class Refine
         long r0 = rcv0[c0];
         if (r0 == c0)
         {
-            throw new ArgumentException($"히어로 중심 L0 칸 {c0} 이 출구(바다)입니다");
+            throw new NoHeroSiteException($"히어로 중심 L0 칸 {c0} 이 출구(바다)입니다");
         }
         double[] Dir(long a, long b) =>
             [g0.Pos[a * 3] - g0.Pos[b * 3], g0.Pos[(a * 3) + 1] - g0.Pos[(b * 3) + 1], g0.Pos[(a * 3) + 2] - g0.Pos[(b * 3) + 2]];
@@ -100,7 +100,7 @@ public static class Refine
         double zOut = Resample.SampleSphereReal(f0["z_m"], (int)g0.Shape[1], pOut)[0];
         if (!double.IsFinite(zOut))
         {
-            throw new ArgumentException("출구 위치의 L0 고도가 NaN 입니다");
+            throw new NoHeroSiteException("출구 위치의 L0 고도가 NaN 입니다");
         }
         double[] q0All = f0.GetFloat64("discharge_m3_per_yr");
         double q0 = q0All[c0];

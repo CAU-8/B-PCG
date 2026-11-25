@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Bpcg.Engine;
 
 /// <summary>
-/// 생성 기록 줄 → 단계별 진행률 (src/bpcg/studio/progress.py 의 STAGES 표를 줄여 옮김).
+/// 생성 기록 줄 → 단계별 진행률 (src/bpcg_studio/progress.py 의 STAGES 표를 줄여 옮김).
 /// </summary>
 /// <remarks>
 /// 줄이 들어오면 아직 끝나지 않은 단계부터 앞으로만 찾아, 끝 줄 무늬가 맞는 첫 단계까지를 끝낸 것으로 봅니다.

@@ -206,6 +206,37 @@ public sealed class CaveNetworkTests
         Assert.Empty(net.Lakes);
     }
 
+    // 수직굴은 칸의 노드(흔든 자리)에 섭니다. 그 자리의 지표가 칸 중심 높이보다 높으면, 칸 중심 높이에서 시작한 수직굴은
+    // 지표에 닿지 못하고 땅속에서 끝납니다. GroundAtNodes 가 노드 자리의 지표를 알려 주면 그보다 위에서 시작해야 합니다.
+    [Fact]
+    public void ShaftsStartAboveTheGroundAtTheirOwnNode()
+    {
+        int[] sinks = [Cell(3, 20), Cell(12, 22), Cell(21, 18)];
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World(sinks, 2.0e5);
+        const double Bump = 7.5;
+        int[]? asked = null;
+        CaveNetwork net = CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(
+            GroundAtNodes: cells =>
+            {
+                asked = cells;
+                return cells.Select(c => z[c] + Bump).ToArray();
+            }));
+        Assert.Equal(sinks.OrderBy(c => c), asked);
+        int k = 0;
+        for (int e = 0; e < net.NSegments; e++)
+        {
+            if (!net.SegIsShaft[e])
+            {
+                continue;
+            }
+            int s = net.Sinks[k++];
+            double top = net.SegA[(e * 3) + 2] - net.SegRadius[e];
+            Assert.Equal(z[s] + Bump + CaveNetwork.ShaftAboveGroundM, top, 9);
+        }
+        Assert.Equal(sinks.Length, k);
+        Assert.Equal(0, net.NStreamSinksWithoutCave);
+    }
+
     [Fact]
     public void DippingBedsMakeThePassageLoopBelowTheWaterAndLeaveLakes()
     {
