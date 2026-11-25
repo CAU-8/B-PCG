@@ -145,7 +145,7 @@
 | 이름 | 코드·설정 이름 | 뜻 | 보는 곳 |
 |---|---|---|---|
 | 3D 샘플 함수 | `HeroVolume` | 아무 3D 점이나 물으면 그 점에 무엇이 있는지(암석 종류, 물, 지표까지 거리, 동굴까지 거리)를 답하는 함수 | [pipeline.md](pipeline.md) 10장 |
-| 칸 중심 높이 | `NodeResample.ToCellCenters` | 솔버가 흔들어 둔 격자점에서 푼 높이를 칸 정중앙의 높이로 옮긴 값. 3D 샘플 함수와 엔진 지형이 이 값을 씀 | [pipeline.md](pipeline.md) 10장 |
+| 칸 중심 높이 | `NodeResample.ToCellCenters`, `NodeResample.SurfaceToCellCenters` | 솔버가 흔들어 둔 격자점(대표점)에서 정한 높이를 칸 정중앙의 높이로 옮긴 값. 지표, 지하수면, 지층 바닥을 옮기고, 3D 샘플 함수와 엔진 지형이 이 값을 씀. 동굴 층 높이는 통로가 대표점 자리를 지나므로 옮기지 않음 | [pipeline.md](pipeline.md) 10장 |
 | 굽기 | bake | 3D 샘플 함수에 물어 엔진이 읽을 파일(높이맵, 동굴 메시, 재질 부피)로 쓰는 일 | `bpcg bake` |
 | 높이맵 | `heightmap.bin` | 회랑 지표 높이를 2 m 간격으로 담은 격자 파일 | Godot 회랑 지형 |
 | 재질 부피 | `strata.u8` | 회랑 땅속의 암석 종류를 4 m × 4 m × 2 m 상자마다 담은 파일 | Godot 지층 단면 |

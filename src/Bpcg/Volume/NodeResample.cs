@@ -93,6 +93,149 @@ public static class NodeResample
     }
 
     /// <summary>
+    /// 계단 너머 이웃을 가르는 배수 (SurfaceToCellCenters): 제 칸에서 이웃까지의 기울기가, 이웃 기울기를 완만한 쪽부터 세어
+    /// 절반째 값의 이 배보다 가파르면 그 이웃은 계단 너머로 보고 뺍니다. 평평하게 기운 면에서는 가장 가파른 이웃이 절반째의
+    /// 약 1.4배라 빠지는 이웃이 없습니다.
+    /// </summary>
+    public const double StepRatio = 3.0;
+
+    /// <summary>
+    /// 계단 너머 이웃을 가르는 기울기의 아래 한계 [m/m] (SurfaceToCellCenters). 거의 평평한 면에서 작은 높이 차까지 계단으로
+    /// 보지 않게 합니다. 0.1 은 25 m 칸 사이에서 2.5 m 입니다.
+    /// </summary>
+    public const double StepMinSlope = 0.1;
+
+    /// <summary>
+    /// 흔든 격자점에서 정한 높이 v (N,) [m] 를 칸 중심의 높이로 옮깁니다. 지표 말고 땅속의 면(지하수면, 지층 바닥)에 씁니다.
+    /// 계산은 <see cref="ToCellCenters"/> 와 같습니다: 둘레 이웃으로 그 면의 기울기를 구해, 옮긴 거리만큼 높이를 되돌립니다.
+    /// </summary>
+    /// <remarks>
+    /// 땅속의 면은 지표와 달리 계단처럼 끊기는 자리가 있습니다. 예를 들어 지하수면은 석회암 땅과 다른 암석의 땅 사이, 두 강
+    /// 사이 분수령 밑에서 수십~수백 m 끊깁니다. 계단 너머 이웃까지 넣어 기울기를 구하면 기울기가 크게 틀려, 칸 하나가 계단
+    /// 높이만큼 움직입니다 (laptop 시드 0 지하수면에서 가장 크게 187 m). 그래서 다섯 가지를 더 지킵니다.
+    /// 1. 값이 유한하지 않은 칸(그 면이 없는 칸)은 그대로 두고, 그런 이웃은 기울기 계산에서 뺍니다.
+    /// 2. sameSurface(c, k) 가 거짓인 이웃도 뺍니다. 예: 지층 순서가 다른 이웃의 층 바닥은 다른 면이라 섞지 않습니다.
+    /// 3. 계단 너머 이웃을 뺍니다. 이웃마다 (값 차이 ÷ 거리)를 재고, 완만한 쪽부터 세어 절반째 값(쓸 이웃이 여덟이면 넷째)의
+    ///    StepRatio 배와 StepMinSlope 가운데 큰 값보다 가파른 이웃을 뺍니다.
+    ///    예: 지하수면이 거의 평평한 칸(기울기 0.002)의 이웃 셋이 190 m 높은 분수령 너머에 있으면, 그 셋은 25 m 에 190 m 를
+    ///    오르는 기울기 7.6 이라 빠지고, 나머지 다섯으로 기울기를 구합니다.
+    /// 4. 구한 기울기가 maxSlope 보다 가파르면 그 면이 끊긴 자리로 보고 그대로 둡니다. 제 칸이 계단의 좁은 쪽에 있어 이웃
+    ///    대부분이 건너편이면 3번으로 거르지 못하는데, 이때 기울기가 이 한계를 넘습니다.
+    /// 5. 옮긴 값은 제 칸과 쓴 이웃 값들의 가장 작은 값과 가장 큰 값 사이로 자릅니다. 칸 중심은 둘레 여덟 이웃의 점들로
+    ///    둘러싸여 있어, 평평하게 기운 면이면 칸 중심의 값이 늘 이 범위 안에 듭니다.
+    /// 예: 동쪽으로 0.5 기운 지층 바닥에서 대표점이 칸 중심보다 동쪽으로 10 m 가 있으면, 칸 중심의 층 바닥은 5 m 낮습니다.
+    /// keep 이 참인 칸(물 칸 등)은 그대로 둡니다. 칸마다 제 자리만 쓰므로 나눠 돌려도 결과가 같습니다.
+    /// </remarks>
+    public static double[] SurfaceToCellCenters(
+        CellGraph graph, double[] v, bool[]? keep = null, Func<int, int, bool>? sameSurface = null,
+        double maxSlope = double.PositiveInfinity)
+    {
+        if (graph.Kind != "flat")
+        {
+            throw new ArgumentException($"칸 중심으로 옮기기는 평면 그래프에서만 합니다. 받은 그래프: '{graph.Kind}'");
+        }
+        int ny = (int)graph.Shape[0];
+        int nx = (int)graph.Shape[1];
+        int n = ny * nx;
+        if (v.Length != n || (keep is not null && keep.Length != n))
+        {
+            throw new ArgumentException(
+                $"v 와 keep 은 칸 수 ({n},) 와 같은 길이여야 합니다. 받은 길이: v {v.Length}, keep {keep?.Length.ToString() ?? "없음"}");
+        }
+        if (!(maxSlope > 0.0))
+        {
+            throw new ArgumentException($"maxSlope 는 0 보다 커야 합니다. 받은 값: {maxSlope}");
+        }
+        const int nSlots = CellGraph.NSlots;
+        double dx = graph.Spacing;
+        (double east, double north) = graph.Origin;
+        double[] pos = graph.Pos;
+        int[] nbr = graph.Nbr;
+        double[] output = new double[n];
+        Parallelism.For(0, n, c =>
+        {
+            double vc = v[c];
+            output[c] = vc;
+            if ((keep is not null && keep[c]) || !double.IsFinite(vc))
+            {
+                return;
+            }
+            double xc = pos[c * 3];
+            double yc = pos[(c * 3) + 1];
+            double ox = xc - (east + (((c % nx) + 0.5) * dx));
+            double oy = yc - (north - (((c / nx) + 0.5) * dx));
+            if (ox == 0.0 && oy == 0.0)
+            {
+                return;
+            }
+            // 쓸 수 있는 이웃과, 제 칸에서 그 이웃까지의 기울기 (값 차이 ÷ 거리).
+            Span<int> use = stackalloc int[nSlots];
+            Span<double> steep = stackalloc double[nSlots];
+            int m = 0;
+            for (int s = 0; s < nSlots; s++)
+            {
+                int k = nbr[(c * nSlots) + s];
+                if (k < 0 || !double.IsFinite(v[k]) || (sameSurface is not null && !sameSurface(c, k)))
+                {
+                    continue;
+                }
+                double ddx = pos[k * 3] - xc;
+                double ddy = pos[(k * 3) + 1] - yc;
+                use[m] = k;
+                steep[m] = Math.Abs(v[k] - vc) / Math.Sqrt((ddx * ddx) + (ddy * ddy));
+                m++;
+            }
+            if (m == 0)
+            {
+                return;
+            }
+            Span<double> sorted = stackalloc double[m];
+            steep[..m].CopyTo(sorted);
+            sorted.Sort();
+            double limit = Math.Max(StepRatio * sorted[(m - 1) / 2], StepMinSlope);
+            double sxx = 0.0;
+            double sxy = 0.0;
+            double syy = 0.0;
+            double bx = 0.0;
+            double by = 0.0;
+            double lo = vc;
+            double hi = vc;
+            for (int q = 0; q < m; q++)
+            {
+                if (steep[q] > limit)
+                {
+                    continue;
+                }
+                int k = use[q];
+                double ddx = pos[k * 3] - xc;
+                double ddy = pos[(k * 3) + 1] - yc;
+                double dz = v[k] - vc;
+                sxx += ddx * ddx;
+                sxy += ddx * ddy;
+                syy += ddy * ddy;
+                bx += ddx * dz;
+                by += ddy * dz;
+                lo = Math.Min(lo, v[k]);
+                hi = Math.Max(hi, v[k]);
+            }
+            double det = (sxx * syy) - (sxy * sxy);
+            // 쓸 이웃이 없거나 한 줄로 늘어서 있으면 기울기를 정할 수 없어 그대로 둡니다.
+            if (!(det > 1e-9 * sxx * syy))
+            {
+                return;
+            }
+            double gx = ((syy * bx) - (sxy * by)) / det;
+            double gy = ((sxx * by) - (sxy * bx)) / det;
+            if ((gx * gx) + (gy * gy) > maxSlope * maxSlope)
+            {
+                return;
+            }
+            output[c] = Math.Clamp(vc - ((gx * ox) + (gy * oy)), lo, hi);
+        });
+        return output;
+    }
+
+    /// <summary>
     /// 산비탈 칸의 높이를 둘레 칸과 섞어 칸 크기의 울퉁불퉁함을 줄입니다. z (ny·nx) [m] 는 칸 중심 높이이고,
     /// keep (ny·nx) 이 참인 칸(물 칸과 물길 칸)은 그대로 둡니다. passes 번 되풀이하며, 0 이면 z 와 같은 값을 돌려줍니다.
     /// </summary>
