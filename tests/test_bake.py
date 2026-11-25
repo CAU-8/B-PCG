@@ -141,8 +141,11 @@ def _glb(path):
     return gltf, raw
 
 
-def test_cave_mesh_glb(corridor, man):
-    info = man["file_meta"]["caves"]
+def test_cave_mesh_glb(cave_run):
+    # tiny 시드 0 히어로 유역은 화강암만 드러나 동굴이 없을 수 있습니다.
+    # 그래서 동굴이 꼭 생기는 실행을 봅니다.
+    corridor = cave_run / "corridor"
+    info = read_json(corridor / "manifest.json")["file_meta"]["caves"]
     path = corridor / info["file"]
     assert path.stat().st_size == info["bytes"]
     gltf, _ = _glb(path)
