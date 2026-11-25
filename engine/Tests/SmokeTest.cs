@@ -36,7 +36,8 @@ public partial class SmokeTest : Node
     public static readonly Dictionary<string, string[]> ShaderUniforms = new()
     {
         ["res://shaders/cross_section.gdshader"] =
-            ["plane_normal", "plane_offset_m", "strata_thickness_m", "section_rect", "hole_rect", "color_mode", "strata", "palette"],
+            ["plane_normal", "plane_offset_m", "strata_thickness_m", "section_rect", "hole_rect", "color_mode", "strata", "palette",
+             "has_surface_height", "surface_height_tex"],
         ["res://shaders/strata_section.gdshader"] =
             ["strata", "strata_top", "palette", "surface_height", "water_table", "section_rect"],
         ["res://shaders/cave.gdshader"] = ["palette", "use_palette", "plane_normal"],
@@ -60,6 +61,9 @@ public partial class SmokeTest : Node
 
     /// <summary>프랙탈 디테일 높이맵 이름 (굽기 폴더 안).</summary>
     public const string DetailName = "heightmap_detail";
+
+    /// <summary>나눠 만든 메시 검사에서 둘레에 다는 치마 깊이 (m).</summary>
+    public const float SkirtCheckM = 30.0f;
 
     private bool _done;
     private ulong _startedMs;
@@ -104,7 +108,7 @@ public partial class SmokeTest : Node
             return;
         }
         if (!await CheckPhysics(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main) || !CheckLayers(main)
-            || !CheckUiScale(main))
+            || !CheckUiScale(main) || !CheckPerfLine(main))
         {
             return;
         }
@@ -223,7 +227,104 @@ public partial class SmokeTest : Node
             return Fail($"HeightAt 이 표본 값과 다릅니다: {hm.HeightAt(probe)}, 기대 {expected}");
         }
         GD.Print($"높이맵: {w} x {h}, 간격 {hm.SpacingM:F1} m, 높이 {lo:F2} ~ {hi:F2} m");
+        return CheckChunkedMesh(hm, vertices);
+    }
+
+    /// <summary>
+    /// 나눠 만든 지형 메시: 조각 수, 가장 고운 삼각형 수(치마 포함), 조각 꼭짓점이 한 장 메시와 같은지,
+    /// 그리고 여러 조각 크기와 간격에서 거친 삼각형 목록이 조각을 겹침 없이 꼭 한 번 덮는지 봅니다.
+    /// </summary>
+    private bool CheckChunkedMesh(HeightmapLoader hm, Vector3[] vertices)
+    {
+        int w = hm.Width;
+        int h = hm.Height;
+        HeightmapLoader.ChunkedMesh chunked = hm.BuildChunkedMesh(SkirtCheckM);
+        int nChunks = (HeightmapLoader.ChunkEdges(w - 1, HeightmapLoader.ChunkQuads).Length - 1)
+            * (HeightmapLoader.ChunkEdges(h - 1, HeightmapLoader.ChunkQuads).Length - 1);
+        long want = ((long)(w - 1) * (h - 1) * 2) + (((2 * (w + h)) - 4) * 4);
+        if (chunked.Chunks.Length != nChunks || chunked.Triangles != want || chunked.Skirt is null)
+        {
+            return Fail($"지형 조각 {chunked.Chunks.Length} 개 (기대 {nChunks}), 삼각형 {chunked.Triangles} (기대 {want}), "
+                + $"치마 {(chunked.Skirt is null ? "없음" : "있음")}");
+        }
+        Vector3[] first = chunked.Chunks[0].SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        Vector3[] last = chunked.Chunks[^1].SurfaceGetArrays(0)[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        if (!first[0].IsEqualApprox(vertices[0]) || !last[^1].IsEqualApprox(vertices[^1]))
+        {
+            return Fail("지형 조각의 꼭짓점이 한 장 메시의 꼭짓점과 다릅니다");
+        }
+        int lists = 0;
+        foreach (int nx in new[] { 32, 33, 56, 63, 64, 95 })
+        {
+            foreach (int nz in new[] { 32, 52, 64 })
+            {
+                foreach (int stride in new[] { 1, 2, 3, 4, 8, 16, 31, 32 })
+                {
+                    if (stride > 1 && stride >= Math.Min(nx, nz))
+                    {
+                        continue;
+                    }
+                    string? why = LodCoverError(nx, nz, stride);
+                    if (why is not null)
+                    {
+                        return Fail($"거친 삼각형 목록 (조각 {nx} × {nz} 칸, 간격 {stride}): {why}");
+                    }
+                    lists++;
+                }
+            }
+        }
+        GD.Print($"지형 조각: 표본 {chunked.Chunks.Length} 조각, 가장 고운 삼각형 {chunked.Triangles} (치마 포함), "
+            + $"거친 목록 {lists} 개가 조각을 꼭 한 번 덮음");
         return true;
+    }
+
+    /// <summary>
+    /// 삼각형 목록이 nx × nz 칸 사각형을 겹침 없이 꼭 한 번 덮는지 봅니다: 넓이 합 = nx · nz, 모두 시계 방향(앞면 위),
+    /// 같은 변을 같은 방향으로 두 번 쓰지 않음, 짝 없는 변은 조각 둘레의 한 칸짜리 변뿐. 맞으면 null, 아니면 까닭.
+    /// </summary>
+    private static string? LodCoverError(int nx, int nz, int stride)
+    {
+        int[] idx = HeightmapLoader.LodIndices(nx, nz, stride);
+        int w = nx + 1;
+        long twiceArea = 0;
+        var edges = new HashSet<(int, int)>();
+        for (int t = 0; t < idx.Length; t += 3)
+        {
+            int a = idx[t];
+            int b = idx[t + 1];
+            int c = idx[t + 2];
+            long cross = ((long)((b % w) - (a % w)) * ((c / w) - (a / w))) - ((long)((b / w) - (a / w)) * ((c % w) - (a % w)));
+            if (cross <= 0)
+            {
+                return $"{t / 3}번 삼각형이 시계 방향이 아니거나 넓이가 0 입니다";
+            }
+            twiceArea += cross;
+            foreach ((int p, int q) in new[] { (a, b), (b, c), (c, a) })
+            {
+                if (!edges.Add((p, q)))
+                {
+                    return $"변 {p}–{q} 를 같은 방향으로 두 번 씁니다 (겹침)";
+                }
+            }
+        }
+        if (twiceArea != 2L * nx * nz)
+        {
+            return $"넓이 합 {twiceArea / 2.0} 이 {nx * nz} 와 다릅니다";
+        }
+        foreach ((int p, int q) in edges)
+        {
+            if (edges.Contains((q, p)))
+            {
+                continue;
+            }
+            bool sameRow = p / w == q / w && (p / w == 0 || p / w == nz) && Math.Abs(p - q) == 1;
+            bool sameCol = p % w == q % w && (p % w == 0 || p % w == nx) && Math.Abs(p - q) == w;
+            if (!sameRow && !sameCol)
+            {
+                return $"변 {p}–{q} 의 짝이 없는데 조각 둘레의 한 칸짜리 변이 아닙니다 (틈)";
+            }
+        }
+        return null;
     }
 
     /// <summary>회랑 장면을 만들어 트리에 붙이고 구성이 맞는지 봅니다. 실패하면 null.</summary>
@@ -242,9 +343,15 @@ public partial class SmokeTest : Node
             Fail("Terrain 노드가 없거나 높이맵을 읽지 못했습니다");
             return null;
         }
-        if (terrain.GetNodeOrNull("Mesh") is not MeshInstance3D)
+        if (terrain.GetNodeOrNull("Mesh") is not Node3D meshRoot || meshRoot.GetNodeOrNull("Chunk0") is not MeshInstance3D)
         {
-            Fail("Terrain 아래 Mesh 가 없습니다");
+            Fail("Terrain 아래 Mesh (지형 조각을 담는 노드) 나 첫 조각 Mesh/Chunk0 이 없습니다");
+            return null;
+        }
+        if (terrain.SkirtM > 0.0f && (terrain.GetNodeOrNull("Mesh/Skirt") is not MeshInstance3D skirt
+            || !skirt.GetInstanceShaderParameter("is_skirt").AsBool()))
+        {
+            Fail("치마 노드 Mesh/Skirt 가 없거나, 치마의 층 색을 그린 높이로 고르는 is_skirt 가 꺼져 있습니다");
             return null;
         }
         if (terrain.GetNodeOrNull("Body/Shape") is not CollisionShape3D collision || collision.Shape is not HeightMapShape3D)
@@ -539,8 +646,22 @@ public partial class SmokeTest : Node
             return Fail("모두 보기 뒤에 지형이 숨어 있습니다");
         }
 
-        // 단면: 켜면 판이 보이고 지형 재질의 자르는 면이 바뀝니다.
+        // 지형 재질은 층 깊이를 그린 면 대신 지금 회랑 높이맵에서 잽니다 (먼 조각의 거친 메시에서 색이 바뀌지 않게).
         var m = (ShaderMaterial)terrain.Material!;
+        var heightSize = new Vector2(terrain.Heightmap.Width, terrain.Heightmap.Height);
+        if (!m.GetShaderParameter("has_surface_height").AsBool()
+            || m.GetShaderParameter("surface_height_size").AsVector2() != heightSize)
+        {
+            return Fail($"지형 재질에 회랑 높이맵({heightSize.X} × {heightSize.Y})이 들어가지 않았습니다");
+        }
+        var surround = baked.GetNode<HeightmapTerrain>("Surround");
+        int edgeChunks = terrain.GetNode("Mesh").GetChildren()
+            .Count(n => n is GeometryInstance3D g && Mathf.IsEqualApprox(g.LodBias, HeightmapLoader.EdgeLodBias));
+        GD.Print($"지형 조각: 회랑 {terrain.GetNode("Mesh").GetChildCount()} 노드 (가장자리 {edgeChunks} 조각은 거친 메시 전환 거리 "
+            + $"{HeightmapLoader.EdgeLodBias:F0}배), 주변 지형 {surround.GetNode("Mesh").GetChildCount()} 노드, "
+            + $"가장 고운 삼각형 회랑 {terrain.MeshTriangles()} · 주변 {surround.MeshTriangles()}");
+
+        // 단면: 켜면 판이 보이고 지형 재질의 자르는 면이 바뀝니다.
         Vector3 cg = terrain.ToGlobal(c);
         baked.SetSection(true, cg, Vector3.Back);
         var section = baked.GetNode<MeshInstance3D>("Section");
@@ -790,7 +911,60 @@ public partial class SmokeTest : Node
         {
             return Fail($"[-] 뒤 배율이 처음 {before:F2} 로 돌아오지 않았습니다: {UiScale.UserFactor():F2}");
         }
-        GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인");
+        // 자동 배율 = max(화면 배율, 창 크기 배율), 2D 화면이 1024×600 보다 작아지지 않게 줄임, 1 이상.
+        Vector2 baseSize = UiScale.BaseWindowSize();
+        (Vector2 Size, float Screen, float Want)[] cases =
+        [
+            (new Vector2(1920.0f, 1080.0f), 1.0f, 1920.0f / 1152.0f),   // 배율 1 프로젝터: 창 크기로 1.67
+            (new Vector2(2304.0f, 1296.0f), 2.0f, 2.0f),                // 맥 레티나 기본 창
+            (new Vector2(1152.0f, 648.0f), 2.0f, 648.0f / 600.0f),      // 레티나의 작은 창: 겹치지 않게 1.08
+            (new Vector2(1024.0f, 768.0f), 1.0f, 1.0f),                 // 4:3 프로젝터: 1 아래로 줄이지 않음
+        ];
+        foreach ((Vector2 size, float screenScale, float want) in cases)
+        {
+            float got = UiScale.AutoFactorFor(size, screenScale, baseSize);
+            if (Math.Abs(got - want) > 1e-3f)
+            {
+                return Fail($"창 {size.X}×{size.Y}, 화면 배율 {screenScale} 의 자동 배율이 {got:F3} 입니다 (기대 {want:F3})");
+            }
+        }
+        GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인, 배율 1 화면의 1920×1080 창 "
+            + $"{UiScale.AutoFactorFor(new Vector2(1920.0f, 1080.0f), 1.0f, baseSize):F2}배");
+        return true;
+    }
+
+    /// <summary>HUD 화면 속도 줄: 처음에 켜져 있고 P 로 숨기고 다시 켜는지, 큰 수를 '만' 단위로 줄여 쓰는지 봅니다.</summary>
+    private bool CheckPerfLine(Main main)
+    {
+        Hud hud = main.Hud;
+        if (!hud.PerfVisible)
+        {
+            return Fail("화면 속도 줄이 처음부터 꺼져 있습니다");
+        }
+        hud._UnhandledInput(KeyEvent(Hud.PerfKey));
+        if (hud.PerfVisible)
+        {
+            return Fail("P 를 눌렀는데 화면 속도 줄이 남아 있습니다");
+        }
+        hud._UnhandledInput(KeyEvent(Hud.PerfKey));
+        if (!hud.PerfVisible)
+        {
+            return Fail("P 를 다시 눌렀는데 화면 속도 줄이 켜지지 않았습니다");
+        }
+        (long N, string Want)[] cases = [(9_999, "9,999"), (205_192, "20.5만"), (6_271_682, "627만"), (25_198_728, "2,520만")];
+        foreach ((long n, string want) in cases)
+        {
+            if (FrameStats.Man(n) != want)
+            {
+                return Fail($"FrameStats.Man({n}) 이 '{FrameStats.Man(n)}' 입니다 (기대 '{want}')");
+            }
+        }
+        string line = FrameStats.HudLine(new FrameStats.Sample(59.6, 0.0, 1_018_244, 1_347_904, 268));
+        if (line != "화면 속도 60 fps · 삼각형 102만 + 그림자 135만")
+        {
+            return Fail($"화면 속도 줄이 '{line}' 입니다");
+        }
+        GD.Print($"화면 속도 줄: P 로 숨기기·켜기 확인, 예: {line}");
         return true;
     }
 

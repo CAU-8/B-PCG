@@ -67,8 +67,11 @@ public partial class Screenshots : Node
         var main = GD.Load<PackedScene>(MainScene).Instantiate<Main>();
         GetTree().Root.AddChild(main);
         main.SetProcessUnhandledInput(false);
+        main.Hud.SetProcessUnhandledInput(false);
         main.Player.SetProcessUnhandledInput(false);
         main.Player.SetPhysicsProcess(false);
+        // 화면 속도 줄은 찍을 때마다 숫자가 달라 그림끼리 견주기 어려우므로 숨깁니다.
+        main.Hud.SetPerfVisible(false);
         BakedLayers baked = main.Baked;
         Player player = main.Player;
         HeightmapTerrain terrain = main.Terrain;

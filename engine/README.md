@@ -95,6 +95,7 @@ uv run bpcg bake --hero out/earth/hero
 | M | 지구본 장면(행성 전체)으로. 지구본에서 M을 누르면 돌아옴 |
 | N | 처음 화면(새 행성 만들기·지난 결과)으로. 지구본에서도 같음 |
 | - / = | 글자·패널 크기를 10%씩 줄이기 / 키우기 (60~250%). 고른 크기는 다음 실행에도 씀 |
+| P | 왼쪽 위 첫 줄(화면 속도와 그린 삼각형 수) 숨기기·켜기 ('화면 속도와 그리기 비용' 절) |
 
 지구본 장면의 조작(끌어서 돌리기, 휠, Space 자동 회전, F 유역으로, 1~9 레이어 등)은 [GLOBE.md](GLOBE.md)에 있습니다.
 
@@ -126,9 +127,63 @@ uv run bpcg bake --hero out/earth/hero
 
 - 창은 쓸 수 있는 화면의 90%까지 키웁니다. 창 크기를 따로 주었으면 그대로 둡니다.
 - 3D 화면은 원래 해상도로 그립니다. 글자와 패널만 커집니다.
-- 창이 작아지면 패널과 도움말이 겹치지 않게 배율을 줄입니다.
+- 글자 배율은 화면 배율과 창 크기 배율 가운데 큰 값입니다. 창 크기 배율은 창이 기본 창(1152 × 648)의 몇 배인지입니다(가로·세로 가운데 작은 쪽).
+- 그래서 배율 1인 프로젝터에서 1920 × 1080 창을 띄우면 글자를 1.67배로 그립니다. 화면 배율만 보면 1배로 그려, 글자가 창에서 차지하는 몫이 노트북 기본 창(배율 2, 2304 × 1296)의 0.6배로 줄어듭니다.
+- 창이 작아지면 패널과 도움말이 겹치지 않게 배율을 줄입니다(2D 화면이 1024 × 600보다 작아지지 않게, 1배보다 작게는 줄이지 않음).
 - `-` / `=` 로 더 키우거나 줄이고, 고른 크기는 `user://settings.cfg` 에 남습니다.
 - 마우스 둘러보기와 지구본 끌기는 화면 픽셀 기준이라, 배율을 바꿔도 감도가 같습니다.
+
+## 화면 속도와 그리기 비용
+
+회랑 장면 왼쪽 위의 첫 줄은 화면 속도와 그리기 비용입니다(P로 숨김). 예: `화면 속도 60 fps · 삼각형 102만 + 그림자 135만`.
+
+- **화면 속도(fps)** 는 1초에 새로 그린 화면 수입니다. 맥북 화면은 1초에 60번 바뀌므로 60이면 끊김 없이 움직입니다. 맥은 창 화면을 대개 1초에 60장만 받아 가서, 더 빨리 그릴 수 있어도 60 근처에서 멈춥니다.
+- **GPU 한 장 ms** 는 그래픽 칩이 화면 한 장을 그린 시간입니다. 16.7 ms보다 짧으면 60 fps를 지킬 여유가 있습니다. 맥의 Metal 판 Godot는 이 시간을 재 주지 않아 맥에서는 줄에 나오지 않습니다.
+- **삼각형** 은 지난 화면에서 실제로 그린 삼각형 수입니다. **그림자** 는 그림자 지도(해 쪽에서 땅을 한 번 더 그려 어디가 그늘인지 정하는 그림)를 만들려고 다시 그린 삼각형 수입니다.
+
+### 지형을 조각으로 나눠 그리는 까닭
+
+회랑 지형(2 m 간격, 삼각형 300만 개)과 주변 지형(25 m 간격, 327만 개)을 메시 하나씩으로 그리면, Godot는 화면에 조금만 걸쳐도 메시 전체를 그립니다. 그림자 지도는 눈에서 1,000 m 안을 거리별로 네 겹으로 나눠 겹마다 다시 그립니다. 그래서 그림자에만 삼각형 2,520만 개를 그렸고, laptop 회랑이 1초에 약 30장만 그려졌습니다. 지금은 두 가지로 줄여 그립니다(`HeightmapLoader.BuildChunkedMesh`).
+
+1. **조각.** 지형을 64 × 64 칸씩 나눕니다(회랑 47 × 8 = 376조각, 주변 지형 20 × 20 = 400조각). Godot는 화면 밖 조각과 그림자 거리 밖 조각을 건너뜁니다.
+2. **거친 메시(LOD, 먼 물체를 삼각형을 줄인 모양으로 그리는 기법).** 조각마다 2·4·8·16·32칸마다 한 줄만 쓰는 거친 삼각형 목록을 미리 만듭니다. 목록마다 그 조각의 실제 높이와 가장 크게 어긋나는 값(m)을 재 두고, 그 어긋남이 화면에서 1 px보다 작아지는 거리부터 거친 목록으로 그립니다.
+    - 예: 1920 × 1080 화면에서 1 px은 1 km 앞에서 약 1.4 m입니다. 그래서 어긋남이 1.4 m인 목록은 1 km보다 먼 조각에 씁니다.
+
+헷갈리기 쉬운 점:
+
+- 조각 둘레의 꼭짓점은 거친 목록에서도 모두 씁니다. 그래서 옆 조각이 다른 간격으로 그려져도 경계에 틈이 생기지 않습니다.
+- 거친 메시는 실제 지표보다 몇 m 높거나 낮게 그려집니다. 그대로 두면 땅속 층 색을 고를 때 흙 대신 그 아래 암석 색이 칠해집니다. 그래서 지형 셰이더는 층 깊이를 그린 면 대신 높이맵 텍스처의 높이에서 잽니다(`cross_section.gdshader` 의 `surface_y`).
+- 회랑 가장자리에 닿은 조각은 4배 먼 거리부터 거친 목록으로 바꿉니다. 가장자리에서 아래로 내린 30 m 벽(치마)의 윗부분이 먼 곳에서 가는 흰 점선으로 드러나지 않게 하기 위해서입니다.
+- 거친 메시는 보이는 모양만 바꿉니다. 걷기와 충돌은 원래 높이맵 그대로 계산합니다.
+- 먼 곳을 더 거칠게 그려 더 빨리 하려면 프로젝트 설정 `rendering/mesh_lod/lod_change/threshold_pixels`(기본 1 px)를 키웁니다. 2 px이면 어긋남이 2 px보다 작은 거리부터 거친 목록을 씁니다.
+
+### 고치기 전후의 화면 속도 (laptop 시드 0)
+
+laptop 시드 0 회랑, 맥북 에어 M3(GPU 10코어), Godot 4.7.2 Metal, 2026-11-26에 아래 '그리기 비용 재기' 명령으로 쟀습니다. 다른 작업이 CPU를 많이 쓰던 상태라 값이 ±2 ms쯤 흔들립니다. 'fps'는 사람이 보는 화면 속도(대개 60 근처에서 멈춤)이고, '한 장'은 화면에 내보내지 않고 같은 장면을 거듭 그려 잰 한 장의 시간입니다.
+
+| 시점 | 창 | 고치기 전 | 고친 뒤 |
+|---|---|---|---|
+| 시작 시점 (회랑 가운데 40 m 위에서 북쪽을 봄) | 1920 × 1080 | 32 fps, 한 장 29.1 ms, 삼각형 653만 + 그림자 2,520만 | 60 fps, 한 장 9.9 ms, 삼각형 102만 + 그림자 138만 |
+| 회랑 서쪽 끝 눈높이에서 회랑 전체를 따라 봄 | 1920 × 1080 | 31 fps, 한 장 29.2 ms, 653만 + 2,520만 | 54 fps, 한 장 11.6 ms, 248만 + 115만 |
+| 하늘(1.6 km 위)에서 회랑과 주변 지형 | 1920 × 1080 | 40 fps, 한 장 23.3 ms, 653만 + 1,309만 | 63 fps, 한 장 10.5 ms, 138만 + 7만 |
+| 시작 시점 | 2304 × 1296 (이 맥북의 기본 창) | 32 fps, 한 장 29.5 ms | 60 fps, 한 장 13.6 ms |
+| 회랑 전체를 따라 봄 | 2304 × 1296 | 30 fps, 한 장 32.2 ms | 56 fps, 한 장 15.3 ms |
+| 하늘에서 | 2304 × 1296 | 37 fps, 한 장 26.0 ms | 60 fps, 한 장 14.5 ms |
+
+- 회랑 장면을 여는 데 걸린 시간은 6.1 s에서 6.2 s로 거의 같습니다(1920 × 1080 실행). 조각과 거친 목록은 조각마다 따로 계산해 여러 코어로 나눠 만듭니다.
+- 그림자를 끄면 시작 시점은 한 장 9.9 ms에서 6.3 ms가 됩니다(1920 × 1080). 그림자 지도 크기, 그림자 겹 수(4 → 2), 그림자 거리(1,000 → 500 m)도 바꿔 봤지만 차이가 흔들림(±2 ms)보다 작아 그대로 둡니다.
+- 맥은 대개 1초에 60장 근처에서 멈추지만, 가끔 그보다 조금 더 받아 가서 63 fps처럼 나옵니다.
+
+### 그리기 비용 재기
+
+```bash
+dotnet build engine/Bpcg.Engine.csproj
+H=$(mktemp -d)
+HOME=$H $GODOT --headless --path engine --import
+HOME=$H $GODOT --path engine --disable-vsync --resolution 1920x1080 res://Tests/perf.tscn -- --baked-dir="$(pwd)/out/earth/corridor"
+```
+
+창이 떠서 세 시점(시작 시점, 회랑 끝에서 회랑 전체를 따라 본 눈높이, 하늘)마다 그림자·주변 지형을 켜고 끈 네 조합을 잽니다. 줄마다 `[그리기] <시점> · <설정>: … fps, 화면에 내보내지 않고 그리기만 한 장 … ms, 삼각형 … + 그림자 …` 가 나오고, 마지막 줄은 `BPCG_PERF_OK 12` 입니다. laptop 회랑에서 1분 안팎(60~80 s) 걸립니다(맥북 에어 M3). 재는 동안 창을 가리거나 화면을 끄면 Godot가 그리지 않아 `BPCG_PERF_FAIL` 로 끝납니다.
 
 ## 지구본과 구운 폴더를 찾는 순서
 
@@ -177,11 +232,35 @@ HOME=$H $GODOT --headless --path . -- --generate --profile=tiny --quit-when-done
 HOME=$H $GODOT --headless --path . res://Tests/smoke.tscn -- --baked-dir=<실행>/corridor --expect-baked
 HOME=$H $GODOT --headless --path . res://Tests/globe_smoke.tscn -- --baked-dir=<실행>/corridor --expect-globe
 HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --shots-dir=/절대/경로 --baked-dir=<실행>/corridor
+HOME=$H $GODOT --path . --disable-vsync --resolution 1920x1080 res://Tests/perf.tscn -- --baked-dir=<실행>/corridor
 ```
 
-화면 캡처(`Tests/screenshots.tscn`)는 회랑·지구본을 여러 시점과 레이어 조합으로 찍어 PNG로 남깁니다. 창을 띄우며, 찍는 동안 키보드·마우스 입력을 받지 않습니다.
+화면 캡처(`Tests/screenshots.tscn`)는 회랑·지구본을 여러 시점과 레이어 조합으로 찍어 PNG로 남깁니다. 창을 띄우며, 찍는 동안 키보드·마우스 입력을 받지 않습니다. 화면 속도 줄은 찍을 때마다 숫자가 달라 숨깁니다. 그리기 비용 재기(`Tests/perf.tscn`)는 '화면 속도와 그리기 비용' 절에 있습니다.
+
+연기 검사(`smoke.tscn`)는 그리기에 대해 다음 항목을 확인합니다: 지형 조각 수와 가장 고운 삼각형 수, 거친 삼각형 목록이 조각을 겹침·틈 없이 꼭 한 번 덮는지(조각 크기 6 × 3가지, 간격 8가지), 지형 재질에 회랑 높이맵이 들어갔는지, 치마의 `is_skirt`, 화면 속도 줄과 P 키, 화면 배율·창 크기로 정한 글자 배율.
 
 ---
+
+## 데모 실행 파일 만들기 (macOS)
+
+발표장에서는 편집기 없이 앱 하나로 여는 편이 안전합니다. `export_presets.cfg` 에 macOS 내보내기 설정 "macOS" 가 있어, 애플 실리콘(arm64)용 앱 `engine/export/B-PCG.app` 을 만듭니다(git 제외). 검사 장면(`Tests/`)과 `baked/` 는 앱에 넣지 않습니다.
+
+- 앱을 만들려면 Godot 내보내기 템플릿(앱의 바탕이 되는, 미리 빌드한 Godot 실행 파일 묶음)이 있어야 합니다. .NET 판 템플릿 `Godot_v4.7.2-stable_mono_export_templates.tpz` 는 1.2 GB입니다. 받을 주소와 SHA-512는 [docs/csharp_port.md](../docs/csharp_port.md)의 '받을 파일과 SHA-512'에 있습니다.
+- Godot는 템플릿을 `<HOME>/Library/Application Support/Godot/export_templates/4.7.2.stable.mono/` 에서 찾습니다. 내보내기도 화면 없는 편집기로 돌므로 임시 HOME을 쓰고, 그 임시 HOME 아래에 템플릿 폴더를 링크해 둡니다.
+- 애플 실리콘용으로 내보내려면 프로젝트 설정 `rendering/textures/vram_compression/import_etc2_astc`(텍스처를 애플 GPU가 읽는 압축 형식으로도 가져오기)가 켜져 있어야 합니다. 꺼져 있으면 Godot가 내보내기를 거절하므로 `project.godot` 에 켜 두었습니다.
+- 인텔 맥에서도 열려면 `binary_format/architecture` 를 `universal` 로 바꿉니다.
+
+```bash
+dotnet build engine/Bpcg.Engine.csproj
+H=$(mktemp -d)
+HOME=$H $GODOT --headless --path engine --import
+HOME=$H $GODOT --headless --path engine --export-release "macOS" export/B-PCG.app
+```
+
+템플릿이 없으면 마지막 명령이 `ERROR: Cannot export project with preset "macOS" due to configuration errors:` 와, 템플릿을 찾지 못했다는 줄(한국어 맥에서는 `예상된 경로에서 찾은 내보내기 템플릿이 없습니다:`)을 찍고 끝납니다. 여기까지만 돌려 확인했습니다(2026-11-26). 템플릿을 받은 뒤 앱이 만들어지고 열리는지는 아직 확인하지 못했습니다 [확인 필요]. 내보낼 때 .NET이 맥용 런타임 패키지(NuGet)를 한 번 받는지도 확인해야 합니다 [확인 필요].
+
+- 만든 앱도 시작 화면부터 엽니다. 행성 만들기는 저장소의 `configs/` 를 앱 위치에서 위로 올라가며 찾으므로, 앱이 저장소 안(`engine/export/`)에 있을 때만 됩니다. 다른 맥에서는 지난 결과 열기만 됩니다('남은 일').
+- 코드 서명은 Godot 내장 임시 서명(기본값)입니다. 다른 맥으로 옮긴 앱이 열리는지는 확인하지 못했습니다 [확인 필요].
 
 ## 한눈에 보기
 
@@ -193,6 +272,8 @@ HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --
 | 좌표 | X = 동, Y = 위, Z = 남, 단위 m. 회랑 기준점을 원점으로 한 지역 좌표 |
 | 장면 | `scenes/start.tscn`(처음 화면, 시작 장면) · `scenes/main.tscn`(회랑) · `scenes/globe.tscn`(지구본) |
 | 카메라 | 40,000 m(40 km)까지 그림. 주변 25 m 지형(한 변 32~40 km) 끝까지 보이게 |
+| 지형 그리기 | 64 × 64 칸 조각, 먼 조각은 거친 메시(어긋남 1 px 미만), 해 그림자는 눈에서 1,000 m 안만 |
+| 내보내기 | `export_presets.cfg` 의 "macOS" (애플 실리콘 arm64, `export/B-PCG.app`) |
 | 생성 결과 | `user://runs/<날짜-시각>-<프로필>-s<시드(난수 계산기가 출발점으로 삼는 번호)>/{planet,hero,corridor,globe}` (맥: `~/Library/Application Support/Godot/app_userdata/B-PCG/runs/`) |
 | 설정 | 저장소의 `configs/` 를 그대로 읽음(프로젝트 폴더에서 위로 찾음, 환경 변수 `BPCG_CONFIGS` 로 바꿈) |
 
@@ -202,8 +283,9 @@ HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --
 |---|---|
 | `project.godot`, `Bpcg.Engine.csproj`, `Bpcg.Engine.sln`, `packages.lock.json` | Godot 프로젝트와 C# 프로젝트 (sln은 편집기 빌드용) |
 | `scenes/` | `start.tscn`, `main.tscn`, `globe.tscn` |
-| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui`·`UiScale`(창·글자 배율) |
-| `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn` 과 그 C# |
+| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui`·`UiScale`(창·글자 배율)·`FrameStats`(화면 속도·그린 삼각형 수) |
+| `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn`·`perf.tscn`(그리기 비용 재기) 과 그 C# |
+| `export_presets.cfg` | 데모 실행 파일 내보내기 설정 ('데모 실행 파일 만들기' 절) |
 | `shaders/` | 단면·지층·동굴·물·지구본·대기 셰이더 (`.gdshader`, `.gdshaderinc`) |
 | `samples/` | 굽기 폴더가 없을 때 쓰는 작은 표본 높이맵 (`make_sample.py` 로 만듦) |
 | `GLOBE.md` | 지구본 장면과 `globe/` 파일 형식 |
@@ -296,4 +378,8 @@ C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.Lo
 ## 남은 일
 
 - 내보낸 게임에는 저장소의 `configs/` 가 없습니다. 설정을 게임에 넣어 `user://` 로 풀어 쓰는 방법을 정해야 합니다(`Scripts/EnginePaths.cs` 의 TODO).
+- 데모 앱 내보내기는 템플릿(1.2 GB)을 받지 않아 끝까지 돌려 보지 못했습니다('데모 실행 파일 만들기' 절).
+- 회랑 끝에서 회랑 전체를 따라 보는 시점은 한 장 11.6 ms(1920 × 1080)·15.3 ms(2304 × 1296)인데도 화면 속도가 54·56 fps로, 다른 작업이 CPU를 많이 쓰던 상태에서 60을 꾸준히 지키지 못했습니다. 한가한 맥에서 다시 재 봐야 합니다.
+- 하늘에서 내려다보면 주변 지형이 한 장에 약 8 ms(2304 × 1296 창)를 씁니다. 삼각형을 줄여도, 한쪽 면만 그려도 줄지 않아 화소마다 칠하는 비용으로 봅니다.
+- 맥(Metal)에서는 GPU 시간을 재지 못해, 화면 속도가 60 아래로 떨어진 까닭이 GPU인지 CPU인지 HUD로는 구분할 수 없습니다. 그리기 비용 재기 장면의 '한 장' 값으로 봅니다.
 - 10/21 런타임 복셀 관문(실행 중에 땅을 파고 쌓는 godot_voxel 확장, [docs/roadmap.md](../docs/roadmap.md))은 아직 시험하지 않았습니다. 넣을 때는 `engine/addons/` 아래에 두고, 화면 없이 `ClassDB.ClassExists("VoxelLodTerrain")` 부터 확인합니다. 안 되면 지금의 높이맵·glb 형식을 그대로 씁니다.

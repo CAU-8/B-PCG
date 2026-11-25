@@ -131,7 +131,7 @@ public partial class BakedLayers : Node3D
     private HeightmapTerrain _terrain = null!;
     private HeightmapTerrain? _surround;
     private MeshInstance3D? _water;
-    private MeshInstance3D? _waterTable;
+    private Node3D? _waterTable;
     private Node3D? _caves;
     private MeshInstance3D? _section;
     private float _sectionYCenter;
@@ -203,6 +203,7 @@ public partial class BakedLayers : Node3D
                 Strata.ApplyTo(_terrainMaterial);
             }
             ApplyCaveMouth(CaveMouthName);
+            ApplySurfaceHeight();
         }
 
         t = Time.GetTicksMsec();
@@ -462,9 +463,29 @@ public partial class BakedLayers : Node3D
         {
             ApplyCaveMouth(on ? CaveMouthDetailName : CaveMouthName);
         }
+        ApplySurfaceHeight();
         ApplySectionSurface();
         ApplySurfaceOffset(on);
         return on;
+    }
+
+    /// <summary>
+    /// 지형 재질이 땅속 층 깊이를 그린 면 대신 지금 회랑 높이맵에서 재게 합니다 (cross_section.gdshader 의 surface_y).
+    /// 먼 지형 조각은 칸을 건너뛴 거친 메시로 그려 그린 면이 실제 지표보다 몇 m 높거나 낮을 수 있습니다. 그 높이로 층을 고르면
+    /// 더 깊은 층의 색이 칠해집니다 (예: 흙 대신 그 아래 석회암 색).
+    /// </summary>
+    private void ApplySurfaceHeight()
+    {
+        HeightmapLoader? now = _terrain.Heightmap;
+        if (_terrainMaterial is null || now is null || !now.IsValid())
+        {
+            return;
+        }
+        _terrainMaterial.SetShaderParameter("has_surface_height", true);
+        _terrainMaterial.SetShaderParameter("surface_height_tex", CachedTexture(now));
+        _terrainMaterial.SetShaderParameter("surface_height_origin", now.Origin);
+        _terrainMaterial.SetShaderParameter("surface_height_spacing_m", now.SpacingM);
+        _terrainMaterial.SetShaderParameter("surface_height_size", new Vector2(now.Width, now.Height));
     }
 
     /// <summary>
@@ -634,17 +655,13 @@ public partial class BakedLayers : Node3D
         {
             return;
         }
-        _waterTable = new MeshInstance3D
-        {
-            Name = "WaterTable",
-            Mesh = WaterTable.BuildMesh(),
-            Position = WaterTable.Origin,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
         ShaderMaterial m = NewCutMaterial(WaterShaderPath);
         m.SetShaderParameter("water_color", WaterTableColor);
         m.SetShaderParameter("roughness", 0.3f);
-        _waterTable.MaterialOverride = m;
+        // 지형과 같이 조각으로 나눠, 화면 밖 조각은 건너뛰고 먼 조각은 거친 목록으로 그립니다.
+        _waterTable = HeightmapTerrain.MeshNode(
+            WaterTable.BuildChunkedMesh(), WaterTable.Origin, m, GeometryInstance3D.ShadowCastingSetting.Off);
+        _waterTable.Name = "WaterTable";
         AddChild(_waterTable);
         SetSection(SectionOn, SectionPoint, SectionNormal);
     }
