@@ -11,7 +11,8 @@ namespace Bpcg.Planet;
 /// </summary>
 /// <remarks>
 /// build_materials: continent_mask → plates → crust → ocean(해수면, 바다) → uplift → climate.
-/// transfer_materials: 거친 격자 → 고운 격자 (docs/pipeline.md 1·4장). 옮기는 규칙은 Python 모듈 docstring 과 같습니다.
+/// transfer_materials: 거친 격자 → 고운 격자 (docs/pipeline.md 1·4장). 옮기는 규칙은 Python 모듈 docstring 과 같고, 발산 경계
+/// 거리만 다릅니다: 수렴 경계 거리처럼 경계 양쪽에 반대 부호를 붙여 옮깁니다 (<see cref="DivergentDistanceToFine"/>).
 /// info 의 seconds 는 걸린 시간이라 대조하지 않습니다.
 /// </remarks>
 public static class Materials
@@ -20,21 +21,35 @@ public static class Materials
         ["plate_id", "boundary_type", "convergence_kind", "subduction_side", "crust_type"];
 
     public static readonly string[] LinearFields =
-        ["convergence_m_per_yr", "spreading_m_per_yr", "dist_divergent_m", "crust_thickness_m", "ocean_age_myr"];
+        ["convergence_m_per_yr", "spreading_m_per_yr", "crust_thickness_m", "ocean_age_myr"];
 
+    /// <summary>
+    /// 그대로 보간하지 않는 필드. 두 경계 거리는 경계 양쪽에 반대 부호를 붙여 보간하고(<see cref="DivergentDistanceToFine"/>,
+    /// 수렴 경계는 TransferMaterials 본문), 나머지는 L0 에서 다시 계산합니다.
+    /// </summary>
     public static readonly string[] RecomputedFields =
     [
-        "dist_convergent_m", "z_platform_m", "is_ocean", "uplift_m_per_yr", "exhumation_m", "dist_arc_m",
+        "dist_convergent_m", "dist_divergent_m", "z_platform_m", "is_ocean", "uplift_m_per_yr", "exhumation_m", "dist_arc_m",
         "precip_m_per_yr", "temperature_c", "pet_m_per_yr", "runoff_m_per_yr", "runoff_eff_m_per_yr",
     ];
 
     /// <summary>부호 거리 보간을 믿는 범위: 거친 칸 2개 안.</summary>
     public const double SignedDistRangeCells = 2.0;
 
+    // 해수면: 설정에 ocean.target_fraction(바다가 덮는 비율)이 있으면 그 비율로, 없으면 ocean.water_volume_m3(물의 부피)로 정합니다.
     private static (double H, bool[] Ocean) SeaLevelAndMask(CellGraph graph, double[] zPlatform, Config cfg)
     {
-        double h = Ocean.SeaLevel(zPlatform, graph.Area, cfg.F("ocean.water_volume_m3"));
+        double h = UsesOceanFraction(cfg)
+            ? Ocean.SeaLevelForFraction(graph, zPlatform, cfg.F("ocean.target_fraction"))
+            : Ocean.SeaLevel(zPlatform, graph.Area, cfg.F("ocean.water_volume_m3"));
         return (h, Ocean.OceanMask(graph, zPlatform, h));
+    }
+
+    /// <summary>설정이 해수면을 바다가 덮는 비율(ocean.target_fraction)로 정하는지. 거짓이면 물의 부피로 정합니다.</summary>
+    public static bool UsesOceanFraction(Config cfg)
+    {
+        Section ocean = cfg.Sec("ocean");
+        return ocean.Contains("target_fraction") && ocean.Get("target_fraction") is not null;
     }
 
     // graph.area[mask].sum() / graph.area.sum() (둘 다 numpy pairwise 합)
@@ -142,6 +157,61 @@ public static class Materials
     }
 
     /// <summary>
+    /// 발산 경계까지 거리 dist_divergent_m 을 고운 격자(L0)로 옮깁니다. 경계선 위에서 거리가 0 이 되도록, 경계 양쪽 칸에 반대 부호를
+    /// 붙여 보간합니다. nearestIdx 는 L0 칸마다 가장 가까운 거친 칸 번호입니다.
+    /// </summary>
+    /// <remarks>
+    /// 거친 격자의 발산 경계 칸은 경계선에서 반 칸 떨어져 있어서, 거리 값이 반 칸입니다(laptop 약 28~39 km). 경계 양쪽 칸이 모두
+    /// 이 값이라 그대로 보간하면 두 칸 사이의 경계선 위에서도 반 칸이 나옵니다. 그러면 열곡 축(docs/pipeline.md 4.4)이 설정만큼
+    /// 가라앉지 않습니다. 한쪽을 음수로 두면 보간한 값이 두 칸 사이에서 0 을 지나고, 그 절댓값이 경계선까지 거리가 됩니다.
+    /// 예: 78 km 떨어진 두 경계 칸의 값이 +39 km 와 −39 km 이면, 한쪽에서 19.5 km 떨어진 L0 칸은 |39 − 78 × 0.25| = 19.5 km 입니다.
+    /// 부호는 경계 칸마다 건너편 판(<see cref="Plates.AcrossPlate"/>)의 번호가 제 판보다 크면 +, 작으면 − 입니다. 그래서 판 P 와 Q 사이
+    /// 경계의 양쪽 칸은 늘 반대 부호입니다. 경계가 아닌 칸은 같은 판에서 가장 가까운 발산 경계 칸의 부호를 받습니다
+    /// (dist_divergent_m 을 잰 방법과 같음). 같은 판에 발산 경계가 없는 칸은 + 입니다.
+    /// 부호를 붙여 보간한 값은 가장 가까운 거친 칸이 발산 경계 칸인 L0 칸에만 씁니다. 다른 곳에서는 경계가 없어도 부호가 바뀌는
+    /// 자리가 있기 때문입니다. 판 하나가 번호가 더 큰 판, 더 작은 판과 모두 발산 경계를 이루면, 그 판 안에서 가장 가까운 경계가
+    /// 바뀌는 선을 사이에 두고 부호가 뒤집힙니다. 같은 두 판 사이 경계라도 발산이 아닌 구간(변환·수렴)에서는 양쪽 부호가 반대입니다.
+    /// 이 자리의 거친 칸은 발산 경계 칸이 아니라 걸러집니다. 걸러진 L0 칸은 그대로 보간한 거리를 씁니다. 발산 경계 칸에서 한 칸 넘게
+    /// 떨어진 곳은 거리가 칸을 건널 때마다 고르게 늘어서, 그대로 보간해도 맞습니다.
+    /// </remarks>
+    internal static double[] DivergentDistanceToFine(
+        CellGraph coarseGraph, FieldSet coarseFields, CellGraph fineGraph, double big, long[] nearestIdx)
+    {
+        int nSrc = (int)coarseGraph.Shape[1];
+        int n = coarseGraph.NCells;
+        double[] dist = coarseFields.GetFloat64("dist_divergent_m");
+        double[] output = FiniteResample(dist, nSrc, fineGraph, big, nearestIdx);
+        int[] plate = coarseFields.Get<int>("plate_id");
+        bool[] isDiv = Array.ConvertAll(coarseFields.Get<byte>("boundary_type"), b => b == Plates.Divergent);
+        if (Array.IndexOf(isDiv, true) < 0)
+        {
+            return output;
+        }
+        int[] across = Plates.AcrossPlate(coarseGraph.Nbr, plate);
+        double[] sideAtBoundary = new double[n];
+        for (int c = 0; c < n; c++)
+        {
+            sideAtBoundary[c] = across[c] > plate[c] ? 1.0 : -1.0;
+        }
+        (_, _, double[] side) = Distance.NearestSourceValues(Plates.SamePlateGraph(coarseGraph, plate), isDiv, sideAtBoundary);
+        double[] signedC = new double[n];
+        for (int c = 0; c < n; c++)
+        {
+            double d = double.IsFinite(dist[c]) ? dist[c] : big;
+            signedC[c] = side[c] < 0.0 ? -d : d; // 같은 판에 발산 경계가 없으면 side 가 NaN 이라 + 입니다.
+        }
+        double[] signedF = Resample.ResampleSphere(signedC, nSrc, fineGraph);
+        for (int f = 0; f < output.Length; f++)
+        {
+            if (isDiv[nearestIdx[f]] && double.IsFinite(output[f]))
+            {
+                output[f] = Math.Abs(signedF[f]);
+            }
+        }
+        return output;
+    }
+
+    /// <summary>
     /// 거친 격자 재료를 고운 구면 그래프(L0)로 옮기고, 좁은 것과 해수면·기후는 다시 계산합니다 (transfer_materials).
     /// coarseInfo 가 null 이거나 z_platform_base_m 이 없으면 z_platform_m − 해구로 다시 만듭니다.
     /// info: sea_level_m, ocean_fraction, continental_fraction, bathymetry_m, z_platform_base_m, trench_m, seconds.
@@ -160,6 +230,7 @@ public static class Materials
         var need = new List<string>(CategoricalFields);
         need.AddRange(LinearFields);
         need.Add("dist_convergent_m");
+        need.Add("dist_divergent_m");
         need.Add("z_platform_m");
         foreach (string name in need)
         {
@@ -184,7 +255,7 @@ public static class Materials
         {
             output[name] = Resample.ResampleSphere(coarseFields.GetFloat64(name), nSrc, fineGraph);
         }
-        output["dist_divergent_m"] = FiniteResample(coarseFields.GetFloat64("dist_divergent_m"), nSrc, fineGraph, big, idx);
+        output["dist_divergent_m"] = DivergentDistanceToFine(coarseGraph, coarseFields, fineGraph, big, idx);
 
         // 해양저 나이: 대륙 NaN 을 가장 가까운 해양 값으로 채워 보간 → 고운 격자 대륙 칸은 NaN.
         double[] ageC = coarseFields.GetFloat64("ocean_age_myr");

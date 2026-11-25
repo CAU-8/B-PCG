@@ -15,16 +15,34 @@ namespace Bpcg.Metrics;
 /// 점수표: 행성(L0)과 히어로(L2) 결과를 지표 표로 묶습니다 (src/bpcg/metrics/scorecard.py, docs/pipeline.md 12장).
 /// 항목마다 {value, unit, kind, pass, note}.
 /// </summary>
+/// <remarks>
+/// 종류(kind)는 넷입니다. forced 는 입력이 거의 정하는 값, emergent 는 입력에 없던 성질이 결과로 나온 값('지구답다'는
+/// 근거로 쓰는 종류), check 는 결과를 따로 다시 재어 어기면 불합격인 규칙, self 는 만드는 코드가 그렇게 짜여 있어 늘 맞아야
+/// 하는 규칙(코드 자기 검사)입니다. self 가 어기면 코드 결함이고, 맞아도 지구와 닮았다는 근거가 아닙니다.
+/// 계산이 예외로 끝난 항목은 value 가 null 이고 note 가 ErrorPrefix 로 시작합니다(check·self 는 불합격, 나머지는 판정 없음).
+/// </remarks>
 public static class Scorecard
 {
+    public const string Forced = "forced";
+    public const string Emergent = "emergent";
+    public const string Check = "check";
+    public const string Self = "self";
+
+    /// <summary>계산이 예외로 끝난 항목의 note 머리. 스튜디오(summary.py)와 기록 줄이 이 글자로 찾습니다.</summary>
+    public const string ErrorPrefix = "계산 실패: ";
+
     public static readonly OrderedDictionary<string, double> DefaultThresholds = new()
     {
         ["earth_ocean_fraction"] = 0.708,
         ["shelf_depth_m"] = 200.0,
         ["bimodal_min_separation_m"] = 1000.0,
+        ["bimodal_bin_m"] = Hypsometry.BimodalBinM,
+        ["bimodal_smooth_m"] = Hypsometry.BimodalSmoothM,
         ["flat_slope"] = 0.02,
         ["gw_surface_tol_m"] = 0.5,
-        ["law_median_max"] = 1.0e-3,
+        // 법칙 자기일관성의 합격선: 모든 칸에서 |S − 법칙|/법칙 < 0.01. 물·흙의 양이 1% 넘게 바뀐 칸은 정상상태 아님으로
+        // 빼므로(Pipeline.LostFlowTolerance), 남은 칸은 법칙과 1% 안이어야 합니다 (1% 바뀌면 경사는 약 0.45% 바뀜).
+        ["law_max"] = 1.0e-2,
         ["budget_max"] = 1.0e-6,
         ["alignment_max"] = 1.3,
         ["rock_samples"] = 10_000,
@@ -297,7 +315,7 @@ public static class Scorecard
             }
             else if (errors[i] is ArgumentException e)
             {
-                output[key] = Entry(null, unit, kind, kind == "check" ? false : null, $"계산 실패: {e.Message}");
+                output[key] = Entry(null, unit, kind, kind is Check or Self ? false : null, ErrorPrefix + e.Message);
             }
             else if (errors[i] is Exception x)
             {
@@ -320,12 +338,29 @@ public static class Scorecard
     {
         OrderedDictionary<string, double> th = l.Th;
         string p = l.Name;
-        Run(jobs, $"{p}.ocean_fraction", "emergent", "", l.Missing(["is_ocean"], graph: true), () =>
+        // 바다 비율은 대륙 지각 넓이(입력 plates.continental_area_fraction)가 거의 정합니다. 그래서 forced 로 두고,
+        // 설명 글에 바다 지각 넓이에서 얼마나 벗어났는지(섬, 잠긴 대륙)를 적습니다.
+        // 해수면을 바다가 덮는 비율(ocean.target_fraction)로 정한 설정에서는 바다 비율이 입력 그대로입니다.
+        bool byFraction = l.Cfg is not null && Bpcg.Planet.Materials.UsesOceanFraction(l.Cfg);
+        Run(jobs, $"{p}.ocean_fraction", Forced, "", l.Missing(["is_ocean", "crust_type"], graph: true), () =>
         {
-            double v = Hypsometry.OceanFraction(l.Bool("is_ocean"), l.Graph!.Area);
-            return (v, null, $"물 부피 보존 해수면으로 나온 값. 지구 {PyFormat.Repr(th["earth_ocean_fraction"])}");
+            bool[] ocean = l.Bool("is_ocean");
+            double v = Hypsometry.OceanFraction(ocean, l.Graph!.Area);
+            if (byFraction)
+            {
+                return (v, null, $"바다가 덮는 비율(ocean.target_fraction)을 정해 해수면을 잡았으므로 입력이 그대로 나온 값. "
+                    + $"지구 {PyFormat.Repr(th["earth_ocean_fraction"])}");
+            }
+            (double oceanic, double emerged, double drowned) = Hypsometry.OceanFractionParts(ocean, l.Long("crust_type"), l.Graph!.Area);
+            string input = l.Cfg is not null && l.Cfg.Contains("plates") && l.Cfg.Sec("plates").Contains("continental_area_fraction")
+                ? $"(입력 plates.continental_area_fraction {G(l.Cfg.F("plates.continental_area_fraction"))})"
+                : "(입력 plates.continental_area_fraction)";
+            string note = $"바다 지각 넓이 {PyFormat.Fixed(oceanic, 3)} − 물 위로 솟은 바다 지각 {PyFormat.Fixed(emerged, 3)} "
+                + $"+ 물에 잠긴 대륙 지각 {PyFormat.Fixed(drowned, 3)}. 대륙 지각 넓이{input}가 거의 정하는 값. "
+                + $"지구 {PyFormat.Repr(th["earth_ocean_fraction"])}";
+            return (v, null, note);
         });
-        Run(jobs, $"{p}.shelf_area", "emergent", "km2", l.Missing(["z_m", "crust_type", "is_ocean"], graph: true), () =>
+        Run(jobs, $"{p}.shelf_area", Emergent, "km2", l.Missing(["z_m", "crust_type", "is_ocean"], graph: true), () =>
         {
             (double a, double frac) = Hypsometry.ShelfArea(
                 l.D("z_m"), l.Graph!.Area, l.Long("crust_type"), l.Bool("is_ocean"), th["shelf_depth_m"]);
@@ -334,10 +369,11 @@ public static class Scorecard
             return (a / 1.0e6, null, note);
         });
         string zname = l.F.Contains("z_mean_m") ? "z_mean_m" : "z_m";
-        Run(jobs, $"{p}.hypsometry_bimodal", "forced", "m", l.Missing([zname], graph: true), () =>
+        Run(jobs, $"{p}.hypsometry_bimodal", Forced, "m", l.Missing([zname], graph: true), () =>
         {
             OrderedDictionary<string, object?> r = Hypsometry.Bimodality(
-                l.D(zname), l.Graph!.Area, minSeparationM: th["bimodal_min_separation_m"]);
+                l.D(zname), l.Graph!.Area, binM: th["bimodal_bin_m"], smoothM: th["bimodal_smooth_m"],
+                minSeparationM: th["bimodal_min_separation_m"]);
             string peaks = string.Join(", ", ((List<object?>)r["peaks"]!).Select(v => PyFormat.Fixed((double)v!, 0)));
             string note = $"{zname} 면적 가중 분포의 봉우리 [{peaks}] m (돌출 봉우리 {r["n_peaks"]}개), "
                 + $"간격 > {G(th["bimodal_min_separation_m"])} m 이면 합격. 지각 비율·지각평형으로 거의 정해지는 반쯤 입력";
@@ -350,7 +386,7 @@ public static class Scorecard
         OrderedDictionary<string, double> th = l.Th;
         string p = l.Name;
 
-        Run(jobs, $"{p}.hack_exponent", "emergent", "", l.Missing(["receiver", "drainage_area_m2"], graph: true), () =>
+        Run(jobs, $"{p}.hack_exponent", Emergent, "", l.Missing(["receiver", "drainage_area_m2"], graph: true), () =>
         {
             int n = l.N;
             (double c, double h) = Drainage.HackFit(
@@ -362,7 +398,7 @@ public static class Scorecard
         // 행성 지도(L0) 칸은 한 변 약 19.5 km 라 거의 모든 육지 칸이 물길(지하수가 빠지는 곳)이고, 그 칸의 지하수면은
         // 수면이나 지표와 같습니다. 그래서 행성 값은 칸 크기가 정하는 값이라 forced 로 두고 지구와 비교하지 않습니다.
         bool sphereLevel = l.Graph is not null && l.Graph.Kind == "sphere";
-        Run(jobs, $"{p}.gw_surface_fraction", sphereLevel ? "forced" : "emergent", "", l.Missing(["z_m", "water_table_m"]), () =>
+        Run(jobs, $"{p}.gw_surface_fraction", sphereLevel ? Forced : Emergent, "", l.Missing(["z_m", "water_table_m"]), () =>
         {
             double[] z = l.D("z_m");
             double v = Hypsometry.GwSurfaceFraction(z, l.D("water_table_m"), l.Land(z.Length), th["gw_surface_tol_m"], l.Graph?.Area);
@@ -375,7 +411,10 @@ public static class Scorecard
             return (FiniteOrNull(v), null, note);
         });
 
-        Run(jobs, $"{p}.river_reach_fraction", "check", "", l.Missing(["receiver", "is_river"]), () =>
+        // 코드 자기 검사(self): 물길은 수신 칸을 따라 내려가면 바다·호수·출구에 닿게 만들고(6장), 강은 유량이 문턱을 넘는
+        // 칸이라 하류로 갈수록 유량이 줄지 않으면 강이 끊기지 않습니다. 땅속으로 사라지는 자리와 닫힌 호수만 유량이 줄어
+        // 끝으로 셉니다.
+        Run(jobs, $"{p}.river_reach_fraction", Self, "", l.Missing(["receiver", "is_river"]), () =>
         {
             int n = l.N;
             bool[] ocean = l.Flag("is_ocean", n);
@@ -407,13 +446,14 @@ public static class Scorecard
                 return (null, null, "하천 칸 없음");
             }
             string ponors = nPonors > 0 ? $", 땅속으로 사라지는 자리 {nPonors}곳도 끝으로 셈" : "";
-            return (v, v == 1.0, $"하천 {riv.Count(b => b)}칸, 기준 100%{ponors}");
+            return (v, v == 1.0, $"하천 {riv.Count(b => b)}칸, 기준 100%{ponors}. 물길을 만드는 방식에서 늘 맞는 코드 자기 검사");
         });
 
-        Run(jobs, $"{p}.river_backflow", "check", "cells", l.Missing(["receiver", "is_river", "water_level_m"]), () =>
+        // 코드 자기 검사(self): 수면은 Water.WaterBodies 가 강을 따라 하류로 갈수록 높아지지 않게 맞춰 둡니다.
+        Run(jobs, $"{p}.river_backflow", Self, "cells", l.Missing(["receiver", "is_river", "water_level_m"]), () =>
         {
             long v = Drainage.RiverBackflowCount(l.Rcv(), l.D("water_level_m"), l.Bool("is_river"));
-            return (v, v == 0, "수신 셀 수면이 더 높은 하천 칸 수, 기준 0");
+            return (v, v == 0, "수신 셀 수면이 더 높은 하천 칸 수, 기준 0. 수면을 정하는 코드가 맞춰 두는 코드 자기 검사");
         });
 
         bool lawGiven = l.Diag.ContainsKey("law_slope");
@@ -422,7 +462,7 @@ public static class Scorecard
         {
             lawNeed.AddRange(["discharge_m3_per_yr", "drainage_area_m2", "sediment_flux_m3_per_yr", "uplift_m_per_yr", "k_s"]);
         }
-        Run(jobs, $"{p}.law_consistency", "check", "", l.Missing(lawNeed, graph: !lawGiven, cfg: !lawGiven), () =>
+        Run(jobs, $"{p}.law_consistency", Check, "", l.Missing(lawNeed, graph: !lawGiven, cfg: !lawGiven), () =>
         {
             int n = l.N;
             double[] lawS = lawGiven
@@ -454,13 +494,17 @@ public static class Scorecard
             {
                 return (null, null, "볼 칸 없음");
             }
-            double median = (double)r["median"]!;
-            string note = $"|S − 법칙|/법칙 중앙값 (최댓값 {PyFormat.General((double)r["max"]!, 3)}, {r["n"]}칸{excl}), "
-                + $"기준 < {G(th["law_median_max"])}";
-            return (median, median < th["law_median_max"], note);
+            double max = (double)r["max"]!;
+            long over = Drainage.LawOverCount(l.D("slope"), lawS, l.D("s_crit"), mask, th["law_max"]);
+            string note = $"|S − 법칙|/법칙 가장 큰 값 (가운데값 {PyFormat.General((double)r["median"]!, 3)}, "
+                + $"{G(th["law_max"])} 넘는 칸 {over}개, {r["n"]}칸{excl}), 기준 < {G(th["law_max"])}. "
+                + "솔버 뒤에 고친 칸과 그 영향으로 물·흙의 양이나 받는 칸 높이가 바뀐 칸(정상상태 아님)은 뺌";
+            return (max, max < th["law_max"], note);
         });
 
-        Run(jobs, $"{p}.water_budget", "check", "", l.Missing(["receiver", "discharge_m3_per_yr", "runoff_eff_m_per_yr"], graph: true), () =>
+        // 코드 자기 검사(self): 유량은 파이프라인이 같은 수신 칸과 같은 누적으로 만든 값입니다. 칸마다 그 칸까지 모인 양에
+        // 견주므로, 뒤에서 유량을 고친 코드가 작은 개울의 물을 잃거나 더하면 잡습니다.
+        Run(jobs, $"{p}.water_budget", Self, "", l.Missing(["receiver", "discharge_m3_per_yr", "runoff_eff_m_per_yr"], graph: true), () =>
         {
             double[] reff = l.D("runoff_eff_m_per_yr");
             double[] src = new double[reff.Length];
@@ -488,11 +532,13 @@ public static class Scorecard
                 }
             }
             double v = Drainage.BudgetError(l.Rcv(), l.D("discharge_m3_per_yr"), src, l.Order());
-            string note = $"Q = 누적(A·R_eff{(hasExtra ? " + 들어오는 물" : "")}{(hasKarst ? " + 땅속과 주고받는 물" : "")}), 기준 ≤ {G(th["budget_max"])}";
+            string note = $"Q = 누적(A·R_eff{(hasExtra ? " + 들어오는 물" : "")}{(hasKarst ? " + 땅속과 주고받는 물" : "")}), "
+                + $"칸마다 그 칸까지 모인 양에 견준 상대 오차의 최댓값, 기준 ≤ {G(th["budget_max"])}. 같은 누적을 다시 하는 코드 자기 검사";
             return (v, v <= th["budget_max"], note);
         });
 
-        Run(jobs, $"{p}.sediment_budget", "check", "", l.Missing(["receiver", "sediment_flux_m3_per_yr", "uplift_m_per_yr"], graph: true), () =>
+        // 코드 자기 검사(self): 흙의 양도 파이프라인이 같은 누적으로 만든 값입니다.
+        Run(jobs, $"{p}.sediment_budget", Self, "", l.Missing(["receiver", "sediment_flux_m3_per_yr", "uplift_m_per_yr"], graph: true), () =>
         {
             double[] u = l.D("uplift_m_per_yr");
             double[] src = new double[u.Length];
@@ -501,12 +547,15 @@ public static class Scorecard
                 src[c] = l.Graph!.Area[c] * u[c];
             }
             double v = Drainage.BudgetError(l.Rcv(), l.D("sediment_flux_m3_per_yr"), src, l.Order(), true);
-            return (v, v <= th["budget_max"], $"Qs = max(누적(A·U), 0), 기준 ≤ {G(th["budget_max"])}");
+            return (v, v <= th["budget_max"], $"Qs = max(누적(A·U), 0), 칸마다 그 칸까지 모인 양에 견준 상대 오차의 최댓값, "
+                + $"기준 ≤ {G(th["budget_max"])}. 같은 누적을 다시 하는 코드 자기 검사");
         });
 
+        // 코드 자기 검사(self): 지표 암석(Model.SurfaceRock)과 솔버의 S_crit 는 같은 층 기둥을 같은 높이에서 찾은 값입니다.
+        // 높이를 뒤에서 고친 칸(선상지·정상상태 아님)을 빼면 두 조회가 늘 같습니다.
         bool rockGiven = l.Diag.ContainsKey("rock_samples");
         List<string> rockNeed = rockGiven ? [] : ["z_m", "surface_rock", "strata_bottom_m", "strata_rock"];
-        Run(jobs, $"{p}.rock_consistency", "check", "", l.Missing(rockNeed), () =>
+        Run(jobs, $"{p}.rock_consistency", Self, "", l.Missing(rockNeed), () =>
         {
             double v;
             string src;
@@ -556,7 +605,7 @@ public static class Scorecard
             {
                 return (null, null, "표본 없음");
             }
-            return (v, v == 1.0, $"{src} {nS}점, 기준 100%");
+            return (v, v == 1.0, $"{src} {nS}점, 기준 100%. 지표 암석을 정한 같은 조회로 다시 견주는 코드 자기 검사");
         });
 
         List<string> caveNames = new[] { "cave_level_0_m", "cave_level_1_m" }.Where(l.F.Contains).ToList();
@@ -566,7 +615,8 @@ public static class Scorecard
             caveMissing.Add("cave_level_0_m");
         }
         caveMissing.AddRange(l.Missing(["strata_bottom_m", "strata_rock"]));
-        Run(jobs, $"{p}.cave_in_soluble", "check", "", caveMissing, () =>
+        // 코드 자기 검사(self): 동굴 층 높이는 그 높이의 암석이 녹는 암석일 때만 남깁니다(Caves.CaveLevels).
+        Run(jobs, $"{p}.cave_in_soluble", Self, "", caveMissing, () =>
         {
             (double v, long cnt) = CaveSolubleFraction(
                 caveNames.Select(l.D), l.D("strata_bottom_m"), l.U8("strata_rock"), l.Columns("strata_bottom_m"));
@@ -574,15 +624,18 @@ public static class Scorecard
             {
                 return (null, null, "동굴 칸 없음 (판정 없음)");
             }
-            return (v, v == 1.0, $"동굴 (칸, 층) {cnt}개, 기준 100%");
+            return (v, v == 1.0, $"동굴 (칸, 층) {cnt}개, 기준 100%. 동굴 층을 만든 거름 조건을 다시 적용하는 코드 자기 검사");
         });
 
-        Run(jobs, $"{p}.water_rule_violations", "check", "cells", l.Missing(["z_m", "water_table_m", "water_level_m"]), () =>
+        // 코드 자기 검사(self): 지하수면은 Groundwater.WaterTable 이 물 칸에서 수면과 같게, 마른 칸에서 지표 아래로, 아래
+        // 지하수면은 맨 위 지하수면 아래로 자릅니다.
+        Run(jobs, $"{p}.water_rule_violations", Self, "cells", l.Missing(["z_m", "water_table_m", "water_level_m"]), () =>
         {
             double[]? lower = l.F.Contains("water_table_lower_m") ? l.D("water_table_lower_m") : null;
             OrderedDictionary<string, object?> r = WaterRuleViolations(
                 l.D("z_m"), l.D("water_table_m"), l.D("water_level_m"), lower, th["water_rule_tol_m"]);
-            string note = $"땅 위로 솟음 {r["above"]}, 물 칸 수면 불일치 {r["water"]}, 아래 지하수면이 더 높음 {r["lower"]}, NaN {r["nan"]}. 기준 0";
+            string note = $"땅 위로 솟음 {r["above"]}, 물 칸 수면 불일치 {r["water"]}, 아래 지하수면이 더 높음 {r["lower"]}, NaN {r["nan"]}. "
+                + "기준 0. 지하수면을 정하는 코드가 맞춰 두는 코드 자기 검사";
             long total = (long)r["total"]!;
             return (total, total == 0, note);
         });
@@ -591,15 +644,16 @@ public static class Scorecard
         foreach (string band in bands)
         {
             string key = $"{p}.grid_alignment" + (band == "all" ? "" : $"_{band}");
-            Run(jobs, key, "check", "", l.Missing(["receiver", "is_river"], graph: true), () =>
+            Run(jobs, key, Check, "", l.Missing(["receiver", "is_river"], graph: true), () =>
             {
-                (long hit, long used) = Drainage.AlignmentCounts(l.Graph!, l.Rcv(), l.Bool("is_river"), band);
+                (long hit, long used, double expected) = Drainage.AlignmentCounts(l.Graph!, l.Rcv(), l.Bool("is_river"), band);
                 if (used == 0)
                 {
                     return (null, null, $"띠 '{band}' 에 6칸을 따라갈 하천 칸 없음");
                 }
-                double v = ((double)hit / used) / (2.0 * Drainage.AlignmentTolDeg / 45.0);
-                string note = $"띠 '{band}', 면 로컬 (i, j), 6칸 하류 방향, 하천 칸 {used}개, 무작위 = 1, 목표 < {G(th["alignment_max"])}";
+                double v = hit / expected;
+                string note = $"띠 '{band}', 면 로컬 (i, j), 하천 칸 {used}개 가운데 6칸 하류까지의 칸 차이가 가로·세로·대각선인 칸 "
+                    + $"{hit}개 ÷ 방향이 무작위일 때의 기대 {PyFormat.Fixed(expected, 1)}개, 무작위 = 1, 목표 < {G(th["alignment_max"])}";
                 if (used < Drainage.AlignmentMinCells)
                 {
                     // 칸이 적으면 방향이 무작위여도 지수가 합격선을 넘을 수 있어 판정하지 않습니다.
@@ -609,7 +663,7 @@ public static class Scorecard
             });
         }
 
-        Run(jobs, $"{p}.solver_converged", "check", "", l.Diag.ContainsKey("converged") ? [] : ["diag.converged"], () =>
+        Run(jobs, $"{p}.solver_converged", Check, "", l.Diag.ContainsKey("converged") ? [] : ["diag.converged"], () =>
         {
             bool c = (bool)l.Diag["converged"]!;
             l.Diag.TryGetValue("iterations", out object? it);
@@ -628,7 +682,7 @@ public static class Scorecard
     private static void AddHeroOnly(List<Job> jobs, Level l)
     {
         string p = l.Name;
-        Run(jobs, $"{p}.flat_fraction", "emergent", "", l.Missing(["slope"]), () =>
+        Run(jobs, $"{p}.flat_fraction", Emergent, "", l.Missing(["slope"]), () =>
         {
             double[] s = l.D("slope");
             double v = Hypsometry.FlatFraction(s, l.Land(s.Length), l.Th["flat_slope"], l.Graph?.Area);
@@ -652,7 +706,10 @@ public static class Scorecard
                 diag is not null && diag.TryGetValue(name, out IReadOnlyDictionary<string, object?>? d) && d is not null
                     ? d
                     : new Dictionary<string, object?>();
-            var l = new Level(name, fields ?? new FieldSet(), graph, levelDiag, cfg, th);
+            // 행성 단계는 행성 단계의 설정(퇴적 항을 끈 landscape.deposition_g_l0)으로 풀었으므로, 경사 법칙도 그 설정으로 다시 셈합니다.
+            // 히어로 단계의 값으로 셈하면 산비탈 항에 퇴적 항이 섞여, 칸이 작은 행성에서 법칙과 어긋난 것처럼 나옵니다.
+            Config? levelCfg = name == "planet" && cfg is not null ? Pipeline.L0Config(cfg) : cfg;
+            var l = new Level(name, fields ?? new FieldSet(), graph, levelDiag, levelCfg, th);
             if (graph is not null && fields is not null && fields.Count > 0)
             {
                 foreach (KeyValuePair<string, Array> kv in fields)
@@ -680,4 +737,9 @@ public static class Scorecard
     /// <summary>점수표에서 pass 가 False 인 항목 이름 (failed_checks).</summary>
     public static List<string> FailedChecks(OrderedDictionary<string, object?> card) =>
         card.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["pass"] is false).Select(kv => kv.Key).ToList();
+
+    /// <summary>계산이 예외로 끝난 항목 이름 (note 가 ErrorPrefix 로 시작). 종류와 상관없이 모두 셉니다.</summary>
+    public static List<string> ComputeErrors(OrderedDictionary<string, object?> card) =>
+        card.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["note"] is string note && note.StartsWith(ErrorPrefix, StringComparison.Ordinal))
+            .Select(kv => kv.Key).ToList();
 }

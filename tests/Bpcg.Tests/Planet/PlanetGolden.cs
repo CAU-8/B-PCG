@@ -65,12 +65,17 @@ internal static class PlanetGolden
         return fs;
     }
 
-    /// <summary>golden 의 prefix 배열을 C# FieldSet 과 비교합니다 (이름 집합이 같아야 함).</summary>
-    public static void AssertFields(GoldenCase g, string prefix, FieldSet actual, string what)
+    /// <summary>
+    /// golden 의 prefix 배열을 C# FieldSet 과 비교합니다 (이름 집합이 같아야 함). skip 에 든 필드는 양쪽에서 빼고 비교합니다
+    /// (정답 자료를 만든 뒤 계산을 일부러 바꾼 필드. 부르는 시험이 따로 확인합니다).
+    /// </summary>
+    public static void AssertFields(GoldenCase g, string prefix, FieldSet actual, string what, IReadOnlyCollection<string>? skip = null)
     {
         string[] expectedNames = g.Arrays.Keys.Where(k => k.StartsWith(prefix, System.StringComparison.Ordinal))
-            .Select(k => k[prefix.Length..]).OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
-        string[] actualNames = actual.Names.OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
+            .Select(k => k[prefix.Length..]).Where(k => skip is null || !skip.Contains(k))
+            .OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
+        string[] actualNames = actual.Names.Where(k => skip is null || !skip.Contains(k))
+            .OrderBy(k => k, System.StringComparer.Ordinal).ToArray();
         Assert.Equal(expectedNames, actualNames);
         foreach (string name in expectedNames)
         {

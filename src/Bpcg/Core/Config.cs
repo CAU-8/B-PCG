@@ -76,6 +76,24 @@ public class Section
     /// <summary>float(v): 정수·실수·bool 을 double 로.</summary>
     public double F(string key) => ConfigValue.ToDouble(Lookup(key), key);
 
+    /// <summary>
+    /// 실수 값. 설정에 키가 없으면 <paramref name="fallback"/> 을 돌려줍니다. 나중에 더한 키를 그 키가 없는 설정 파일에서도
+    /// 읽을 때 씁니다(예: 지구 크기에 맞춘 길이를 작은 행성 설정에서만 바꿀 때). 키가 있는데 값이 숫자가 아니면 <see cref="F"/> 처럼 예외를 냅니다.
+    /// </summary>
+    public double FOr(string key, double fallback)
+    {
+        object? v;
+        try
+        {
+            v = Lookup(key);
+        }
+        catch (KeyNotFoundException)
+        {
+            return fallback;
+        }
+        return ConfigValue.ToDouble(v, key);
+    }
+
     /// <summary>int(v): 실수는 0 쪽으로 자르고 NaN·inf·int64 밖이면 예외.</summary>
     public long I(string key) => ConfigValue.ToLong(Lookup(key), key);
 

@@ -53,12 +53,38 @@ public sealed class PlanetMaterialsTests
             : null;
 
         (FieldSet fields, OrderedDictionary<string, object?> info) = Materials.TransferMaterials(coarse, coarseFields, coarseInfo, fine, cfg);
-        PlanetGolden.AssertFields(g, "out.f.", fields, name);
+        // dist_divergent_m 은 정답 자료를 만든 뒤 일부러 바꿨습니다. 경계 양쪽에 반대 부호를 붙여 보간해, 경계선 위에서 거리가
+        // 0 에 닿게 했습니다 (docs/pipeline.md 4.1, Materials.DivergentDistanceToFine). 그래서 이 필드는 따로 봅니다.
+        PlanetGolden.AssertFields(g, "out.f.", fields, name, skip: ["dist_divergent_m"]);
+        AssertSignedDivergentDistance(g.Out("f.dist_divergent_m").AsDouble(), fields.GetFloat64("dist_divergent_m"),
+            coarseFields.Get<byte>("boundary_type"), Cubesphere.CellOf(fine.Unit(), m.GetProperty("n_coarse").GetInt32()), name);
         PlanetGolden.AssertInfoArrays(g, "out.info.", info, $"{name}.info");
         foreach (string key in new[] { "sea_level_m", "ocean_fraction", "continental_fraction" })
         {
             Compare.Bits(g.Out(key).ScalarDouble(), System.Convert.ToDouble(info[key], System.Globalization.CultureInfo.InvariantCulture), $"{name}.{key}");
         }
+    }
+
+    /// <summary>
+    /// 옛 방법(그대로 보간)의 정답과 지금 dist_divergent_m 을 비교합니다. 가장 가까운 거친 칸이 발산 경계 칸이 아닌 L0 칸은 비트까지
+    /// 같아야 합니다. 발산 경계 칸 둘레의 L0 칸은 부호를 붙여 보간하므로 옛 값보다 크지 않고, 적어도 한 칸은 작아야 합니다.
+    /// </summary>
+    private static void AssertSignedDivergentDistance(double[] old, double[] now, byte[] coarseBoundary, long[] nearest, string name)
+    {
+        Assert.Equal(old.Length, now.Length);
+        int nSmaller = 0;
+        for (int f = 0; f < old.Length; f++)
+        {
+            if (coarseBoundary[nearest[f]] != Plates.Divergent)
+            {
+                Compare.Bits([old[f]], [now[f]], $"{name}.dist_divergent_m[{f}] (발산 경계 칸 둘레 밖)");
+                continue;
+            }
+            Assert.True(now[f] >= 0.0 && now[f] <= old[f] * (1.0 + 1e-12),
+                $"{name}.dist_divergent_m[{f}]: 부호 보간 값 {now[f]} 은 0 이상이고 옛 값 {old[f]} 이하여야 합니다");
+            nSmaller += now[f] < old[f] ? 1 : 0;
+        }
+        Assert.True(nSmaller > 0, $"{name}.dist_divergent_m: 발산 경계 둘레에서 옛 값보다 작아진 칸이 없습니다");
     }
 
     // 해수면(물 부피를 낮은 곳부터 채움), 바다 칸, 기울인 자전축의 위도와 기후. 흔든 구면 격자(면당 8칸)입니다.

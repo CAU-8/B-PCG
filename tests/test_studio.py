@@ -1022,23 +1022,52 @@ def test_field_meta_always_has_positive_min_and_sensible_uplift_range(runs, tmp_
 
 
 # ---------------------------------------------------------------- 개요 (점수표·경고·시간)
-def test_scorecard_keeps_checks_that_failed_to_compute():
+def test_scorecard_keeps_items_that_failed_to_compute():
+    """계산이 예외로 끝난 항목은 종류와 상관없이 줄과 경고로 남습니다.
+
+    입력이 없어 건너뛴 항목만 숨깁니다.
+    """
     planet = {
         "planet.law_consistency": {
             "value": None, "pass": False, "kind": "check", "note": "계산 실패: 빈 배열",
         },
-        "planet.water_budget": {"value": 1e-9, "pass": True, "kind": "check"},
-        "planet.hack_exponent": {"value": None, "pass": None, "kind": "emergent", "note": "건너뜀"},
-        "planet.ocean_fraction": {"value": 0.7, "pass": None, "kind": "emergent"},
+        "planet.water_budget": {"value": 1e-9, "pass": True, "kind": "self", "note": "기준"},
+        "planet.hack_exponent": {
+            "value": None, "pass": None, "kind": "emergent", "note": "계산 실패: min_area_cells",
+        },
+        "planet.shelf_area": {
+            "value": None, "pass": None, "kind": "emergent", "note": "건너뜀: 없는 입력 z_m",
+        },
+        "planet.ocean_fraction": {"value": 0.7, "pass": None, "kind": "forced", "note": "x"},
+        "planet.grid_alignment_edge": {"value": 1.5, "pass": False, "kind": "check", "note": "y"},
     }  # fmt: skip
     rows = {r["key"]: r for r in sm._scorecard_rows(planet, None)}
     assert "law_consistency" in rows and rows["law_consistency"]["planet"]["pass"] is False
-    assert "hack_exponent" not in rows
+    assert "hack_exponent" in rows and rows["hack_exponent"]["planet"]["pass"] is None
+    assert "shelf_area" not in rows
+    assert rows["water_budget"]["kind_label"].startswith("자기 검사 (self)")
     assert rows["ocean_fraction"]["earth"] == f"{sm.EARTH_OCEAN_FRACTION:g}"  # Scorecard.cs 기준값
     failed = sm.failed_checks(planet, None)
-    assert [f["key"] for f in failed] == ["planet.law_consistency"] and failed[0]["compute_failed"]
-    warns = sm._warnings(None, None, None, None, {}, {}, failed)
-    assert any("불합격" in w["message"] and "계산 실패" in w["message"] for w in warns)
+    keys = {f["key"]: f["compute_failed"] for f in failed}
+    assert keys == {
+        "planet.law_consistency": True,
+        "planet.hack_exponent": True,
+        "planet.grid_alignment_edge": False,
+    }
+    warns = [w["message"] for w in sm._warnings(None, None, None, None, {}, {}, failed)]
+    assert any("불합격" in m and "격자 정렬" in m and "Hack" not in m for m in warns)
+    assert any("계산하지 못했습니다" in m and "Hack" in m and "경사 법칙" in m for m in warns)
+
+
+def test_progress_warns_when_scorecard_items_fail_to_compute():
+    tr = ProgressTracker()
+    tr.start(0.0)
+    line = "[점수표] 항목 29개 가운데 합격·불합격을 가리는 것 12개, 불합격 없음, 계산 실패 없음"
+    tr.feed(line, 1.0)
+    assert tr.snapshot(1.0)["warnings"] == []
+    tr.feed("[히어로] 끝: 1.00 s, 점수표 불합격 없음, 계산 실패 1개 (hero.hack_exponent)", 2.0)
+    (w,) = tr.snapshot(2.0)["warnings"]
+    assert "계산하지 못했습니다" in w["message"]
 
 
 def test_summary_warns_on_unconverged_strength_limit_and_labels_corridor_times():

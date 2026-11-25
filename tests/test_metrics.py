@@ -1,8 +1,8 @@
 """점수표 검사 (docs/pipeline.md 12장): C# 이 쓴 scorecard.json 과 묶음 진단값.
 
-항목 모양, 요약 수, 그리고 결과 필드로 다시 셀 수 있는 지표(바다·대륙붕 넓이, 지하수면이 지표에
-닿는 넓이, 평평한 넓이)가 점수표 값과 같은지 봅니다. Hack 지수·격자 정렬 지수 같은 계산은
-C# 지표 코드(Metrics/*.cs)가 기준입니다.
+항목 모양, 종류(kind), 요약 수, 그리고 결과 필드로 다시 셀 수 있는 지표(바다·대륙붕 넓이, 지하수면이
+지표에 닿는 넓이, 평평한 넓이)가 점수표 값과 같은지 봅니다. Hack 지수·격자 정렬 지수 같은 계산은
+C# 지표 코드(Metrics/*.cs)와 그 시험(tests/Bpcg.Tests/Metrics)이 기준입니다.
 """
 
 import numpy as np
@@ -12,7 +12,19 @@ from bundles import read_json
 SHELF_DEPTH_M = 200.0  # Scorecard.cs DefaultThresholds["shelf_depth_m"]
 GW_SURFACE_TOL_M = 0.5  # ["gw_surface_tol_m"]
 FLAT_SLOPE = 0.02  # ["flat_slope"]
-KINDS = {"forced", "emergent", "check"}
+KINDS = {"forced", "emergent", "check", "self"}
+ERROR_PREFIX = "계산 실패: "  # Scorecard.cs ErrorPrefix
+# 만드는 코드가 늘 맞게 짠 규칙(코드 자기 검사, kind self).
+# 나머지 판정 항목은 결과를 다시 재는 check 입니다.
+SELF_CHECKS = {
+    "river_reach_fraction",
+    "river_backflow",
+    "water_budget",
+    "sediment_budget",
+    "rock_consistency",
+    "cave_in_soluble",
+    "water_rule_violations",
+}
 
 
 @pytest.mark.parametrize("level", ["planet", "hero"])
@@ -29,6 +41,21 @@ def test_scorecard_file_matches_bundle_and_summary(request, tiny_run, level):
     assert s["n_judged"] == sum(e["pass"] is not None for e in card.values())
     assert s["n_failed"] == len(s["failed"]) == sum(e["pass"] is False for e in card.values())
     assert s["n_failed"] == 0
+    errors = sorted(k for k, e in card.items() if e["note"].startswith(ERROR_PREFIX))
+    assert s["n_errors"] == len(s["errors"]) == 0 and s["errors"] == errors
+
+
+def test_scorecard_kinds(planet, hero):
+    """자기 검사·검사·입력이 정하는 값의 종류 (pipeline.md 12장 표)."""
+    for b in (planet, hero):
+        card = b.diag["scorecard"]
+        for name, e in card.items():
+            base = name.split(".", 1)[1]
+            if base in SELF_CHECKS:
+                assert e["kind"] == "self", name
+            elif base in ("law_consistency", "solver_converged") or base.startswith("grid_"):
+                assert e["kind"] == "check", name
+    assert planet.diag["scorecard"]["planet.ocean_fraction"]["kind"] == "forced"
 
 
 def test_planet_area_metrics_recount(planet):

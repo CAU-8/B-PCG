@@ -33,6 +33,7 @@ public static class Finder
     };
 
     public const double MaxLatDeg = 55.0;
+    /// <summary>후보 칸 둘레에서 건조한 땅의 비율을 재는 반지름 (m). 설정 <c>hero.dry_radius_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double DryRadiusM = 200_000.0;
     public const double DryAridityIndex = 1.0;
     public const double NormalizePercentile = 99.0;
@@ -286,7 +287,12 @@ public static class Finder
             {
                 isDry[c] = !ocean[c] && p[c] < DryAridityIndex * pet[c];
             });
-            double[] dry = DryFraction(g, isDry, idx, DryRadiusM);
+            double dryRadius = cfg.FOr("hero.dry_radius_m", DryRadiusM);
+            if (!(dryRadius > 0.0))
+            {
+                throw new ArgumentException($"hero.dry_radius_m({dryRadius} m)는 0 보다 커야 합니다. 후보 칸 둘레에서 건조한 땅의 비율을 재는 반지름입니다.");
+            }
+            double[] dry = DryFraction(g, isDry, idx, dryRadius);
             for (int k = 0; k < idx.Length; k++)
             {
                 parts["carbonate"][idx[k]] = carb[k];
