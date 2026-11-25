@@ -235,7 +235,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 결과 그림 `src/Bpcg.Figures`: ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF, 모두 MIT. 명령줄 `src/Bpcg.Cli`와 C# 시험도 이 프로젝트를 거쳐 같은 패키지를 씁니다.
     - 엔진 `engine/`: GodotSharp·GodotSharpEditor·Godot.SourceGenerators(Godot을 C#에서 부르는 패키지), 모두 MIT.
     - C# 시험 `tests/Bpcg.Tests`: xunit.v3과 그 하위 패키지는 Apache-2.0, 함께 딸려 오는 Microsoft.Testing.Platform 등은 MIT.
-    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3 [확인 필요: ILGPU의 라이선스].
+    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3, University of Illinois/NCSA 오픈 소스 라이선스(NuGet 갤러리에 올린 패키지의 라이선스 파일). MIT처럼 쓰고 고치고 다시 배포할 수 있고, BSD처럼 저작권 문구를 남기고 만든 사람의 이름을 홍보에 쓰지 않는다는 조건이 붙습니다. 위의 허용 목록(MIT·BSD·Apache-2.0)에는 이름이 없습니다.
 - **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
 - **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다. OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
 
