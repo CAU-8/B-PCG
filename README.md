@@ -180,4 +180,11 @@ flowchart LR
 
 ## 라이선스
 
-코드 라이선스는 아직 정하지 않았습니다. 자료의 출처와 꼭 붙여야 하는 문구는 [data/README.md](data/README.md)에 있습니다.
+코드와 문서(그림과 로고 포함)는 MIT 라이선스입니다([LICENSE](LICENSE)). MIT는 저작권 문구와 라이선스 글을 함께 남기면 누구나 쓰고, 고치고, 다시 나눠 주고, 팔 수 있게 허락하는 라이선스입니다. 저작권자는 `B-PCG contributors`, 곧 이 저장소에 코드와 문서를 쓴 모든 사람입니다.
+
+두 종류의 파일은 원래 조건을 따릅니다. 파일 목록과 라이선스 원문은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 있습니다.
+
+- numpy·scipy·matplotlib·CPython에서 옮겨 온 함수와 색표: 원래 라이선스(BSD-3-Clause 등)의 저작권 문구를 함께 남깁니다.
+- 진짜 지구 자료에서 잘라 온 시험 자료와 표: 예를 들어 `configs/pilot_basins.csv`는 OCTOPUS(강 모래로 잰 유역의 침식 속도 모음)에서 고른 행이라, 상업적으로 쓰지 못할 수 있습니다.
+
+받는 자료의 출처와 꼭 붙여야 하는 문구는 [data/README.md](data/README.md)에 있습니다.

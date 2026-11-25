@@ -19,6 +19,7 @@
 | 격자 | 가이드 1장 큐브스피어(주사위 여섯 면을 부풀려 공 모양으로 만든 격자) 규칙. `n`은 면 한 변의 칸 수, `n_cells = 6·n²`, 칸 번호 `c = f·n² + j·n + i` | 4절 |
 | 경로 | 코드에 절대 경로를 쓰지 않습니다. C#은 `Bpcg.Core.Paths`, 파이썬은 `bpcg_studio.paths`로만 찾습니다 | 8절 |
 | 데이터 | `data/`는 올리지 않습니다(README와 manifest만). 커밋하는 바이너리는 1 MB 이하 | 8절 |
+| 라이선스 | 코드와 문서는 MIT(`LICENSE`). 다른 프로젝트에서 옮겨 온 코드와 진짜 지구 자료에서 잘라 온 파일은 `THIRD_PARTY_NOTICES.md`에 적습니다 | 9절 |
 | 라이선스 격리 | GPL 도구(fastscapelib, TopoToolbox, pysheds, richdem)는 `analysis/`에서만 import합니다. ruff가 막습니다 | 9절 |
 | 재현성 | 생성기의 난수와 노이즈(무작위 값을 매끈하게 겹쳐 만든 높이 무늬)는 시드(난수 계산기가 출발점으로 삼는 번호)를 받은 정수 해시(`Bpcg.Core.Hashing`)로만. `System.Random`은 쓰지 않음 | 6절 |
 | git | main 직접 커밋 금지. 기능 브랜치 → PR → 리뷰 1명 → squash 합치기 | 10절 |
@@ -32,6 +33,7 @@
 b-pcg/
 ├── Bpcg.slnx            C# 솔루션 (src/Bpcg, src/Bpcg.Cli, src/Bpcg.Figures, engine, tests/Bpcg.Tests)
 ├── Directory.Build.props, global.json, .editorconfig   C# 공통 설정
+├── LICENSE, THIRD_PARTY_NOTICES.md   이 저장소의 라이선스(MIT)와, 옮겨 온 코드·잘라 온 자료의 목록
 ├── src/
 │   ├── Bpcg/            생성기 본체 (C# 라이브러리, Godot에 의존하지 않음)
 │   │   ├── Core/        격자·이웃·거리·행성 상수·노이즈·설정·경로 (가이드 1장, 공통 뼈대)
@@ -229,15 +231,26 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
 ## 9. 라이선스
 
-- **코드 라이선스.** 아직 정하지 않았습니다(개발 단계 0단계의 남은 일). 정하면 `LICENSE`에 적고, 데이터 라이선스와 분리합니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다(아래 '데이터').
+라이선스 글이 없으면 공개 저장소라도 남이 코드를 쓸 수 없습니다. 반대로 남의 코드나 자료를 원래 조건을 지키지 않고 넣으면, 이 저장소를 MIT로 나눠 줄 수 없게 됩니다. 그래서 무엇을 넣어도 되는지와, 넣으면 어디에 적는지를 정합니다.
+
+- **이 저장소의 라이선스.** 코드와 문서(그림과 로고 포함)는 MIT입니다(`LICENSE`, 저작권자 `B-PCG contributors`). MIT는 저작권 문구와 라이선스 글을 남기면 누구나 쓰고, 고치고, 다시 나눠 주고, 팔 수 있게 허락하는 라이선스입니다. PR로 올린 코드와 문서도 MIT로 들어갑니다.
+- **목록 파일.** 다른 프로젝트에서 옮겨 온 코드와 색표, 진짜 지구 자료에서 잘라 온 파일은 `THIRD_PARTY_NOTICES.md`에 적습니다. 라이선스 원문은 `docs/licenses/`에 둡니다. 이 파일들은 MIT가 아니라 원래 조건을 따릅니다.
+- **다른 프로젝트의 코드를 옮길 때.**
+    - MIT와 섞어 쓸 수 있는 허용형 라이선스(MIT, BSD, Apache-2.0, PSF, ISC 등)의 코드만 옮깁니다. GPL 코드와 비상업 조건의 코드는 옮기지 않습니다.
+    - 옮긴 파일의 머리 주석에 원본 프로젝트, 판, 파일 이름을 적습니다.
+    - `THIRD_PARTY_NOTICES.md` 2절 표에 한 줄을 더하고, 원문이 `docs/licenses/`에 없으면 함께 넣습니다.
+    - 예: `src/Bpcg/Numerics/Interp.cs`의 `Brentq`는 scipy의 `brentq.c`를 옮겼습니다. scipy 원문은 `docs/licenses/scipy_license.txt`에 있습니다.
 - **GPL 도구.** `analysis/`에서만 씁니다. GPL은 그 코드를 가져다 쓴 프로그램에도 GPL 조건을 따르게 하는 라이선스입니다. `analysis/` 밖에서 import하면 ruff가 막습니다(`TID251`).
-- **핵심 코드.** `src/Bpcg`는 직접 짠 C# 코드로 만들고, NuGet 패키지를 하나도 쓰지 않습니다. 다른 프로젝트가 쓰는 NuGet 패키지도 MIT·BSD·Apache-2.0 라이선스만 허용합니다. 프로젝트마다 쓰는 패키지는 그 폴더의 `packages.lock.json`에 있고, 라이선스(패키지 설명 파일 `.nuspec`에 적힌 값)는 이렇습니다.
+- **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
+- **패키지.** `src/Bpcg`는 NuGet 패키지를 하나도 쓰지 않습니다. 다른 프로젝트가 쓰는 NuGet 패키지도 MIT·BSD·Apache-2.0처럼 MIT 저장소와 섞어 쓸 수 있는 허용형 라이선스만 허용합니다. 프로젝트마다 쓰는 패키지는 그 폴더의 `packages.lock.json`에 있고, 라이선스(패키지 설명 파일 `.nuspec`에 적힌 값)는 이렇습니다.
     - 결과 그림 `src/Bpcg.Figures`: ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF, 모두 MIT. 명령줄 `src/Bpcg.Cli`와 C# 시험도 이 프로젝트를 거쳐 같은 패키지를 씁니다.
     - 엔진 `engine/`: GodotSharp·GodotSharpEditor·Godot.SourceGenerators(Godot을 C#에서 부르는 패키지), 모두 MIT.
     - C# 시험 `tests/Bpcg.Tests`: xunit.v3과 그 하위 패키지는 Apache-2.0, 함께 딸려 오는 Microsoft.Testing.Platform 등은 MIT.
-    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3 [확인 필요: ILGPU의 라이선스].
-- **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
-- **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다. OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
+    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3, University of Illinois/NCSA 라이선스(MIT와 거의 같은 허용형). nuget.org의 패키지 설명 파일이 가리키는 `LICENSE.txt`에서 확인했습니다.
+- **빌드한 프로그램을 나눠 줄 때.** Godot로 내보낸 게임이나 `dotnet publish` 결과에는 패키지와 Godot 엔진이 들어갑니다. 이런 실행 파일을 나눠 줄 때는 들어간 패키지와 Godot의 라이선스 글을 함께 넣습니다(`THIRD_PARTY_NOTICES.md` 4절).
+- **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다.
+    - 자료를 잘라 저장소에 넣으면 `THIRD_PARTY_NOTICES.md` 3절 표에 원자료, 조건, 인용을 적습니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다.
+    - OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
 
 ## 10. git과 협업 요약
 
