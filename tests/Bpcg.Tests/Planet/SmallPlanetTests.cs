@@ -65,6 +65,44 @@ public sealed class SmallPlanetTests
         }
     }
 
+    /// <summary>설정을 '절.키' 이름의 목록으로 펼칩니다. 프로필 절(profile)은 두 행성이 같으므로 뺍니다.</summary>
+    private static SortedSet<string> FlatKeys(OrderedDictionary<string, object?> section, string prefix = "")
+    {
+        var keys = new SortedSet<string>(StringComparer.Ordinal);
+        foreach ((string key, object? value) in section)
+        {
+            if (prefix.Length == 0 && key == "profile")
+            {
+                continue;
+            }
+            string name = prefix.Length == 0 ? key : $"{prefix}.{key}";
+            if (value is OrderedDictionary<string, object?> sub)
+            {
+                keys.UnionWith(FlatKeys(sub, name));
+            }
+            else
+            {
+                keys.Add(name);
+            }
+        }
+        return keys;
+    }
+
+    [Fact]
+    public void 작은_행성_설정에는_지구_설정의_키가_모두_있다()
+    {
+        // 지구 설정에 새 키를 더하고 작은 행성 설정에 빠뜨리면, 그 키로 켜는 규칙(호수의 물수지, 땅속으로 사라지는 개울 등)이
+        // 작은 행성에서만 꺼진 채로 남습니다. 물의 부피(ocean.water_volume_m3)만 예외입니다. 작은 행성은 그 대신 바다가 덮는
+        // 비율(ocean.target_fraction)로 해수면을 정합니다.
+        SortedSet<string> missing = FlatKeys(Config.LoadConfig("earth", "tiny").AsDict());
+        missing.ExceptWith(FlatKeys(Config.LoadConfig("small10", "tiny").AsDict()));
+        missing.Remove("ocean.water_volume_m3");
+        Assert.True(
+            missing.Count == 0,
+            $"earth.toml 에는 있고 small10.toml 에는 없는 키: {string.Join(", ", missing)}. "
+            + "small10.toml 에 earth.toml 과 같은 뜻으로 더하고, 행성 크기에 맞는 값인지 따져 줄 끝 주석에 적으세요.");
+    }
+
     [Fact]
     public void 길이_키의_값이_숫자가_아니면_기본값으로_넘어가지_않고_오류를_낸다()
     {
