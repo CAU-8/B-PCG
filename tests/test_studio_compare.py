@@ -153,6 +153,7 @@ def _post(base: str, path: str, body: dict):
         return json.loads(r.read().decode("utf-8"))
 
 
+@pytest.mark.slow  # 따로 C# 실행을 돌려 몇 초 걸림 (CI 는 돌림)
 def test_server_routes_and_run(compare_out, tmp_path):
     app = Studio(out_dir=compare_out, baked_dir=tmp_path / "baked")
     server = create_server(0, app)

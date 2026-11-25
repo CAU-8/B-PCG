@@ -15,6 +15,8 @@ uv run python analysis/scale/scale_ladder_calcs.py
 
 나머지 스크립트는 대부분 가봉 AfriSAR 자료(약 15 GB, NASA 계정 필요)가 있어야 돕니다. 아래 '필요한 자료'를 봅니다.
 
+`afrisar/`, `veg/` 스크립트와 `dem_catalog/bench_flow.py` 는 numba(파이썬 함수를 기계어로 바꿔 빠르게 돌리는 도구)와 h5py(HDF5 파일을 읽는 도구)를 씁니다. 두 패키지는 기본 설치에 없으니 먼저 `./scripts/setup.sh --analysis` 로 설치합니다. Intel Mac 에서는 numba 의 설치 파일이 없어 설치할 수 없습니다.
+
 ## 지킬 규칙
 
 - **결과는 설계 문서로.** 결과 숫자는 설계도(`docs/design/blueprint.md`)와 조사 기록(`docs/design/research/`)에 옮겨 적습니다. 아래 표의 '뒷받침하는 주장' 열이 그 연결입니다.

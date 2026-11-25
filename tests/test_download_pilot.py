@@ -328,6 +328,23 @@ def test_download_uses_part_then_replace(tmp_path, monkeypatch):
     assert not dp.part_path(dest).exists()
 
 
+def test_new_download_is_checked_by_sha256(tmp_path, monkeypatch):
+    """새로 받은 파일은 --verify-hash 없이도 sha256 을 봅니다. 다르면 지워 처음부터 받게 합니다."""
+    blob = b"y" * 30
+    monkeypatch.setattr(dp, "run_curl", FakeCurl({"u": (200, 0, blob)}))
+    dest = tmp_path / "f.bin"
+    wrong = {"bytes": 30, "sha256": sha(b"z" * 30)}  # 크기는 같고 내용이 다름
+    status, msg = dp.ensure_file("u", dest, wrong)
+    assert status == "error" and "sha256" in msg and "--write-manifest" in msg
+    assert not dest.exists() and not dp.part_path(dest).exists()
+    status, msg = dp.ensure_file("u", dest, {"bytes": 30, "sha256": sha(blob)})
+    assert status == "got" and "sha256 맞음" in msg and dest.read_bytes() == blob
+    # --write-manifest 일 때는 바뀐 원본을 받아들입니다 (manifest 는 그 뒤에 새로 씀)
+    dest.unlink()
+    assert dp.ensure_file("u", dest, wrong, accept_new=True)[0] == "got"
+    assert dest.read_bytes() == blob
+
+
 def test_download_404_is_no_tile_only_when_allowed(tmp_path, monkeypatch):
     monkeypatch.setattr(dp, "run_curl", FakeCurl({"u": (404, 22, b"")}))
     dest = tmp_path / "t.tif"

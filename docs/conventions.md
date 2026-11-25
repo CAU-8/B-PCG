@@ -204,11 +204,10 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
     | 표시 | 뜻 |
     |---|---|
-    | `slow` | 오래 걸림 |
-    | `data` | `data/pilot`이 필요함, 없으면 건너뜀 |
-    | `godot` | Godot .NET 판과 dotnet이 필요함, 없으면 건너뜀 |
+    | `slow` | 모든 시험이 같이 쓰는 tiny 실행 말고 C# 실행을 따로 돌려 몇 초 넘게 걸림. 손으로 빠르게 확인할 때 `uv run pytest -m "not slow"`로 뺌 |
+    | `godot` | Godot .NET 판과 dotnet이 필요함, 없으면 건너뜀 (`tests/test_engine.py`) |
 
-    지금 `slow`와 `data`는 `pyproject.toml`에 선언만 되어 있고, 이 표시를 붙인 시험은 없습니다. 붙여 쓰는 표시는 `tests/test_engine.py`의 `godot` 하나입니다. 그래서 CI가 돌리는 `-m "not slow"`는 지금 아무 시험도 빼지 않습니다. C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
+    `slow`는 시험 다섯 개에 붙어 있습니다. 스레드 수를 바꿔 돌린 결과 비교, ETOPO 없이 그린 결과 그림, 평면 히어로 크기 바꾸기, 방법 비교 서버, 파이썬 입구 `bpcg` 입니다. 다른 코드가 읽는 기록 줄을 보는 시험에는 붙이지 않습니다. 예를 들어 결과 그림의 마지막 줄 `그림을 썼습니다`는 스튜디오 진행률이 읽으므로, 그 줄을 보는 `test_figures_results_writes_every_figure`는 빠른 확인에 남깁니다. CI는 표시와 상관없이 모든 파이썬 시험을 돌립니다(`uv run pytest`). C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
 - **허용 오차.** 허용 오차(얼마나 틀려도 통과로 볼지)에는 근거를 주석으로 남깁니다. 예: `# 가이드 1장: 면적 합 상대 오차 < 1e-12`(1e-12는 1조분의 1). 리뷰에서 이 근거를 봅니다([CONTRIBUTING.md](../CONTRIBUTING.md) '리뷰할 때 확인하는 항목').
 - **시험 자료.** `tests/fixtures/`에 1 MB 이하로 두고, 출처를 `tests/fixtures/README.md`에 적습니다. 예를 들어 가봉 로페 숲의 30 m 지형 조각 `lope_tile512_30m.npz`는 약 0.87 MB입니다. 공개 저장소라 커밋하는 바이너리를 작게 둡니다(8절).
 - **GPL 도구와 비교.** `analysis/`에서 미리 계산해 결과만 `tests/fixtures/`에 저장합니다. 테스트는 GPL 도구를 import하지 않고 저장된 결과와 비교만 합니다. 9절의 라이선스 격리 때문입니다.
@@ -283,28 +282,30 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
 - **설치.**
     - 설치는 `scripts/setup.sh`(맥·리눅스) 또는 `scripts/setup.ps1`(윈도우)로 합니다. .NET 10 SDK는 따로 설치하고(스크립트가 없으면 알려 줌), `tools/doctor.py`로 점검합니다.
+    - uv가 없으면 설치 스크립트가 GitHub 릴리스의 uv 압축 파일을 받아, 스크립트에 적어 둔 SHA-256(받은 파일이 원본과 같은지 보는 지문)과 같을 때만 풉니다. 받은 설치 스크립트를 바로 실행(`curl … | sh`)하지 않습니다. uv 판을 올리면 스크립트의 `UV_VERSION`과 SHA-256 값을 함께 바꿉니다. 값은 `gh api repos/astral-sh/uv/releases/tags/<판>` 의 `digest`에 있습니다.
     - 파이썬은 uv만 씁니다.
     - `pip install`은 쓰지 않습니다. `uv.lock`과 실제 설치가 어긋나, 팀원마다 설치된 판이 달라집니다. CI도 `uv.lock`이 `pyproject.toml`과 어긋나면 실패합니다(`UV_LOCKED=1`).
-- **의존성 묶음.** 파이썬 패키지는 쓰임새별로 묶어 설치합니다(`pyproject.toml`의 `[dependency-groups]`).
+- **의존성 묶음.** 파이썬 패키지는 쓰임새별로 묶어 설치합니다(`pyproject.toml`의 `[dependency-groups]`). 기본 설치(`uv sync`)에는 스튜디오와 시험이 쓰는 패키지만 둡니다. 선택 묶음에는 운영체제에 따라 설치 파일(wheel)이 없는 패키지가 있어서, 기본에 넣으면 그 컴퓨터에서는 설치 전체가 막히기 때문입니다.
 
     | 묶음 | 내용 | 설치 |
     |---|---|---|
-    | 기본 | numpy, scipy, numba | 늘 |
-    | `dev` | pytest, ruff, hypothesis, matplotlib | 늘(`uv sync`) |
-    | `data` | h5py, xarray, rasterio, pyogrio, geopandas 등 | 늘(`uv sync`) |
-    | `mesh` | scikit-image, trimesh | 늘(`uv sync`) |
-    | `analysis` | pyflwdir, landlab | `--group analysis` |
-    | `gpl` | fastscapelib, topotoolbox | `--group gpl`, analysis 전용 |
-    | `notebook` | jupyterlab | `--group notebook` |
+    | 기본 | numpy, scipy | 늘 |
+    | `dev` | pytest, ruff, hypothesis, matplotlib, pillow | 늘(`uv sync`) |
+    | `analysis` | pyflwdir, landlab, 그리고 `analysis/` 스크립트가 쓰는 numba, h5py | `setup.sh --analysis` |
+    | `data` | h5py, xarray, rasterio, pyogrio, geopandas 등 진짜 지구 자료(`data/pilot`)를 읽는 도구. 지금은 부르는 코드가 없음 | `setup.sh --all` |
+    | `gpl` | fastscapelib, topotoolbox | `setup.sh --gpl`, analysis 전용 |
+    | `notebook` | jupyterlab | `setup.sh --notebook` |
+
+    설치 스크립트 대신 uv로 바로 더할 때는 `uv sync --inexact --group <묶음>`처럼 `--inexact`를 붙입니다. 붙이지 않으면 `uv sync`가 이미 설치한 다른 선택 묶음을 지웁니다.
 
 - **패키지 추가.** 파이썬은 `uv add <패키지> --group <묶음>`, C#은 `dotnet add <프로젝트> package <패키지>`로 더하고, PR 설명에 이유를 씁니다. `uv.lock`·`packages.lock.json`도 같이 커밋합니다.
-- **지원 환경.**
-    - macOS 15 이상(Apple Silicon): 잠근 rasterio 바이너리가 macOS 15용입니다.
-    - Windows 10/11 x64.
-    - Linux x86_64(glibc 2.28 이상).
-    - Linux ARM에서는 `gpl` 묶음을 설치할 수 없습니다.
-    - Windows ARM64는 x64 파이썬을 에뮬레이션으로 씁니다(시험 안 함).
-    - Intel Mac은 지원하지 않습니다(numba 0.68에 macOS x86_64 바이너리가 없음).
+- **지원 환경.** 묶음마다 설치 파일이 나온 운영체제가 다릅니다. 표는 [README.md](../README.md) '지원 환경'에 있습니다. 설치 스크립트와 `tools/doctor.py`도 같은 값으로 미리 검사합니다.
+    - 기본 설치: Apple Silicon Mac은 macOS 12 이상(scipy), Intel Mac은 macOS 10.15 이상, Windows 10/11 x64·ARM64, Linux(glibc 2.28 이상).
+    - `analysis`: Intel Mac에서는 안 됩니다(numba 0.68에 macOS x86_64 설치 파일이 없음). Apple Silicon Mac은 macOS 14 이상(netcdf4).
+    - `gpl`, `data`: 맥은 macOS 15 이상(rasterio). Linux ARM64에서는 `gpl`을 설치할 수 없습니다.
+    - `notebook`: Intel Mac에서는 안 됩니다(argon2-cffi-bindings).
+    - Windows ARM64는 선택 묶음 때문에 x64 파이썬을 에뮬레이션으로 씁니다(시험 안 함).
+    - 패키지 판을 올리면 `uv sync --locked --no-build --dry-run --python-platform <플랫폼> --group <묶음>`으로 다시 확인합니다. 맥의 판은 `MACOSX_DEPLOYMENT_TARGET=14.0`처럼 정합니다. 아무것도 설치하지 않습니다.
 - **파이썬 3.13인 이유.** fastscapelib과 TopoToolbox가 3.14용 바이너리를 내지 않습니다. 그래서 세 운영체제 모두에서 바이너리로 설치되는 가장 새 버전이 3.13입니다. 올릴 때는 `tools/check_wheels.py`로 먼저 확인합니다.
 - **Godot.** 4.7.2 **.NET 판**(`4.7.2.stable.mono`)을 모두 같은 버전으로 씁니다.
     - 표준판으로는 C# 엔진이 열리지 않습니다.

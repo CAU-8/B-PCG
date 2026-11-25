@@ -9,21 +9,24 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "numpy>=2.5",
     "scipy>=1.18",
-    "numba>=0.68",
 ]
 
 [project.scripts]
 # studio 는 Python 스튜디오, planet·hero·bake·all 은 C# 콘솔(src/Bpcg.Cli)로 넘깁니다
 bpcg = "bpcg_studio.cli:main"
 
-# 패키지 묶음. 설치: uv sync (기본 = dev, data, mesh) / uv sync --group analysis / uv sync --all-groups
+# 패키지 묶음. 설치: uv sync (기본 = dev) / uv sync --inexact --group analysis / uv sync --all-groups
+# 기본 묶음에는 스튜디오와 시험이 쓰는 패키지만 둡니다. 선택 묶음은 플랫폼마다 설치 파일(wheel)이
+# 없는 패키지가 있어, 기본에 넣으면 그 컴퓨터에서 설치 전체가 막힙니다 (README.md '지원 환경').
 [dependency-groups]
 dev = [
     "pytest>=9.1",
     "ruff>=0.16",
     "hypothesis>=6.168",
     "matplotlib>=3.11",
+    "pillow>=12.3",  # tests/test_bake.py 가 PNG 를 읽음
 ]
+# 진짜 지구 자료(data/pilot: GeoTIFF, netCDF, gdb)를 읽는 도구. 지금은 이 묶음을 부르는 코드가 없습니다.
 data = [
     "h5py>=3.16",
     "h5netcdf>=1.8",
@@ -33,14 +36,12 @@ data = [
     "geopandas>=1.2",
     "pyarrow>=25",
 ]
-mesh = [
-    "scikit-image>=0.26",
-    "trimesh>=5.1",
-]
-# 비교·분석 도구 (MIT). analysis/ 와 tests/ 에서만 씁니다.
+# 비교·분석 도구 (MIT)와 analysis/ 스크립트가 바로 가져오는 numba, h5py. analysis/ 에서만 씁니다.
 analysis = [
     "pyflwdir>=0.5.12",
     "landlab>=2.11",
+    "numba>=0.68",
+    "h5py>=3.16",
 ]
 # GPL-3.0 도구. analysis/ 에서만 import 합니다 (ruff TID251 로 막음). 결과는 미리 계산해 저장합니다.
 gpl = [
@@ -53,7 +54,7 @@ notebook = [
 ]
 
 [tool.uv]
-default-groups = ["dev", "data", "mesh"]
+default-groups = ["dev"]
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13"]
@@ -77,11 +78,6 @@ ignore = ["E741"]  # 수식 기호 l, I, O 를 변수 이름으로 쓸 수 있�
 "pysheds".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
 "richdem".msg = "GPL 도구는 analysis/ 에서만 씁니다 (docs/conventions.md 의 라이선스 격리)"
 
-[tool.ruff.lint.isort]
-# 지운 Python 생성기 bpcg 를 아직 import 하는 analysis 스크립트(돌지 않음)가 있습니다. 맥은 대소문자를
-# 구분하지 않아 src/Bpcg 를 bpcg 패키지로 보므로, 운영체제마다 import 정렬이 달라지지 않게 고정합니다.
-known-third-party = ["bpcg"]
-
 [tool.ruff.lint.per-file-ignores]
 "analysis/**" = ["TID251", "E501"]
 
@@ -89,7 +85,6 @@ known-third-party = ["bpcg"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
-    "slow: 오래 걸리는 검사 (빼려면 -m 'not slow')",
-    "data: data/pilot 이 있어야 도는 검사 (없으면 건너뜀)",
+    "slow: C# 실행을 따로 돌려 몇 초 넘게 걸리는 검사 (빠른 확인은 -m 'not slow', CI 는 모두 돌림)",
     "godot: Godot 4.7.2 .NET 판과 dotnet 이 있어야 도는 검사 (없으면 건너뜀)",
 ]

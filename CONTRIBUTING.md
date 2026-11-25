@@ -109,7 +109,7 @@ PR 양식의 확인 목록을 채웁니다. 리뷰어가 무엇을 왜 바꿨는
 ## 패키지를 더할 때
 
 ```bash
-uv add <패키지> --group <dev|data|mesh|analysis|gpl|notebook>   # 파이썬
+uv add <패키지> --group <dev|data|analysis|gpl|notebook>   # 파이썬
 dotnet add <프로젝트> package <패키지>                            # C#
 ```
 

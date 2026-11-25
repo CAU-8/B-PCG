@@ -168,6 +168,30 @@ class LevelData:
                 self._values.popitem(last=False)
         return v
 
+    def cell_value(self, name: str, cell: int) -> float:
+        """칸 하나의 값 (계산값 포함). 칸 정보(probe)가 씁니다.
+
+        values() 처럼 필드 전체(laptop 프로필에서 칸 약 160만 개)를 float64 로 바꾸지 않고,
+        파일을 mmap 으로 열어 그 칸 하나만 읽습니다. 계산값(DERIVED)은 칸마다 따로 계산하는
+        식이라 칸 하나의 값으로 풀어도 같습니다. 지도용 캐시(_values)에는 넣지 않아, 칸을
+        눌러도 지도 캐시가 밀리지 않습니다.
+        """
+        with self.lock:
+            hit = self._values.get(name)
+        if hit is not None:
+            return float(hit[cell])
+        one = slice(cell, cell + 1)
+        if name in DERIVED:
+            if not self.has(name):
+                raise KeyError(name)
+            with np.errstate(invalid="ignore"):
+                v = DERIVED[name]["fn"](lambda n: np.asarray(self.raw(n)[one], dtype=np.float64))
+            return float(np.asarray(v, dtype=np.float64).reshape(-1)[0])
+        a = self.raw(name)
+        if a.ndim != 1:
+            raise ViewError(f"'{name}' 는 지도로 그릴 수 없는 {a.ndim}차원 필드입니다")
+        return float(a[cell])
+
     def field_names(self) -> list[str]:
         names = [n for n in self.entries if FIELD_TEXT.get(n, {}).get("map", True)]
         names = [n for n in names if len(self.entries[n]["shape"]) == 1]
@@ -506,7 +530,7 @@ class LevelData:
         for name in self.field_names() + [n for n in ("receiver",) if n in self.entries]:
             meta = self.meta_light(name)
             try:
-                raw = float(self.values(name)[cell])
+                raw = self.cell_value(name, cell)
             except (KeyError, ViewError):
                 continue
             if name == "z_m":
