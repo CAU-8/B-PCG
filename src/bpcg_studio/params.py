@@ -303,7 +303,8 @@ PROFILE_HELP: dict[str, str] = {
     "여기서 먼저 만들어 L0 로 옮깁니다",
     "profile.grid.l0_n_per_face": "행성 지도(L0)의 해상도로, 면 한 변의 칸 수 n 입니다. 칸 수는 "
     "6·n², 칸 한 변은 약 40,000 km / (4·n) 입니다. 늘리면 칸 수가 제곱으로 늘어납니다",
-    "profile.hero.max_flow_iterations": "히어로 유역 솔버의 반복 상한입니다. 행성 지도(L0)는 "
+    "profile.hero.max_flow_iterations": "히어로 유역 솔버의 반복 상한입니다. 평면 히어로가 지층을 "
+    "정하려고 거친 격자에서 먼저 한 번 푸는 일(미리 풀기)도 이 값을 씁니다. 행성 지도(L0)는 "
     "landscape.max_flow_iterations 를 씁니다",
     "profile.hero.spacing_m": "히어로 유역(L2)의 칸 간격입니다. 반으로 줄이면 칸 수가 4배로 "
     "늘어납니다",

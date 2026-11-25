@@ -96,7 +96,10 @@ public static class Flat
         bool[] outlet = new bool[cg.NCells];
         outlet[Domain.EdgeCells(nC, "south", nC / 2, 1)[0]] = true;
         double[] runoff = Enumerable.Repeat(RunoffMPerYr, cg.NCells).ToArray();
-        SolverResult res = Solver.SolveSteadyState(cg, outlet, [OutletZM], uC, runoff, null, cfg);
+        // 미리 풀기도 히어로 유역을 푸는 일이라 히어로의 반복 상한(profile.hero.max_flow_iterations)을 씁니다.
+        // laptop 거친 격자(320 × 320칸)는 553번째 반복에서 멈춥니다. 행성 지도의 상한(지구 설정 400번)으로는 멈춤 조건에 닿지 못합니다(2026-11-26).
+        SolverResult res = Solver.SolveSteadyState(
+            cg, outlet, [OutletZM], uC, runoff, null, cfg, maxIter: Pipeline.SolverMaxIter(cfg, "hero"));
         double[] xs = new double[nC];
         double[] ys = new double[nC];
         for (int i = 0; i < nC; i++)
