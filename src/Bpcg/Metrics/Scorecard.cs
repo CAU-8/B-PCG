@@ -386,13 +386,28 @@ public static class Scorecard
             {
                 sink[c] = ocean[c] || lake[c] || root[c];
             }
+            // 석회암 땅에서 개울이 땅속으로 사라지는 칸도 강이 끝나는 자리입니다.
+            int nPonors = 0;
+            if (l.F.Contains("karst_exchange_m3_per_yr"))
+            {
+                double[] ex = l.D("karst_exchange_m3_per_yr");
+                for (int c = 0; c < n; c++)
+                {
+                    if (ex[c] < 0.0)
+                    {
+                        sink[c] = true;
+                        nPonors++;
+                    }
+                }
+            }
             bool[] riv = l.Bool("is_river");
             double v = Drainage.RiverReachFraction(l.Rcv(), l.Order(), riv, sink);
             if (!double.IsFinite(v))
             {
                 return (null, null, "하천 칸 없음");
             }
-            return (v, v == 1.0, $"하천 {riv.Count(b => b)}칸, 기준 100%");
+            string ponors = nPonors > 0 ? $", 땅속으로 사라지는 자리 {nPonors}곳도 끝으로 셈" : "";
+            return (v, v == 1.0, $"하천 {riv.Count(b => b)}칸, 기준 100%{ponors}");
         });
 
         Run(jobs, $"{p}.river_backflow", "check", "cells", l.Missing(["receiver", "is_river", "water_level_m"]), () =>
@@ -462,8 +477,18 @@ public static class Scorecard
                     src[c] += ex[c];
                 }
             }
+            // 석회암 땅에서 땅속으로 사라졌다가 샘으로 솟는 물 (음수는 사라지는 칸, 양수는 솟는 칸).
+            bool hasKarst = l.F.Contains("karst_exchange_m3_per_yr");
+            if (hasKarst)
+            {
+                double[] ex = l.D("karst_exchange_m3_per_yr");
+                for (int c = 0; c < src.Length; c++)
+                {
+                    src[c] += ex[c];
+                }
+            }
             double v = Drainage.BudgetError(l.Rcv(), l.D("discharge_m3_per_yr"), src, l.Order());
-            string note = $"Q = 누적(A·R_eff{(hasExtra ? " + 들어오는 물" : "")}), 기준 ≤ {G(th["budget_max"])}";
+            string note = $"Q = 누적(A·R_eff{(hasExtra ? " + 들어오는 물" : "")}{(hasKarst ? " + 땅속과 주고받는 물" : "")}), 기준 ≤ {G(th["budget_max"])}";
             return (v, v <= th["budget_max"], note);
         });
 

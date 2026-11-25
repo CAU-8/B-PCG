@@ -9,6 +9,7 @@ using Bpcg.Geology;
 using Bpcg.Hero;
 using Bpcg.IO;
 using Bpcg.Numerics;
+using Bpcg.Subsurface;
 using Bpcg.Volume;
 
 namespace Bpcg.Bake;
@@ -1035,7 +1036,8 @@ public static class Corridor
         caves["n_entrance_candidates"] = vol.NEntranceCandidates;
         caves["n_unopened_entrances"] = vol.NUnopened;
         caves["n_entrances_without_passage"] = vol.NNoPassage;
-        caves["n_entrances_dug"] = (long)vol.EntranceCapsules.Length;
+        // 입구 굴: 산비탈 밖으로 열리는 입구 후보에 판 굴. 강둑의 샘 구멍(n_bank_springs)은 따로 셉니다.
+        caves["n_entrances_dug"] = (long)(vol.EntranceCapsules.Length - vol.NBankSprings);
         caves["n_entrances"] = (long)entIn.Count;
         caves["n_sinkholes"] = (long)vol.Network.Sinks.Length;
         // 싱크홀의 자리는 칸의 대표점입니다 (꺼진 땅의 가운데와 같은 점). 아래 sinkholes_in_corridor 와 같은 기준으로 셉니다.
@@ -1044,6 +1046,22 @@ public static class Corridor
             c => nodePos[c * 3] >= rect.XMin && nodePos[c * 3] <= rect.XMax
                 && nodePos[(c * 3) + 1] >= rect.YMin && nodePos[(c * 3) + 1] <= rect.YMax);
         caves["passage_km"] = vol.PassageM.Sum() / 1000.0;
+        // 통로 그물을 잰 값: 샘, 개울이 사라지는 싱크홀, 물에 다 잠긴 길이, 통로가 물 높이 아래로 내려간 평균 깊이, 그물의 모양.
+        CaveNetwork net = vol.Network;
+        caves["n_springs"] = (long)net.NSprings;
+        caves["n_bank_springs"] = (long)vol.NBankSprings;
+        caves["n_stream_sinks"] = (long)net.SinkIsStream.Count(b => b);
+        caves["sink_discharge_m3_per_s"] = net.SinkDischarge.Sum() / Constants.SecondsPerYear;
+        caves["lower_level_km"] = net.LowerLevelM / 1000.0;
+        caves["flooded_km"] = net.FloodedM / 1000.0;
+        caves["mean_loop_depth_m"] = net.MeanLoopDepthM;
+        caves["n_caves"] = net.Shape.NCaves;
+        caves["n_single_passage_caves"] = net.Shape.NSinglePassage;
+        caves["n_branches"] = net.Shape.NBranches;
+        caves["mean_degree"] = net.Shape.MeanDegree;
+        caves["branch_length_cv"] = net.Shape.BranchLengthCv;
+        caves["tortuosity"] = net.Shape.Tortuosity;
+        caves["n_sinks_on_steep_ground"] = (long)vol.NSteepSinks;
         // 싱크홀 둘레의 꺼진 땅(돌리네)과 동굴 호수가 생기는 방의 수.
         caves["n_dolines"] = (long)vol.DolineDepth.Count(d => d > 0.0);
         // 회랑 안 싱크홀의 자리와 그 둘레 꺼진 땅의 크기: [동쪽, 북쪽, 반지름, 깊이] (히어로 국소 좌표, m).

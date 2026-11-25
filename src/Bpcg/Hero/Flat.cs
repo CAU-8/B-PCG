@@ -194,7 +194,7 @@ public static class Flat
         }
         StageResult st = Pipeline.RunStages2To4(
             graph, isOutlet, [OutletZM], u, runoffEff, precip, columns, cfg, log: log, runoff: runoff,
-            temperatureSeaC: [TemperatureSeaC], maxIter: maxIter, zInit: zInit);
+            temperatureSeaC: [TemperatureSeaC], maxIter: maxIter, zInit: zInit, pet: pet);
         st.Diag["warm_start"] = warm;
         sec["stages"] = Seconds(t);
 

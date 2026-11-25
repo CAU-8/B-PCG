@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from bundles import load_config_dict, outlet_of, topo_order
 
-from bpcg_studio.fields import FIELDS
+from bpcg_studio.fields import FIELDS, HERO_ONLY
 from bpcg_studio.hero import hero_grid_size
 
 # 판정이 있으면 반드시 합격해야 하는 일관성 검사 (pipeline.md 12장)
@@ -42,7 +42,8 @@ def test_planet_fields(planet):
     cfg = load_config_dict()
     assert g.kind == "sphere" and n == 6 * int(cfg["profile"]["grid"]["l0_n_per_face"]) ** 2
     f = planet.fields
-    assert set(f) == set(FIELDS)  # 행성은 FIELDS 의 모든 필드를 만듭니다
+    # 행성은 히어로 유역에서만 만드는 필드를 뺀 FIELDS 의 모든 필드를 만듭니다
+    assert set(f) == set(FIELDS) - HERO_ONLY
     for k, v in f.items():
         assert v.shape[0] == n, k
     must_finite = (
@@ -54,7 +55,15 @@ def test_planet_fields(planet):
     # 바다는 출구(자기 자신)이고 고도는 수심(< 0), 육지는 해수면 위
     ocean = f["is_ocean"]
     rcv = f["receiver"].astype(np.int64)
-    assert np.array_equal(rcv == np.arange(n), ocean)
+    root = rcv == np.arange(n)
+    assert root[ocean].all()
+    # 육지에서 물길이 끝나는 칸은 넘치지 못하는 호수 칸이거나, 물이 칸 하나도 채우지 못한
+    # 마른 분지의 바닥입니다 (둘레 칸이 모두 그 칸보다 높거나 같음).
+    z = f["z_m"].astype(np.float64)
+    for c in np.flatnonzero(root & ~ocean):
+        nb = g.nbr[c][g.nbr[c] >= 0]
+        assert f["lake_closed"][c] or (z[nb] >= z[c]).all(), c
+    assert not (f["lake_closed"] & ~f["is_lake"]).any()
     assert (f["z_m"][ocean] < 0).all() and (f["z_m"][~ocean] > 0).all()
     assert (f["relief_m"][ocean] == 0).all() and (f["relief_m"] >= 0).all()
     assert np.isfinite(f["water_level_m"][ocean]).all()
