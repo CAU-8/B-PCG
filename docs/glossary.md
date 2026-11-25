@@ -127,7 +127,8 @@
 | 샘 | `HeroVolume.EntranceOpen`, `HeroVolume.NBankSprings` | 땅속을 흐른 물이 지표로 나오는 자리. 두 가지: 아래층의 물이 강·호수·바다와 만나는 강가 샘, 동굴 입구 후보 가운데 산 밖으로 열리는 골짜기 벽의 샘. 통로가 닿은 샘에만 굴(강가는 샘 구멍)을 둠 | Godot T 키 |
 | 수직굴 | `CaveNetwork.SegIsShaft` | 싱크홀에서 동굴 층까지 곧게 내려가는 굴 | Godot 회랑 |
 | 꺼진 땅(돌리네) | `HeroVolume.DolineDepthAt`, `caves.doline_radius_m`, `caves.doline_depth_ratio`, `caves.doline_max_slope` | 싱크홀 둘레의 지표가 그릇 모양으로 꺼진 자리. 바닥의 구멍으로 물이 빠져서 물은 고이지 않음. 반지름 15~60 m, 깊이는 지름의 0.10배. 둘레 땅의 평균 경사가 약 12° 이하인 싱크홀에만 둠. 3D 회랑의 지표에만 만듦 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
-| 동굴 호수 | `CaveNetwork.Lakes`, `CaveNetwork.LoopDepth` | 아래층 통로가 물 높이 아래로 내려간 구간에 고인 물. 물 깊이 2.5 m 이상이고 천장 아래에 0.5 m 이상 빈 곳이 남은 구간을 호수 하나로 셈. 통로는 기운 지층의 면을 따라 물 높이 아래로 내려갔다 올라오기를 되풀이하고, 천장까지 잠긴 구간은 물에 다 잠긴 통로임 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
+| 동굴 호수 | `CaveNetwork.Lakes`, `CaveNetwork.LoopDepth`, `CaveNetwork.SawtoothDepth` | 아래층 통로가 물 높이 아래로 내려간 구간에 고인 물. 물 깊이 2.5 m 이상이고 천장 아래에 0.5 m 이상 빈 곳이 남은 구간을 호수 하나로 셈. 통로는 기운 지층의 면을 따라 물 높이 아래로 내려갔다 올라오기를 되풀이하고, 천장까지 잠긴 구간은 물에 다 잠긴 통로임 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
+| 층리면 | `Bedding.AtLevel` | 지층이 쌓인 면. 아래층 동굴 통로는 이 면을 따라 물 높이 아래로 내려가다, 정한 폭만큼 깊어지면 세로 틈을 타고 위의 면으로 옮겨 탐. 면이 기운 정도는 칸의 대표점 위치로 잼 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
 | 동굴 통로 그물 | `CaveNetwork`, `caves.wall_retreat_m_per_yr`, `caves.active_zone_m` | 싱크홀에서 샘까지 물이 흐르는 길을 이은 통로들. 물이 많은 싱크홀부터 길을 내고, 뒤의 길은 먼저 뚫린 통로에 붙어 나뭇가지 꼴이 됨. 굵기는 큰비 때의 물을 흘리는 굵기와 통로가 물에 잠겨 있던 동안 벽이 녹아 물러난 거리 가운데 작은 쪽(그리는 범위 2~3 m) | Godot 회랑, `caves.glb`, [pipeline.md](pipeline.md) 10장 4번 |
 
 ## 6. 굽기와 엔진

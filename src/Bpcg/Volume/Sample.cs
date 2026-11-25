@@ -437,7 +437,7 @@ public sealed class HeroVolume
         StrataRock = columns.Rock;
         _detailSeed = SubSeed(Seed, StreamDetail);
         BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos, cfg);
-        BuildCaveNetwork(fields, graph, cfg);
+        BuildCaveNetwork(fields, graph, columns.Bottom, cfg);
     }
 
     /// <summary>꺼진 땅의 반지름 아래 한계 [m]. 2 m 지표에서 그릇 모양이 보이려면 지름이 칸 여러 개여야 합니다.</summary>
@@ -558,65 +558,6 @@ public sealed class HeroVolume
             }
         }
         return count > 0 ? sum / count : slope[(cj * Nx) + ci];
-    }
-
-    /// <summary>
-    /// 동굴 층 k 가 놓인 지층의 층리면(지층이 쌓인 면) 높이 [m] 와 그 면이 기운 각의 sin. 층리면은 그 층 높이가 든 지층의
-    /// 바닥면으로 봅니다 (맨 아래 기반암 안이면 기반암의 윗면). 기울기는 양옆 칸과의 높이 차로 잽니다. 동굴 층이 없는 칸은 NaN, 0.
-    /// </summary>
-    private (double[] BedZ, double[] DipSin) BeddingAtLevel(int k)
-    {
-        int n = Ny * Nx;
-        int nL = NLayers;
-        double[] bed = new double[n];
-        double[] dip = new double[n];
-        Array.Fill(bed, NpMath.NaN);
-        if (nL == 0)
-        {
-            return (bed, dip);
-        }
-        Parallelism.For(0, n, c =>
-        {
-            double lv = CaveLevels[(k * n) + c];
-            if (!double.IsFinite(lv))
-            {
-                return;
-            }
-            int li = nL - 1;
-            for (int i = 0; i < nL; i++)
-            {
-                if (StrataBottom[(c * nL) + i] < lv)
-                {
-                    li = i;
-                    break;
-                }
-            }
-            double b = StrataBottom[(c * nL) + li];
-            if (!double.IsFinite(b))
-            {
-                return;
-            }
-            bed[c] = b;
-            int jj = c / Nx;
-            int ii = c % Nx;
-            int iw = Math.Max(ii - 1, 0);
-            int ie = Math.Min(ii + 1, Nx - 1);
-            int js = Math.Min(jj + 1, Ny - 1);
-            int jn = Math.Max(jj - 1, 0);
-            double bw = StrataBottom[(((jj * Nx) + iw) * nL) + li];
-            double be = StrataBottom[(((jj * Nx) + ie) * nL) + li];
-            double bs = StrataBottom[(((js * Nx) + ii) * nL) + li];
-            double bn = StrataBottom[(((jn * Nx) + ii) * nL) + li];
-            if (!(double.IsFinite(bw) && double.IsFinite(be) && double.IsFinite(bs) && double.IsFinite(bn)) || ie == iw || js == jn)
-            {
-                return;
-            }
-            double gx = (be - bw) / ((ie - iw) * Dx);
-            double gy = (bn - bs) / ((js - jn) * Dx);
-            double g2 = (gx * gx) + (gy * gy);
-            dip[c] = Math.Sqrt(g2 / (1.0 + g2));
-        });
-        return (bed, dip);
     }
 
     /// <summary>
@@ -1032,7 +973,7 @@ public sealed class HeroVolume
     /// 동굴 조각을 만듭니다. 입구 칸마다 산 밖으로 열리는지 확인해 샘으로 삼고, 싱크홀에서 샘까지의 통로 그물
     /// (<see cref="CaveNetwork"/>)을 만든 뒤, 층 통로·수직굴·입구 굴을 캡슐(양 끝과 반지름) 목록으로 모읍니다.
     /// </summary>
-    private void BuildCaveNetwork(FieldSet fields, CellGraph graph, Config cfg)
+    private void BuildCaveNetwork(FieldSet fields, CellGraph graph, double[] nodeStrataBottom, Config cfg)
     {
         long[] ent = (long[])FieldSet.CastTo(fields["cave_entrance"], typeof(long));
         (double[] xc, double[] yc) = CellCenters();
@@ -1217,7 +1158,8 @@ public sealed class HeroVolume
         }
 
         // 아래층이 놓인 지층의 층리면 높이와 기운 정도. 통로가 층리면을 따라 물 높이 아래로 오르내리는 폭을 정합니다.
-        (double[] bedZ, double[] dipSin) = BeddingAtLevel(0);
+        // 통로 그물은 칸의 대표점 위에 놓이므로, 대표점에서 정한 지층 기둥(히어로 묶음의 값 그대로)과 대표점 위치로 잽니다.
+        (double[] bedZ, double[] dipSin) = Bedding.AtLevel(graph, nodeStrataBottom, NLayers, CaveLevels[..n]);
 
         // 지표의 개울이 땅속으로 사라지는 칸 (히어로 단계가 적은 값, 음수가 사라지는 물). 없는 묶음은 그런 칸이 없습니다.
         double[]? streamLoss = null;
