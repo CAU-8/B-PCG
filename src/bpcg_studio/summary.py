@@ -6,7 +6,8 @@
   job.json 의 단계 시간.
 - 솔버 수렴: 반복 수·수렴 여부·고정 칸·반복마다 기록(history).
 - 점수표: planet/scorecard.json, hero/scorecard.json 을 한 표로. 항목 뜻과 지구 값은 SCORE_TEXT.
-  계산하지 못한 검사(값 없음, 불합격)도 줄로 남기고 위 경고에 적습니다.
+  계산이 예외로 끝난 항목(note 가 '계산 실패: ' 로 시작, 종류와 상관없이)도 줄로 남기고
+  위 경고에 적습니다.
 - 그림: figures/*.png 와 FIGURE_TEXT 의 설명 (무엇인가·어떻게 읽나·볼 점).
 """
 
@@ -19,14 +20,18 @@ from bpcg_studio.names import bare_name
 from bpcg_studio.params import config_diff_parts, flat_config
 
 EARTH_OCEAN_FRACTION = 0.708  # Scorecard.cs 의 DefaultThresholds["earth_ocean_fraction"] 과 같음
+# 계산이 예외로 끝난 항목의 note 머리 (Scorecard.cs 의 ErrorPrefix 와 같음)
+ERROR_PREFIX = "계산 실패: "
 
 # 점수표 항목 (planet./hero. 를 뗀 이름) → 이름, 뜻, 지구 값이나 합격 기준(있을 때).
 # 뜻은 docs/pipeline.md 12장과 src/Bpcg/Metrics/Scorecard.cs 의 계산을 쉬운 말로 옮긴 것입니다.
 SCORE_TEXT: dict[str, dict[str, str]] = {
     "ocean_fraction": {
         "label": "바다 비율",
-        "meaning": "행성 넓이 가운데 바다의 몫입니다. 바닷물 양을 정해 두고 낮은 곳부터 채우므로, "
-        "이 비율은 입력이 아니라 결과로 나옵니다.",
+        "meaning": "행성 넓이 가운데 바다의 몫입니다. 해수면은 바닷물 양을 정해 두고 낮은 곳부터 "
+        "채워 정하지만, 대륙 지각이 덮는 넓이(입력 plates.continental_area_fraction)가 값을 거의 "
+        "정합니다. 메모 줄은 바다 지각 넓이에서 섬과 물에 잠긴 대륙만큼 벗어난 양을 적습니다. "
+        "그래서 '지구답다'는 근거로 쓰지 않습니다(forced).",
         "earth": "",  # earth_ocean_fraction() 으로 채움 (점수표 기준과 같은 값)
     },
     "shelf_area": {
@@ -58,59 +63,70 @@ SCORE_TEXT: dict[str, dict[str, str]] = {
     "river_reach_fraction": {
         "label": "강이 바다·호수·출구에 닿는 비율",
         "meaning": "강 칸에서 물길을 따라 내려가면 바다나 호수, 유역 출구에 닿는 칸의 비율입니다. "
-        "1 이면 모든 강이 끊기지 않고 이어집니다.",
+        "1 이면 모든 강이 끊기지 않고 이어집니다. 물길을 만드는 방식 때문에 늘 1 이 되므로, "
+        "코드 결함을 잡는 자기 검사입니다.",
         "earth": "기준 1 (100%)",
     },
     "river_backflow": {
         "label": "거꾸로 흐르는 강 칸",
         "meaning": "물을 받는 아래 칸의 수면이 보내는 칸보다 높은 강 칸의 수입니다. 물이 비탈을 "
-        "거슬러 오르는 셈이라 0 이어야 합니다.",
+        "거슬러 오르는 셈이라 0 이어야 합니다. 수면을 정하는 코드가 하류로 갈수록 높아지지 않게 "
+        "맞춰 두므로 늘 0 인 자기 검사입니다.",
         "earth": "기준 0",
     },
     "law_consistency": {
         "label": "경사 법칙과 실제 경사의 차이",
         "meaning": "칸마다 실제 경사가 솔버의 경사 법칙(강과 산비탈이 깎는 양으로 정한 경사)과 "
-        "얼마나 다른지 잰 상대 오차의 중앙값입니다. 0.001 은 0.1% 차이입니다. 선상지·후처리 칸, "
-        "출구, 지층 경계를 넘는 칸은 뺍니다.",
-        "earth": "기준 0.001 미만",
+        "얼마나 다른지 잰 상대 오차 가운데 가장 큰 값입니다. 0.01 은 1% 차이입니다. 솔버 뒤에 "
+        "고친 칸(선상지·둑·메운 흙·낮춘 호수 바닥)과 그 영향을 받은 칸(그런 칸으로 흘러드는 칸, "
+        "지나는 물이나 흙의 양이 1% 넘게 바뀐 칸), 출구, 지층 경계를 넘는 칸은 뺍니다. 솔버가 다 "
+        "풀지 못했거나 고친 칸을 빠뜨리면 커집니다.",
+        "earth": "기준 0.01 미만 (모든 칸)",
     },
     "water_budget": {
         "label": "물 수지 오차",
         "meaning": "물이 새거나 생기지 않았는지 봅니다. 유량 Q 가 칸마다 (넓이 × 침식에 쓰는 "
-        "유출)을 상류부터 더한 값과 맞는지 잰 상대 오차입니다(히어로는 행성에서 들어오는 물을 "
-        "더함).",
+        "유출)을 상류부터 더한 값과 맞는지, 그 칸까지 모인 양에 견준 상대 오차의 최댓값입니다"
+        "(히어로는 행성에서 들어오는 물과 땅속으로 사라졌다 솟는 물을 더함). 유량을 만든 같은 "
+        "누적을 다시 하므로, 뒤에서 유량을 고친 코드의 결함을 잡는 자기 검사입니다.",
         "earth": "기준 1e-6 (100만분의 1) 이하",
     },
     "sediment_budget": {
         "label": "퇴적물 수지 오차",
         "meaning": "흙이 새거나 생기지 않았는지 봅니다. 퇴적물 유량 Qs 가 상류의 (융기 × 넓이)를 "
-        "더한 값과 맞는지 잰 상대 오차입니다.",
+        "더한 값과 맞는지, 그 칸까지 모인 양에 견준 상대 오차의 최댓값입니다. 같은 누적을 다시 "
+        "하는 자기 검사입니다.",
         "earth": "기준 1e-6 (100만분의 1) 이하",
     },
     "rock_consistency": {
         "label": "경사를 만든 암석 = 보이는 암석",
         "meaning": "솔버가 경사를 정할 때 쓴 암석과 지표에 보이는 암석이 같은 칸의 "
-        "비율입니다(표본으로 셈). 1 이면 모두 같습니다.",
+        "비율입니다(표본으로 셈). 1 이면 모두 같습니다. 두 암석을 같은 층 기둥에서 같은 높이로 "
+        "찾으므로 늘 1 인 자기 검사입니다. 엔진의 3D 재질과 견주는 검사는 아직 없습니다.",
         "earth": "기준 1 (100%)",
     },
     "cave_in_soluble": {
         "label": "동굴이 녹는 암석 안에 있음",
         "meaning": "동굴 층이 있는 자리(칸마다, 층마다) 가운데 그 높이의 암석이 석회암·대리암인 "
-        "비율입니다. 1 이면 모든 동굴이 녹는 암석 안에 있습니다.",
+        "비율입니다. 1 이면 모든 동굴이 녹는 암석 안에 있습니다. 동굴 층은 녹는 암석일 때만 "
+        "남기므로 늘 1 인 자기 검사입니다.",
         "earth": "기준 1 (100%)",
     },
     "water_rule_violations": {
         "label": "물 규칙 위반 칸",
         "meaning": "물 규칙을 어긴 칸 수의 합입니다: 지하수면이 땅 위로 솟음, 물 칸의 지하수면이 "
-        "수면과 다름, 아래 지하수면이 지하수면보다 높음, 값이 비어 있음(NaN).",
+        "수면과 다름, 아래 지하수면이 지하수면보다 높음, 값이 비어 있음(NaN). 지하수면을 정하는 "
+        "코드가 이 규칙대로 자르므로 늘 0 인 자기 검사입니다.",
         "earth": "기준 0",
     },
     "grid_alignment": {
         "label": "격자 정렬 지수",
         "meaning": "강이 바둑판 칸의 줄(가로·세로·45°)을 얼마나 따르는지입니다. 강 칸마다 6칸 "
-        "아래까지의 방향이 이 줄에서 5° 안인 비율을, 아무 방향으로 흐를 때의 비율(약 22%)로 "
-        "나눕니다. 1 이면 격자를 편들지 않습니다. 잴 강 칸이 150개에 못 미치면 우연히 큰 값이 "
-        "나올 수 있어 합격·불합격을 가리지 않습니다.",
+        "아래까지 따라간 칸 차이가 정확히 가로·세로·대각선인 칸을 셉니다. 그 수를, 방향이 "
+        "아무렇게나일 때 그렇게 될 칸 수의 기대값으로 나눕니다. 기대값은 칸 차이의 길이마다 "
+        "계산합니다(6칸 떨어지면 약 19%, 8칸이면 약 11%). 1 이면 격자를 편들지 않고, 1.3 이면 "
+        "무작위보다 30% 많이 따릅니다. 잴 강 칸이 250개에 못 미치면 우연히 큰 값이 나올 수 있어 "
+        "합격·불합격을 가리지 않습니다.",
         "earth": "기준 1.3 미만",
     },
     "grid_alignment_edge": {
@@ -140,9 +156,10 @@ SCORE_TEXT: dict[str, dict[str, str]] = {
     },
 }
 
-# 점수표 종류. 이름(check·emergent·forced)은 CLAUDE.md 2.6 과 docs/glossary.md 7장의 것입니다.
+# 점수표 종류. 이름(check·self·emergent·forced)은 CLAUDE.md 2.6 과 docs/glossary.md 7장의 것입니다.
 KIND_TEXT = {
-    "check": "검사 (check): 꼭 지켜야 하는 규칙",
+    "check": "검사 (check): 결과를 다시 재어 확인하는 규칙",
+    "self": "자기 검사 (self): 코드가 늘 맞게 짠 규칙, 어기면 코드 결함",
     "emergent": "결과 (emergent): 입력에 없던 성질, 지구와 견줌",
     "forced": "반쯤 입력 (forced): 입력이 거의 정함, 근거로 쓰지 않음",
 }
@@ -335,33 +352,48 @@ def _scorecard_rows(planet: dict | None, hero: dict | None) -> list[dict]:
     return rows
 
 
+def compute_failed(entry: dict | None) -> bool:
+    """계산이 예외로 끝난 항목인지 (note 가 '계산 실패: ' 로 시작). 종류·판정과 상관없이 봅니다."""
+    return bool(entry) and str(entry.get("note") or "").startswith(ERROR_PREFIX)
+
+
 def _shown(entry: dict | None) -> dict | None:
-    """점수표 한 칸을 보일지: 값이 있거나, 값 없이 불합격(계산 실패)이면 보입니다."""
+    """점수표 한 칸을 보일지: 값이 있거나, 불합격이거나, 계산이 예외로 끝났으면 보입니다.
+
+    입력이 없어 건너뛴 칸(예: 행성 단계 점수표의 히어로 항목)만 숨깁니다.
+    """
     if not entry:
         return None
-    if entry.get("value") is not None or entry.get("pass") is False:
+    if entry.get("value") is not None or entry.get("pass") is False or compute_failed(entry):
         return entry
     return None
 
 
 def failed_checks(planet: dict | None, hero: dict | None) -> list[dict]:
-    """불합격 검사 [{key, level, label, note, compute_failed}] (솔버 수렴은 따로 경고하므로 뺌)."""
+    """불합격 검사와 계산 실패 항목 [{key, level, label, note, compute_failed}].
+
+    불합격은 pass 가 False 인 항목이고(솔버 수렴은 따로 경고하므로 뺌), 계산 실패는 종류와
+    상관없이 계산이 예외로 끝난 항목입니다. 판정이 없는 종류(emergent·forced)의 계산 실패도
+    여기에 들어갑니다.
+    """
     out = []
     for level, card in (("행성", planet or {}), ("히어로", hero or {})):
         for k, e in card.items():
-            if not isinstance(e, dict) or e.get("pass") is not False:
+            if not isinstance(e, dict):
+                continue
+            failed = compute_failed(e)
+            if e.get("pass") is not False and not failed:
                 continue
             base = k.split(".", 1)[-1]
-            if base == "solver_converged":
+            if base == "solver_converged" and not failed:
                 continue
-            note = str(e.get("note") or "")
             out.append(
                 {
                     "key": k,
                     "level": level,
                     "label": SCORE_TEXT.get(base, {}).get("label", base),
-                    "note": note,
-                    "compute_failed": e.get("value") is None or note.startswith("계산 실패"),
+                    "note": str(e.get("note") or ""),
+                    "compute_failed": failed,
                 }
             )
     return out
@@ -566,15 +598,23 @@ def _warnings(
                 "landscape.max_flow_iterations 를 늘려 "
                 "다시 돌립니다. '솔버 수렴' 표의 행성 반복 수는 두 번째 풀이의 반복 수입니다."
             )
-    if failed:
-        names = ", ".join(
-            f"{f['level']} {f['label']}" + (" (계산 실패)" if f["compute_failed"] else "")
-            for f in failed
-        )
-        notes = " / ".join(f"{f['key']}: {f['note']}" for f in failed if f["note"])
+    bad = [f for f in (failed or []) if not f["compute_failed"]]
+    if bad:
+        names = ", ".join(f"{f['level']} {f['label']}" for f in bad)
+        notes = " / ".join(f"{f['key']}: {f['note']}" for f in bad if f["note"])
         add(
-            f"점수표 검사 {len(failed)}개가 불합격입니다: {names}. 아래 점수표의 회색 메모 "
+            f"점수표 검사 {len(bad)}개가 불합격입니다: {names}. 아래 점수표의 회색 메모 "
             "줄에 받은 값과 기준이 있습니다.",
+            notes,
+        )
+    errors = [f for f in (failed or []) if f["compute_failed"]]
+    if errors:
+        names = ", ".join(f"{f['level']} {f['label']}" for f in errors)
+        notes = " / ".join(f"{f['key']}: {f['note']}" for f in errors if f["note"])
+        add(
+            f"점수표 항목 {len(errors)}개를 계산하지 못했습니다(계산 실패): {names}. 검사 "
+            "항목이면 불합격으로, 지구와 견주는 항목이면 값 없이 남습니다. 아래 점수표의 회색 메모 "
+            "줄에 오류 글이 있습니다.",
             notes,
         )
     return out

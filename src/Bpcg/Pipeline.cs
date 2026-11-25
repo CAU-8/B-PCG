@@ -70,10 +70,16 @@ public static class Pipeline
 {
     public const int SolverLogEvery = 10;
 
-    /// <summary>닫힌 호수 아래 물길에서, 솔버가 쓴 유량보다 이 몫 넘게 줄어든 칸에 '정상상태 아님'을 답니다 (0.01 = 100 가운데 1).</summary>
+    /// <summary>
+    /// 선상지·둑·호수·땅속으로 사라지는 개울 때문에 지나는 물이나 흙의 양이 솔버가 쓴 값보다 이 몫 넘게 바뀐 칸에 '정상상태 아님'을
+    /// 답니다 (0.01 = 100 가운데 1).
+    /// </summary>
     public const double LostFlowTolerance = 0.01;
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
+
+    // 지나는 양이 솔버가 쓴 값에서 LostFlowTolerance 넘게 바뀌었는지 (둘 다 0 이면 바뀌지 않음).
+    private static bool FlowChanged(double now, double solver) => Math.Abs(now - solver) > LostFlowTolerance * Math.Abs(solver);
 
     internal static void Say(Action<string>? log, string msg) => log?.Invoke(msg);
 
@@ -150,20 +156,33 @@ public static class Pipeline
         CellGraph? heroGraph = null, IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? diag = null) =>
         Scorecard.Build(planetFields, planetGraph, heroFields, heroGraph, diag, cfg);
 
-    /// <summary>점수표 요약: n_items, n_judged, n_failed, failed (scorecard_summary).</summary>
+    /// <summary>
+    /// 점수표 요약 (scorecard_summary): n_items, n_judged, n_failed, failed, n_errors, errors. errors 는 계산이 예외로 끝난
+    /// 항목(종류와 상관없이)이고, 그 가운데 check·self 는 failed 에도 들어 있습니다.
+    /// </summary>
     public static OrderedDictionary<string, object?> ScorecardSummary(OrderedDictionary<string, object?> card)
     {
         var judged = card.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["pass"] is not null).ToList();
         var failed = judged.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["pass"] is false)
             .Select(kv => kv.Key).OrderBy(k => k, PyJson.CodePointComparer.Instance).Cast<object?>().ToList();
+        var errors = Scorecard.ComputeErrors(card).OrderBy(k => k, PyJson.CodePointComparer.Instance).Cast<object?>().ToList();
         return new OrderedDictionary<string, object?>
         {
             ["n_items"] = (long)card.Count,
             ["n_judged"] = (long)judged.Count,
             ["n_failed"] = (long)failed.Count,
             ["failed"] = failed,
+            ["n_errors"] = (long)errors.Count,
+            ["errors"] = errors,
         };
     }
+
+    /// <summary>
+    /// 기록 줄 끝에 붙이는 점수표 결과: "불합격 없음, 계산 실패 없음". 스튜디오 경고(progress.py WARNINGS)가 '계산 실패 N개'를
+    /// 찾습니다.
+    /// </summary>
+    public static string ScorecardLogText(OrderedDictionary<string, object?> summary) =>
+        $"불합격 {LogText.Failed((List<object?>)summary["failed"]!)}, 계산 실패 {LogText.Failed((List<object?>)summary["errors"]!)}";
 
     /// <summary>
     /// 지표를 고친 뒤의 물길 (receiver, 하류가 먼저 오는 순서). 고친 칸(fan), 출구, 옛 수신 셀이 더는 낮지 않은 칸만
@@ -403,9 +422,13 @@ public static class Pipeline
             {
                 bool changed = rcv[c] != res.Receiver[c];
                 nRerouted += changed ? 1 : 0;
-                notSteady[c] |= changed;
-                // 닫힌 호수가 물을 가둔 아래쪽 옛 물길: 솔버가 쓴 물의 양보다 줄어든 칸은 솔버의 균형에서 벗어납니다.
-                notSteady[c] |= balance is not null && q[c] < (1.0 - LostFlowTolerance) * res.Discharge[c];
+                // 솔버가 경사를 정할 때 쓴 값이 뒤에서 바뀐 칸은 솔버의 균형(정상상태)에서 벗어납니다. 물을 보낼 칸이 바뀐 칸,
+                // 물을 받는 칸의 높이가 바뀐 칸(낮춘 호수 바닥이나 흙으로 메운 칸으로 흘러드는 칸), 지나는 물이나 흙의 양이
+                // 1% 넘게 바뀐 칸(닫힌 호수가 물을 가둔 아래쪽 옛 물길, 선상지·둑이 물길을 돌려 물이 불어난 칸)입니다.
+                notSteady[c] |= changed
+                    || z[rcv[c]] != res.Z[rcv[c]]
+                    || FlowChanged(q[c], res.Discharge[c])
+                    || FlowChanged(qs[c], res.SedimentFlux[c]);
             }
         }
         else
@@ -520,7 +543,7 @@ public static class Pipeline
                 for (int c = 0; c < n; c++)
                 {
                     // 솔버가 쓴 물의 양에서 벗어난 칸 (사라진 아래쪽의 마른 골짜기, 솟은 아래쪽의 불어난 강).
-                    notSteady[c] |= Math.Abs(karst.Discharge[c] - q[c]) > LostFlowTolerance * q[c];
+                    notSteady[c] |= FlowChanged(karst.Discharge[c], q[c]);
                 }
                 q = karst.Discharge;
                 wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr, closedLevel: balance?.Level);
@@ -817,7 +840,7 @@ public static class Pipeline
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = ScorecardSummary(card);
-        Say(log, $"[점수표] 항목 {summary["n_items"]}개 가운데 합격·불합격을 가리는 것 {summary["n_judged"]}개, 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
+        Say(log, $"[점수표] 항목 {summary["n_items"]}개 가운데 합격·불합격을 가리는 것 {summary["n_judged"]}개, {ScorecardLogText(summary)}");
         Say(log, $"[행성] 끝: {(double)sec["total"]!:F2} s");
 
         object? plateInfo = coarseInfo.TryGetValue("plates", out object? pi) ? pi : new OrderedDictionary<string, object?>();

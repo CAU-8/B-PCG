@@ -58,7 +58,7 @@ public static class Fields
         ["slope"] = new FieldInfo("surface", "m/m", "float32", "수신 셀까지 경사"),
         ["k_s"] = new FieldInfo("surface", "", "float32", "강 가파름 (Q 단위 m³/yr)"),
         ["s_crit"] = new FieldInfo("surface", "m/m", "float32", "지표 암석의 임계 경사"),
-        ["not_steady"] = new FieldInfo("surface", "", "bool", "후처리로 고친 칸 (정상상태 아님)"),
+        ["not_steady"] = new FieldInfo("surface", "", "bool", "후처리로 고쳤거나 그 영향을 받은 칸 (정상상태 아님)"),
         ["fan"] = new FieldInfo("surface", "", "bool", "선상지"),
         ["dam"] = new FieldInfo("surface", "", "bool", "산사태 둑 (골짜기를 막은 돌무더기)"),
         ["water_level_m"] = new FieldInfo("water", "m", "float32", "수면 h_w (물 없으면 NaN)"),

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Bpcg.Numerics;
+using Bpcg.Planet;
 
 namespace Bpcg.Metrics;
 
@@ -218,6 +219,34 @@ public static class Hypsometry
         bool[] all = new bool[isOcean.Length];
         Array.Fill(all, true);
         return WeightedFraction(isOcean, all, a);
+    }
+
+    /// <summary>
+    /// 바다 비율을 지각 종류로 나눈 세 몫 (ocean_fraction_parts), 모두 행성 넓이 대비: 바다 지각 넓이, 그 가운데 물 위로 솟은
+    /// 넓이(섬), 물에 잠긴 대륙 지각 넓이. 바다 비율 = 바다 지각 − 섬 + 잠긴 대륙입니다. 대륙 지각 넓이는 입력
+    /// plates.continental_area_fraction 이 정하므로, 첫 몫이 바다 비율을 거의 정합니다.
+    /// </summary>
+    public static (double OceanicCrust, double EmergedOceanic, double DrownedContinental) OceanFractionParts(
+        bool[] isOcean, long[] crustType, double[] area)
+    {
+        int n = isOcean.Length;
+        if (crustType.Length != n)
+        {
+            throw new ArgumentException($"crust_type 의 길이 {crustType.Length} 가 is_ocean 의 길이 {n} 와 다릅니다");
+        }
+        double[] a = Area(area, n);
+        bool[] all = new bool[n];
+        Array.Fill(all, true);
+        bool[] oceanic = new bool[n];
+        bool[] emerged = new bool[n];
+        bool[] drowned = new bool[n];
+        for (int c = 0; c < n; c++)
+        {
+            oceanic[c] = crustType[c] != Crust.Continental;
+            emerged[c] = oceanic[c] && !isOcean[c];
+            drowned[c] = !oceanic[c] && isOcean[c];
+        }
+        return (WeightedFraction(oceanic, all, a), WeightedFraction(emerged, all, a), WeightedFraction(drowned, all, a));
     }
 
     /// <summary>대륙붕 넓이 (shelf_area): (넓이 [m²], 바다 넓이 대비 비율).</summary>

@@ -13,14 +13,15 @@ namespace Bpcg.Metrics;
 public static class Drainage
 {
     public const int AlignmentSteps = 6;
-    public const double AlignmentTolDeg = 5.0;
 
     /// <summary>
     /// 격자 정렬 지수로 합격·불합격을 가리는 데 필요한 가장 적은 하천 칸 수. 방향이 무작위여도 지수는 칸이 적을수록 크게
-    /// 흔들립니다: 표준편차 = sqrt((1 − p) ÷ (p × 칸 수)), p = 2 × 5° ÷ 45° ≈ 0.22. 150칸에서 약 0.15 라, 합격선 1.3 과
-    /// 무작위 값 1 의 차이 0.3 이 그 두 배입니다. 칸이 이보다 적으면 우연히 합격선을 넘을 수 있습니다.
+    /// 흔들립니다: 표준편차 = sqrt((1 − p) ÷ (p × 칸 수)). p 는 방향이 무작위일 때 칸 차이가 가로·세로·대각선이 될 확률로,
+    /// 6칸 따라간 변위가 길수록 작아집니다(laptop 프로필에서 약 0.15~0.19, AlignmentNull). p = 0.15 일 때 250칸에서
+    /// 표준편차가 약 0.15 라, 합격선 1.3 과 무작위 값 1 의 차이 0.3 이 그 두 배입니다. 칸이 이보다 적으면 우연히 합격선을
+    /// 넘을 수 있습니다.
     /// </summary>
-    public const long AlignmentMinCells = 150;
+    public const long AlignmentMinCells = 250;
     public const double EdgeBand = 0.9;
 
     private const int NSlots = CellGraph.NSlots;
@@ -340,7 +341,32 @@ public static class Drainage
         };
     }
 
-    /// <summary>흐름 수지의 상대 오차 (budget_error).</summary>
+    /// <summary>LawConsistency 와 같은 칸에서 |S − 법칙|/법칙 이 tol 을 넘는 칸 수.</summary>
+    public static long LawOverCount(double[] slope, double[] lawSlope, double[] sCrit, bool[]? mask, double tol)
+    {
+        long over = 0;
+        for (int c = 0; c < slope.Length; c++)
+        {
+            bool use = (mask is null || mask[c]) && double.IsFinite(slope[c]) && double.IsFinite(lawSlope[c])
+                && lawSlope[c] > 0.0 && slope[c] < sCrit[c];
+            if (use && Math.Abs(slope[c] - lawSlope[c]) / lawSlope[c] > tol)
+            {
+                over++;
+            }
+        }
+        return over;
+    }
+
+    /// <summary>
+    /// 흐름 수지의 상대 오차 (budget_error). 두 값 가운데 큰 값입니다.
+    /// <list type="bullet">
+    /// <item>칸마다: |flux − 상류부터 더한 source| ÷ (상류부터 더한 |source|). 칸마다 그 칸까지 모인 양에 견주므로, 작은 개울에서
+    /// 물이 새도 큰 강의 양에 묻히지 않습니다. 예: 1년에 1,000 m³ 가 모이는 칸에서 10 m³ 가 새면 0.01 입니다.</item>
+    /// <item>출구 합: |출구 칸 flux 의 합 − 들어온 합| ÷ (출구 칸에서 잰 |source| 누적의 합).</item>
+    /// </list>
+    /// 모인 |source| 가 0 인 칸은 flux 와 기대값이 같아야 하고, 다르면 무한대입니다. clipNegative 면 기대값을 0 아래로 내리지
+    /// 않습니다(가라앉는 땅의 흙 수지).
+    /// </summary>
     public static double BudgetError(long[] receiver, double[] flux, double[] source, long[]? order = null, bool clipNegative = false)
     {
         CheckRcv(receiver);
@@ -354,6 +380,7 @@ public static class Drainage
         }
         long[] o = Order(order, receiver);
         double[] expect = AccumulateModule.Accumulate(receiver, o, source);
+        double[] gross = AccumulateModule.Accumulate(receiver, o, Array.ConvertAll(source, Math.Abs));
         if (clipNegative)
         {
             for (int c = 0; c < n; c++)
@@ -366,24 +393,19 @@ public static class Drainage
         {
             root[c] = receiver[c] == c;
         }
-        double totalIn = clipNegative ? NpStats.SumWhere(expect, root) : NpReduce.Sum(source);
-        double scale = NpReduce.Sum(NpStats.Select(Array.ConvertAll(expect, Math.Abs), root));
-        if (!(scale > 0.0))
-        {
-            double fmax = 0.0;
-            foreach (double v in flux)
-            {
-                fmax = Math.Max(fmax, Math.Abs(v));
-            }
-            return fmax == 0.0 ? 0.0 : double.PositiveInfinity;
-        }
-        double outlet = Math.Abs(NpStats.SumWhere(flux, root) - totalIn) / scale;
-        double cellMax = double.NegativeInfinity;
+        double cell = 0.0;
         for (int c = 0; c < n; c++)
         {
-            cellMax = Math.Max(cellMax, Math.Abs(flux[c] - expect[c]));
+            double diff = Math.Abs(flux[c] - expect[c]);
+            if (diff > 0.0)
+            {
+                cell = Math.Max(cell, gross[c] > 0.0 ? diff / gross[c] : double.PositiveInfinity);
+            }
         }
-        double cell = cellMax / scale;
+        double totalIn = clipNegative ? NpStats.SumWhere(expect, root) : NpReduce.Sum(source);
+        double scale = NpStats.SumWhere(gross, root);
+        double gap = Math.Abs(NpStats.SumWhere(flux, root) - totalIn);
+        double outlet = scale > 0.0 ? gap / scale : gap > 0.0 ? double.PositiveInfinity : 0.0;
         return NpMath.PyMax(outlet, cell);
     }
 
@@ -403,9 +425,44 @@ public static class Drainage
         throw new ArgumentException($"그래프 종류는 sphere 또는 flat 이어야 합니다: {graph.Kind}");
     }
 
-    /// <summary>격자 정렬 지수의 (정렬된 칸 수, 쓴 칸 수) (alignment_counts).</summary>
-    public static (long Hit, long Used) AlignmentCounts(
-        CellGraph graph, long[] receiver, bool[] isRiver, string band = "all", int steps = AlignmentSteps, double tolDeg = AlignmentTolDeg)
+    /// <summary>
+    /// 방향이 고르게 무작위인 직선 변위(길이 r 칸)를 칸 번호로 반올림했을 때, 칸 차이가 가로·세로·대각선이 될 확률
+    /// (alignment_null). 격자 정렬 지수의 '무작위 = 1' 기준입니다.
+    /// </summary>
+    /// <remarks>
+    /// 가로·세로·대각선 여덟 방향과 거울 대칭 덕분에 0°~45° 만 봅니다. 끝점 (r·cos φ, r·sin φ) 의 세로 성분이 0 으로
+    /// 반올림되면 가로이고(φ &lt; asin(0.5/r)), 두 성분이 같은 정수 k 로 반올림되면 대각선입니다(k 마다 두 각도 구간의 겹침).
+    /// 예: r = 1 이면 1(이웃 여덟 칸은 모두 여덟 방향), r = 2 이면 약 0.40, r = 6 이면 약 0.19, r = 8 이면 약 0.11 입니다.
+    /// 변위가 길수록 작아지므로, 하나의 상수(예: 5° 허용 각의 2 × 5° ÷ 45° ≈ 0.22)로 나누면 긴 강일수록 지수가 작게 나옵니다.
+    /// </remarks>
+    public static double AlignmentNull(double r)
+    {
+        if (!(r >= 1.0) || double.IsInfinity(r))
+        {
+            throw new ArgumentException($"r 은 1 이상의 유한한 칸 수여야 합니다: {r}");
+        }
+        const double octant = Math.PI / 4.0;
+        double axis = Math.Asin(0.5 / r);
+        double diag = 0.0;
+        for (int k = 1; k - 0.5 <= r; k++)
+        {
+            double lo = Math.Max(AcosClip((k + 0.5) / r), AsinClip((k - 0.5) / r));
+            double hi = Math.Min(Math.Min(AcosClip((k - 0.5) / r), AsinClip((k + 0.5) / r)), octant);
+            diag += Math.Max(0.0, hi - lo);
+        }
+        return (Math.Min(axis, octant) + diag) / octant;
+    }
+
+    private static double AcosClip(double x) => x >= 1.0 ? 0.0 : Math.Acos(x);
+
+    private static double AsinClip(double x) => x >= 1.0 ? Math.PI / 2.0 : Math.Asin(x);
+
+    /// <summary>
+    /// 격자 정렬 지수를 이루는 수 (alignment_counts): 정렬된 칸 수(칸 차이가 정확히 가로·세로·대각선), 쓴 칸 수, 방향이
+    /// 무작위일 때 정렬될 칸 수의 기대값(쓴 칸마다 변위 길이의 AlignmentNull 을 더한 값).
+    /// </summary>
+    public static (long Hit, long Used, double Expected) AlignmentCounts(
+        CellGraph graph, long[] receiver, bool[] isRiver, string band = "all", int steps = AlignmentSteps)
     {
         int n = graph.NCells;
         CheckRcv(receiver, n);
@@ -414,12 +471,15 @@ public static class Drainage
         {
             throw new ArgumentException($"steps 는 1 이상이어야 합니다: {steps}");
         }
-        if (!(tolDeg > 0.0 && tolDeg < 22.5))
-        {
-            throw new ArgumentException($"tol_deg 는 (0, 22.5) 도여야 합니다: {tolDeg}");
-        }
         (int faceCells, int ny, int nx) = FaceLayout(graph);
+        // 칸 차이 (di, dj) 는 |di|, |dj| ≤ steps 인 정수라, 길이의 제곱 di² + dj² 마다 기대 확률을 미리 구해 둡니다.
+        double[] pNull = new double[(2 * steps * steps) + 1];
+        for (int r2 = 1; r2 < pNull.Length; r2++)
+        {
+            pNull[r2] = AlignmentNull(Math.Sqrt(r2));
+        }
         sbyte[] flag = new sbyte[n];
+        int[] lenSq = new int[n];
         Parallelism.For(0, n, c0 =>
         {
             flag[c0] = -1;
@@ -461,33 +521,34 @@ public static class Drainage
             {
                 return;
             }
-            double ang = Math.Atan2(dj, di) * (180.0 / Math.PI);
-            double dev = ang % 45.0;
-            if (45.0 - dev < dev)
-            {
-                dev = 45.0 - dev;
-            }
-            flag[c0] = dev <= tolDeg ? (sbyte)1 : (sbyte)0;
+            lenSq[c0] = (int)((di * di) + (dj * dj));
+            flag[c0] = di == 0 || dj == 0 || di == dj ? (sbyte)1 : (sbyte)0;
         });
         long hit = 0;
         long used = 0;
-        foreach (sbyte v in flag)
+        // 기대값은 칸 번호 순서로 더해 실행마다 같은 값이 나오게 합니다.
+        double expected = 0.0;
+        for (int c = 0; c < n; c++)
         {
-            hit += v == 1 ? 1 : 0;
-            used += v >= 0 ? 1 : 0;
+            if (flag[c] >= 0)
+            {
+                hit += flag[c];
+                used++;
+                // 수신 셀이 이웃이 아니면(그런 그래프는 없지만) 표 밖의 길이라 바로 계산합니다.
+                expected += lenSq[c] < pNull.Length ? pNull[lenSq[c]] : AlignmentNull(Math.Sqrt(lenSq[c]));
+            }
         }
-        return (hit, used);
+        return (hit, used, expected);
     }
 
-    /// <summary>격자 정렬 지수 (grid_alignment): 정렬 비율 / (2·tol/45). 쓴 칸이 없으면 NaN.</summary>
+    /// <summary>
+    /// 격자 정렬 지수 (grid_alignment): 정렬된 칸 수 ÷ 방향이 무작위일 때의 기대값 (AlignmentCounts). 1 이면 격자 방향을
+    /// 편들지 않고, 1.3 이면 무작위보다 30% 많이 따릅니다. 쓴 칸이 없으면 NaN.
+    /// </summary>
     public static double GridAlignment(
-        CellGraph graph, long[] receiver, bool[] isRiver, string band = "all", int steps = AlignmentSteps, double tolDeg = AlignmentTolDeg)
+        CellGraph graph, long[] receiver, bool[] isRiver, string band = "all", int steps = AlignmentSteps)
     {
-        (long hit, long used) = AlignmentCounts(graph, receiver, isRiver, band, steps, tolDeg);
-        if (used == 0)
-        {
-            return double.NaN;
-        }
-        return ((double)hit / used) / (2.0 * tolDeg / 45.0);
+        (long hit, long used, double expected) = AlignmentCounts(graph, receiver, isRiver, band, steps);
+        return used == 0 ? double.NaN : hit / expected;
     }
 }
