@@ -24,6 +24,12 @@ $ProgressPreference = 'SilentlyContinue'   # 진행 막대를 끄면 Invoke-WebR
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 
 $UvVersion = '0.12.17'
+$UvUrlBase = "https://github.com/astral-sh/uv/releases/download/$UvVersion"
+# uv 가 없으면 위 주소의 zip 을 받아, 아래 SHA-256 과 같을 때만 풉니다 (받은 설치 스크립트를 바로 실행하지 않음).
+# 값은 GitHub 릴리스 정보(gh api repos/astral-sh/uv/releases/tags/0.12.17 의 digest)에서 가져왔습니다.
+# $UvVersion 을 바꾸면 함께 바꿉니다.
+$UvShaWin64 = 'a252121d5b59398fcb137c6ea448176459a44010f33f67e0072305a637119ca7'
+$UvShaWinArm64 = '3e1aa6849d77f0e00dc865e4afab5c5b32de053e21fe35bf5ad5cec3734ec976'
 $GodotVersion = '4.7.2'
 $GodotTag = "$GodotVersion-stable"
 $GodotUrlBase = "https://github.com/godotengine/godot/releases/download/$GodotTag"
@@ -53,13 +59,14 @@ B-PCG 개발 환경 설치 (Windows)
 
 쓰는 법 (저장소 폴더에서): powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 [옵션...]
 
-  (옵션 없음)  uv, 파이썬 3.13, 기본 패키지 묶음(dev, data, mesh)을 설치합니다.
-  -Analysis    비교·분석 도구(pyflwdir, landlab)도 설치합니다.
+  (옵션 없음)  uv, 파이썬 3.13, 기본 패키지 묶음(dev: 스튜디오와 시험에 쓰는 패키지)을 설치합니다.
+  -Analysis    비교·분석 도구(pyflwdir, landlab, numba, h5py)도 설치합니다.
   -Gpl         GPL 비교 도구(fastscapelib, TopoToolbox)도 설치합니다.
   -Notebook    JupyterLab 도 설치합니다.
   -Godot       Godot 4.7.2 .NET 판을 .tools\godot-net\ 에 받습니다 (약 120 MB).
   -Data        파일럿 데이터를 받습니다 (약 4.5 GB, 오래 걸립니다. 끊겨도 다시 실행하면 이어 받습니다).
-  -All         -Analysis -Gpl -Notebook -Godot 를 한꺼번에 (데이터는 빼고).
+  -All         -Analysis -Gpl -Notebook -Godot 와 data 묶음(자료를 읽는 패키지)을 한꺼번에
+               (파일럿 데이터 받기는 빼고).
   -Check       아무것도 설치하지 않고 환경 점검(tools\doctor.py)만 합니다.
   -Help        이 도움말을 봅니다.
 
@@ -78,7 +85,9 @@ if ($Help) {
     Show-Usage
     exit 0
 }
-if ($All) { $Analysis = $true; $Gpl = $true; $Notebook = $true; $Godot = $true }
+# $Data 는 파일럿 데이터 받기, $DataGroup 은 자료를 읽는 패키지 묶음(data) 설치입니다.
+$DataGroup = $false
+if ($All) { $Analysis = $true; $Gpl = $true; $Notebook = $true; $Godot = $true; $DataGroup = $true }
 
 Push-Location -LiteralPath $Root
 
@@ -141,8 +150,9 @@ if ($Check) {
     Die 'uv 가 없습니다. 먼저 설치하세요: powershell -ExecutionPolicy Bypass -File scripts\setup.ps1'
 }
 
-# ARM64 Windows 에는 pyogrio, shapely, pyarrow 의 ARM64 wheel 이 없습니다.
-# 그래서 x64 파이썬을 받아 에뮬레이션으로 돌립니다 (Windows 11 ARM 은 x64 프로그램을 그대로 돌립니다).
+# 기본 묶음은 ARM64 Windows 용 wheel 이 있지만, 선택 묶음의 landlab, pyarrow, fastscapelib 등은 없습니다.
+# 나중에 선택 묶음을 더해도 .venv 를 다시 만들지 않도록 x64 파이썬을 받아 에뮬레이션으로 돌립니다
+# (Windows 11 ARM 은 x64 프로그램을 그대로 돌립니다).
 $PythonRequest = $null
 if ($Arch -eq 'arm64') {
     $PyVer = (Get-Content -LiteralPath (Join-Path $Root '.python-version') -Raw).Trim()
@@ -184,16 +194,49 @@ if ($DotnetSdk) {
 }
 
 # ---------------------------------------------------------------- 3. uv (파이썬과 패키지 관리자)
+# GitHub 릴리스의 uv zip 을 받아 SHA-256 이 $UvSha* 와 같은지 본 뒤, 안의 exe(uv, uvx, uvw)를 $UvBin 에 둡니다.
+# 값이 다르면 받은 파일을 지우고 아무것도 두지 않은 채 멈춥니다.
+function Install-Uv {
+    if ($Arch -eq 'arm64') {
+        $target = 'aarch64-pc-windows-msvc'; $sha = $UvShaWinArm64
+    } else {
+        $target = 'x86_64-pc-windows-msvc'; $sha = $UvShaWin64
+    }
+    $url = "$UvUrlBase/uv-$target.zip"
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('bpcg-uv-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    $zipPath = Join-Path $tmp 'uv.zip'
+    Say "uv $UvVersion 받기: $url"
+    & curl.exe -fL --retry 3 --retry-delay 2 --progress-bar -o $zipPath $url
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        Die 'uv 내려받기에 실패했습니다. 인터넷 연결을 확인하고 다시 실행하세요.'
+    }
+    $got = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($got -ne $sha) {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        Die "받은 uv 파일의 SHA-256($got)이 스크립트에 적은 값($sha)과 다릅니다. 받은 파일은 지웠습니다. 다시 실행해도 다르면 팀에 알려 주세요."
+    }
+    $extract = Join-Path $tmp 'x'
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $extract -Force
+    # zip 안의 폴더 구조에 기대지 않고 uv.exe 가 있는 폴더를 찾습니다.
+    $uvExe = Get-ChildItem -LiteralPath $extract -Recurse -Filter 'uv.exe' -File | Select-Object -First 1
+    if (-not $uvExe) {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        Die "uv 압축 파일 안에 uv.exe 가 없습니다: $url"
+    }
+    New-Item -ItemType Directory -Force -Path $UvBin | Out-Null
+    foreach ($exe in Get-ChildItem -LiteralPath $uvExe.DirectoryName -Filter '*.exe' -File) {
+        Copy-Item -LiteralPath $exe.FullName -Destination (Join-Path $UvBin $exe.Name) -Force
+    }
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $UvInstalledNow = $false
 if (-not (Find-Uv)) {
     $t = Get-Date
-    Say "uv $UvVersion 설치 (공식 설치 스크립트, $UvBin). 사용자 PATH 는 건드리지 않습니다."
-    # 설치 스크립트는 새 Windows PowerShell 프로세스에서 돌립니다. TLS 1.2 를 켜야 오래된 5.1 에서도 받습니다.
-    $env:UV_NO_MODIFY_PATH = '1'
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "`$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://astral.sh/uv/$UvVersion/install.ps1 | iex"
-    $rc = $LASTEXITCODE
-    Remove-Item Env:\UV_NO_MODIFY_PATH -ErrorAction SilentlyContinue
-    if ($rc -ne 0) { Die 'uv 설치에 실패했습니다. 인터넷 연결을 확인하고 다시 실행하세요.' }
+    Say "uv $UvVersion 설치 ($UvBin). 사용자 PATH 는 건드리지 않습니다."
+    Install-Uv
     if (-not (Find-Uv)) { Die "uv 를 설치했지만 $UvBin 에서 찾지 못했습니다. 새 터미널을 열고 다시 실행하세요." }
     $UvInstalledNow = $true
     Step-Time $t
@@ -202,7 +245,7 @@ $UvHave = ((& uv --version) -split ' ')[1]
 $UvTooOld = $false
 try { $UvTooOld = ([version]($UvHave -replace '[^0-9.].*$', '')) -lt [version]$UvVersion } catch { }
 if ($UvTooOld) {
-    Die "uv $UvHave 는 너무 오래됐습니다. $UvVersion 이상이 필요합니다. 올리기: uv self update   (winget 으로 깔았다면 winget upgrade astral-sh.uv)"
+    Die "uv $UvHave 는 너무 오래됐습니다. $UvVersion 이상이 필요합니다. 올리기: uv self update   (winget 으로 깔았다면 winget upgrade astral-sh.uv). 이 스크립트가 $UvBin 에 깐 uv 는 uv self update 가 되지 않으니, 그 폴더의 uv.exe, uvx.exe, uvw.exe 를 지운 뒤 이 스크립트를 다시 실행하세요."
 }
 Say "uv $UvHave ($((Get-Command uv -CommandType Application | Select-Object -First 1).Source))"
 
@@ -231,10 +274,11 @@ if (Test-VenvStale) {
 }
 
 $SyncArgs = @('sync', '--locked', '--inexact')
-$GroupNote = '기본(dev, data, mesh)'
+$GroupNote = '기본(dev)'
 if ($Analysis) { $SyncArgs += @('--group', 'analysis'); $GroupNote += ' + analysis' }
 if ($Gpl) { $SyncArgs += @('--group', 'gpl'); $GroupNote += ' + gpl' }
 if ($Notebook) { $SyncArgs += @('--group', 'notebook'); $GroupNote += ' + notebook' }
+if ($DataGroup) { $SyncArgs += @('--group', 'data'); $GroupNote += ' + data' }
 if ($PythonRequest) { $SyncArgs += @('--python', $PythonRequest) }
 
 # 파이썬 버전은 .python-version, 패키지 버전은 uv.lock 이 정합니다. 파이썬도 uv 가 직접 받습니다.

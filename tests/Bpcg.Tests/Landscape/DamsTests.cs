@@ -11,7 +11,7 @@ namespace Bpcg.Tests.Landscape;
 /// <summary>
 /// 산사태 둑 (docs/pipeline.md 7.4): 둑이 있을 기대 수를 솟는 속도와 골짜기 모양에서 계산하고, 둑 뒤를 강이 실어 온 흙으로 메웁니다.
 /// </summary>
-public sealed class DamsTests
+public sealed partial class DamsTests
 {
     private const int N = 41;
     private const double Dx = 25.0;

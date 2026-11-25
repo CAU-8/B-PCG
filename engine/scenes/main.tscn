@@ -44,6 +44,7 @@ directional_shadow_max_distance = 1000.0
 script = ExtResource("2_terrain")
 Material = SubResource("ShaderMaterial_terrain")
 SkirtM = 30.0
+BuildOnReady = false
 
 [node name="Baked" type="Node3D" parent="."]
 script = ExtResource("5_baked")

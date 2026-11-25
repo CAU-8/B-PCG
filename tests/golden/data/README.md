@@ -5,7 +5,7 @@ golden 자료는 "이 입력이면 이 출력이 나와야 한다"를 적어 둔
 - 출처: 포팅 당시 `src/bpcg` 함수 출력 (스크립트는 git 기록의 `csharp/golden/export_golden.py`). 만든 환경(Python·numpy·numba·scipy 판, 운영체제)은 `manifest.json` 에 있습니다.
 - 사례 파일: `<모듈>/<사례>.npz`(배열 이름 `in.<이름>`·`out.<이름>`) + 같은 이름의 `.json`(배열이 아닌 값).
 - 초월 함수(tan·atan·sin 등)를 거친 값은 만든 운영체제의 libm 을 따릅니다. 지금 자료는 macOS arm64 에서 만들었습니다.
-- 예외: 설정 사례(`core/config` 의 `load_earth_*`, `overrides`)는 `configs/planets/earth.toml` 의 글자를 정답으로 담습니다. 그래서 읽는 규칙이 그대로여도 `earth.toml` 에 키를 더하거나 값을 바꾸면 정답이 달라집니다. 그때만 `uv run python tests/golden/refresh_config.py` 로 다시 씁니다. 이 스크립트는 Python 판 `load_config` 와 같은 규칙으로 읽고, 2026-10-19 에 포팅 때 자료(바꾸기 전 `earth.toml`)를 글자 하나 다르지 않게 다시 만드는 것을 확인했습니다. 덮어쓰기의 형 검사(`checked`)와 오류 사례는 설정 내용과 상관없어 그대로 둡니다.
+- 예외: 설정 사례(`core/config` 의 `load_earth_*`, `overrides`)는 `configs/planets/earth.toml` 의 글자를 정답으로 담습니다. 그래서 읽는 규칙이 그대로여도 `earth.toml` 에 키를 더하거나 값을 바꾸면 정답이 달라집니다. 그때만 `uv run python tests/golden/refresh_config.py` 로 다시 씁니다. 이 스크립트는 Python 판 `load_config` 와 같은 규칙으로 읽고, 2026-10-19 에 포팅 때 자료(바꾸기 전 `earth.toml`)를 글자 하나 다르지 않게 다시 만드는 것을 확인했습니다. 덮어쓰기의 형 검사(`checked`)와 오류 사례는 설정 내용과 상관없어 그대로 둡니다. 이 사례의 `digest` 는 Python 판처럼 설정 전체 글자의 해시입니다. 목차의 설정 해시 `config_digest`(`Config.Digest`)는 결과를 바꾸지 않는 키(스레드 수 `profile.compute.numba_threads`)를 뺀 뒤 같은 해시 함수(`Config.HashOf`)로 셉니다. 그래서 `ConfigTests` 는 `Config.HashOf` 의 값을 이 `digest` 와 비교합니다.
 - 예외: 필드 표(`core/fields/fields_table.json`)는 손으로 고칩니다. `ConfigTests.FieldsTable` 이 이 파일의 필드 줄(이름, 묶음, 단위, 자료형, 설명)을 `src/Bpcg/Core/Fields.cs` 의 `Fields.All` 과 한 줄씩 비교하기 때문입니다. 묶음 목록(`groups`)과, 없는 필드 이름을 줬을 때의 오류 글(`check_error`)도 비교합니다. 그래서 필드를 더하거나 필드 설명·오류 글을 바꾸면, 같은 커밋에서 이 파일의 같은 자리도 고칩니다.
 
 ## 사례를 읽는 시험

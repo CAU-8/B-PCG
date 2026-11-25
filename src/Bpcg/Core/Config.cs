@@ -135,7 +135,7 @@ public class Section
 
 /// <summary>
 /// 행성 설정 + 프로필 (src/bpcg/core/config.py Config). cfg["a.b"] 로 점 경로를 읽고,
-/// <see cref="Digest"/> 는 Python 과 같은 설정 해시를 냅니다.
+/// <see cref="Digest"/> 는 결과를 바꾸지 않는 키를 뺀 설정 해시를 냅니다(스튜디오 config.py 의 digest 와 같은 값).
 /// </summary>
 /// <remarks>
 /// config.py 의 모듈 함수(load_config, parse_assignment, checked_overrides)는 클래스 이름 Config 와 겹치므로
@@ -194,12 +194,56 @@ public sealed class Config : Section
         return new Config(data);
     }
 
-    /// <summary>설정 내용의 짧은 해시: json.dumps(sort_keys=True, ensure_ascii=False) 의 SHA-256 앞 12자 (소문자).</summary>
+    /// <summary>
+    /// 결과 파일을 바꾸지 않는 설정 키(점 경로). 설정 해시(<see cref="Digest"/>)를 셀 때 뺍니다.
+    /// 스레드 수는 계산을 몇 갈래로 나눠 돌릴지만 정하고, 스레드 수가 달라도 결과 파일은 바이트까지 같습니다
+    /// (docs/conventions.md 6절). 키를 더하기 전에, 그 키만 바꿔 돌린 결과 파일이 바이트까지 같은지 시험으로 확인합니다
+    /// (tests/test_cli.py 의 test_single_and_auto_thread_results_match 처럼).
+    /// </summary>
+    public static IReadOnlyList<string> DigestIgnoredKeys { get; } = ["profile.compute.numba_threads"];
+
+    /// <summary>
+    /// 설정 해시: 결과를 바꾸지 않는 키(<see cref="DigestIgnoredKeys"/>)를 뺀 설정 내용의 짧은 해시(<see cref="HashOf"/>).
+    /// 목차(manifest.json)의 config_digest 가 이 값입니다. 예: 스레드 수만 1 과 0(모든 코어)으로 바꿔 돌린 두 실행은 설정 해시가 같습니다.
+    /// 키를 빼서 비게 된 절도 뺍니다. 그래서 [compute] 절이 아예 없는 설정과 스레드 수만 적은 설정은 설정 해시가 같습니다.
+    /// </summary>
     public string Digest()
     {
-        string json = PyJson.DumpsSorted(Data);
+        OrderedDictionary<string, object?> data = AsDict();
+        foreach (string dotted in DigestIgnoredKeys)
+        {
+            RemoveDotted(data, dotted.Split('.'), 0);
+        }
+        return HashOf(data);
+    }
+
+    /// <summary>
+    /// 설정 내용 전체의 짧은 해시: json.dumps(sort_keys=True, ensure_ascii=False) 의 SHA-256 앞 12자(소문자).
+    /// Python 판 config.digest 와 같은 계산이라, golden 대조 시험이 이 함수로 Python 이 적은 값과 비교합니다.
+    /// </summary>
+    internal static string HashOf(OrderedDictionary<string, object?> data)
+    {
+        string json = PyJson.DumpsSorted(data);
         byte[] hash = SHA256.HashData(new UTF8Encoding(false).GetBytes(json));
         return Convert.ToHexStringLower(hash)[..12];
+    }
+
+    // 점 경로 키 하나를 지웁니다. 중간 절이나 키가 없으면 그대로 둡니다. 키를 지워 비게 된 절은 위로 올라가며 지웁니다.
+    private static void RemoveDotted(OrderedDictionary<string, object?> node, string[] parts, int i)
+    {
+        if (i == parts.Length - 1)
+        {
+            node.Remove(parts[i]);
+            return;
+        }
+        if (node.TryGetValue(parts[i], out object? child) && child is OrderedDictionary<string, object?> sub)
+        {
+            RemoveDotted(sub, parts, i + 1);
+            if (sub.Count == 0)
+            {
+                node.Remove(parts[i]);
+            }
+        }
     }
 
     /// <summary>manifest 의 config 에서 다시 만듭니다 (bundle.config_from_manifest).</summary>

@@ -80,9 +80,36 @@ class Config(Section):
         return Config(data)
 
     def digest(self) -> str:
-        """설정 내용의 짧은 해시 (결과 manifest 에 기록)."""
-        raw = json.dumps(self._data, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        """설정 해시: 목차(manifest.json)의 config_digest 와 같은 값 (C# Config.Digest).
+
+        결과 파일을 바꾸지 않는 키(DIGEST_IGNORED_KEYS)를 빼고, 그래서 비게 된 절도 뺀 뒤
+        키를 정렬한 JSON 의 SHA-256 앞 12자를 씁니다.
+        """
+        data = self.as_dict()
+        for dotted in DIGEST_IGNORED_KEYS:
+            _remove_dotted(data, dotted.split("."))
+        raw = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()[:12]
+
+
+# 결과 파일을 바꾸지 않는 설정 키. 설정 해시에서 뺍니다 (C# Config.DigestIgnoredKeys 와 같은 목록).
+# 스레드 수는 계산을 몇 갈래로 나눌지만 정하고, 스레드 수가 달라도 결과 파일은 바이트까지 같습니다.
+DIGEST_IGNORED_KEYS = ("profile.compute.numba_threads",)
+
+
+def _remove_dotted(node: dict[str, Any], parts: list[str]) -> None:
+    """점 경로 키 하나를 지웁니다. 없으면 그대로 둡니다.
+
+    키를 지워 비게 된 절은 위로 올라가며 지웁니다.
+    """
+    if len(parts) == 1:
+        node.pop(parts[0], None)
+        return
+    sub = node.get(parts[0])
+    if isinstance(sub, dict):
+        _remove_dotted(sub, parts[1:])
+        if not sub:
+            del node[parts[0]]
 
 
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:

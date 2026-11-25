@@ -10,7 +10,7 @@ using Xunit;
 namespace Bpcg.Tests.Subsurface;
 
 /// <summary>석회암 땅에서 땅속으로 사라지는 개울 (docs/pipeline.md 8.5).</summary>
-public sealed class KarstStreamsTests
+public sealed partial class KarstStreamsTests
 {
     private const int Rows = 11;
     private const int Cols = 40;

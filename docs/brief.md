@@ -184,7 +184,7 @@ Core, IO, Numerics → Planet, Geology, Hydro → Landscape → Subsurface → H
 - **묶음.** 단계 사이에는 결과 폴더 하나를 넘깁니다. 이 폴더를 묶음이라고 부릅니다. 목차(`manifest.json`: 설정 전체, 시드, 커밋, 시간), 칸 정보(`graph.npz`), 지도마다 파일 하나(`<그룹>/<필드>.npy`)가 들어 있습니다. 목차의 `git_dirty`는 그 커밋에 아직 커밋하지 않은 `src/`·`configs/` 변경을 더해 만든 결과인지 적습니다(git이 없으면 null).
 - **같은 시드면 같은 행성.** 지형에 들어가는 무작위 값은 정수 해시로만 만듭니다. 병렬 계산은 칸마다 자기 자리에만 씁니다. 그래서 코어 수가 달라도 결과가 비트까지 같습니다.
 - **정밀도.** 솔버의 높이와 웅덩이 메우기는 double(소수 약 16자리), 엔진 파일은 float32(약 7자리)입니다.
-- **시험.** C#은 `dotnet test --solution Bpcg.slnx`(`tests/Bpcg.Tests/`), 파이썬은 `uv run pytest -m "not slow"`(`tests/test_*.py`, C# 결과 파일·스튜디오·엔진 검사)입니다. C# 시험 가운데 golden 대조 시험은 golden 파일(옛 Python 생성기의 결과를 정답으로 저장해 둔 시험 자료)과 비트까지 같은지 봅니다. 큰 golden 사례를 쓰는 시험 27개는 파일이 없어 건너뜁니다([history.md](history.md) 2026-10-03 줄, [tests/golden/data/README.md](../tests/golden/data/README.md)).
+- **시험.** C#은 `dotnet test --solution Bpcg.slnx`(`tests/Bpcg.Tests/`), 파이썬은 `uv run pytest`(`tests/test_*.py`, C# 결과 파일·스튜디오·엔진 검사)입니다. 손으로 빠르게 확인할 때는 오래 걸리는 시험 다섯 개를 빼는 `-m "not slow"`를 붙입니다. C# 시험 가운데 golden 대조 시험은 golden 파일(옛 Python 생성기의 결과를 정답으로 저장해 둔 시험 자료)과 비트까지 같은지 봅니다. 큰 golden 사례를 쓰는 시험 27개는 파일이 없어 건너뜁니다([history.md](history.md) 2026-10-03 줄, [tests/golden/data/README.md](../tests/golden/data/README.md)).
 
 ## 6. 엔진 (`engine/`, Godot 4.7.2 .NET)
 

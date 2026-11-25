@@ -271,10 +271,11 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
 
     /// <summary>
     /// 묶음 하나를 path 폴더에 씁니다 (write_bundle). 반환: 쓴 manifest.
+    /// parent 는 이 묶음을 만들 때 읽은 위 단계 묶음의 표지(<see cref="RunFolder.BundleId"/>)이고, 없으면(행성, 평면 히어로) null 입니다.
     /// </summary>
     public static OrderedDictionary<string, object?> WriteBundle(
         string path, CellGraph graph, FieldSet fields, OrderedDictionary<string, object?>? meta = null, Config? cfg = null,
-        List<long[]>? rivers = null, string? kind = null)
+        List<long[]>? rivers = null, string? kind = null, OrderedDictionary<string, object?>? parent = null)
     {
         Core.Fields.CheckFields(fields.Names);
         Directory.CreateDirectory(path);
@@ -347,6 +348,7 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
             ["config_digest"] = cfg?.Digest(),
             ["seed"] = cfg is null ? null : cfg.I("planet.seed"),
             ["profile"] = cfg?.Sec("profile").Get("name"),
+            ["parent"] = parent,
             ["graph"] = GraphInfo(graph),
             ["face_basis"] = faceBasis,
             ["fields"] = entries,
@@ -536,8 +538,12 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
         };
     }
 
-    /// <summary>HeroState 를 묶음으로 씁니다 (save_hero_state).</summary>
-    public static OrderedDictionary<string, object?> SaveHeroState(string path, HeroState hero, Config cfg)
+    /// <summary>
+    /// HeroState 를 묶음으로 씁니다 (save_hero_state). planetId 는 히어로를 만들 때 읽은 행성 묶음의 표지
+    /// (<see cref="RunFolder.BundleId"/>)이고, 행성 없이 만든 평면 히어로면 null 입니다.
+    /// </summary>
+    public static OrderedDictionary<string, object?> SaveHeroState(
+        string path, HeroState hero, Config cfg, OrderedDictionary<string, object?>? planetId = null)
     {
         var meta = new OrderedDictionary<string, object?>
         {
@@ -545,7 +551,7 @@ public sealed class Bundle(CellGraph graph, FieldSet fields, OrderedDictionary<s
             ["fan_apexes"] = hero.FanApexes,
             ["diag"] = hero.Diag,
         };
-        return WriteBundle(path, hero.Graph, KnownFields(hero.Fields), meta, cfg, [.. hero.Rivers], "hero");
+        return WriteBundle(path, hero.Graph, KnownFields(hero.Fields), meta, cfg, [.. hero.Rivers], "hero", planetId);
     }
 
     private static double[] Vec(object? v) => ((List<object?>)v!).Select(D).ToArray();

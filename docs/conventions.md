@@ -19,6 +19,7 @@
 | 격자 | 가이드 1장 큐브스피어(주사위 여섯 면을 부풀려 공 모양으로 만든 격자) 규칙. `n`은 면 한 변의 칸 수, `n_cells = 6·n²`, 칸 번호 `c = f·n² + j·n + i` | 4절 |
 | 경로 | 코드에 절대 경로를 쓰지 않습니다. C#은 `Bpcg.Core.Paths`, 파이썬은 `bpcg_studio.paths`로만 찾습니다 | 8절 |
 | 데이터 | `data/`는 올리지 않습니다(README와 manifest만). 커밋하는 바이너리는 1 MB 이하 | 8절 |
+| 라이선스 | 코드와 문서는 MIT(`LICENSE`). 다른 프로젝트에서 옮겨 온 코드와 진짜 지구 자료에서 잘라 온 파일은 `THIRD_PARTY_NOTICES.md`에 적습니다 | 9절 |
 | 라이선스 격리 | GPL 도구(fastscapelib, TopoToolbox, pysheds, richdem)는 `analysis/`에서만 import합니다. ruff가 막습니다 | 9절 |
 | 재현성 | 생성기의 난수와 노이즈(무작위 값을 매끈하게 겹쳐 만든 높이 무늬)는 시드(난수 계산기가 출발점으로 삼는 번호)를 받은 정수 해시(`Bpcg.Core.Hashing`)로만. `System.Random`은 쓰지 않음 | 6절 |
 | git | main 직접 커밋 금지. 기능 브랜치 → PR → 리뷰 1명 → squash 합치기 | 10절 |
@@ -32,6 +33,7 @@
 b-pcg/
 ├── Bpcg.slnx            C# 솔루션 (src/Bpcg, src/Bpcg.Cli, src/Bpcg.Figures, engine, tests/Bpcg.Tests)
 ├── Directory.Build.props, global.json, .editorconfig   C# 공통 설정
+├── LICENSE, THIRD_PARTY_NOTICES.md   이 저장소의 라이선스(MIT)와, 옮겨 온 코드·잘라 온 자료의 목록
 ├── src/
 │   ├── Bpcg/            생성기 본체 (C# 라이브러리, Godot에 의존하지 않음)
 │   │   ├── Core/        격자·이웃·거리·행성 상수·노이즈·설정·경로 (가이드 1장, 공통 뼈대)
@@ -187,6 +189,10 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - `System.Random`은 .NET 판마다 수열이 달라질 수 있어서 쓰지 않습니다.
     - 맥과 연구실 PC가 같은 무작위 값을 쓰려면 해시가 필요합니다.
 - **기록.** 생성 결과의 manifest에는 git 커밋, 그때 `src/`·`configs/`에 커밋하지 않은 변경이 있었는지(`git_dirty`, git이 없으면 null), 설정 파일 내용, 시드, bpcg 버전을 적습니다. 그래서 결과 폴더만 보고도 어떤 코드와 설정으로 만들었는지 알 수 있습니다.
+- **설정 해시.** manifest의 `config_digest`는 설정 내용으로 만든 12글자 값입니다. 두 결과의 설정 해시와 시드가 같으면 같은 설정으로 만든 결과입니다.
+    - 결과 파일을 바꾸지 않는 키는 빼고 셉니다(`Config.DigestIgnoredKeys`). 지금은 스레드 수 `profile.compute.numba_threads` 하나입니다. 위에 적은 대로 스레드 수가 달라도 결과 파일은 바이트까지 같기 때문입니다. 그래서 스레드 수만 다른 두 실행은 설정 해시가 같습니다.
+    - 키를 더 빼려면, 그 키만 바꿔 돌린 결과 파일이 바이트까지 같은지 시험으로 먼저 보입니다. 그리고 C#의 `Config.DigestIgnoredKeys`와 스튜디오의 `DIGEST_IGNORED_KEYS`(`src/bpcg_studio/config.py`)를 함께 고칩니다.
+    - 히어로·회랑·지구본의 manifest는 만들 때 읽은 위 단계 묶음의 설정 해시와 시드도 적습니다(`parent`). 명령줄과 스튜디오는 이 값으로 같은 실행 폴더의 묶음이 같은 실행에서 나왔는지 확인합니다([pipeline.md](pipeline.md) 11장 '실행 폴더').
 
 ## 7. 테스트
 
@@ -194,15 +200,18 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - C# 단위 시험: `tests/Bpcg.Tests/`(xunit v3). 함수 하나를 golden 자료와 비트 단위로 맞대어 봅니다. golden 자료는 옛 Python 판이 만든 기준 결과이고, `tests/golden/data/`에 있습니다(큰 사례는 `out/golden/`). C# 판이 옛 Python 판과 같은 답을 내는지 확인합니다. `dotnet test --solution Bpcg.slnx`로 돕니다. 큰 사례가 없으면 그 시험만 건너뜁니다.
     - 결과 검사: `tests/test_<대상>.py`(pytest). C# 콘솔(`bpcg all` 등)이 쓴 묶음·굽기 파일을 읽어 불변식(물은 아래로, 넓이 합, 형식 약속)을 봅니다. 엔진은 `tests/test_engine.py`가 Godot을 띄워 봅니다.
 - **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 121개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
+- **지문 시험이 보지 못하는 기능을 켠 시험.** tiny 프로필·시드 0에는 석회암 땅에서 땅속으로 사라지는 개울, 그 개울이 들어가는 구멍(싱크홀)에서 샘까지의 동굴 통로, 증발이 많아 넘치지 못하는 호수가 생기지 않습니다. 그래서 이 기능들이 바뀌어도 지문 시험은 잡지 못합니다.
+    - `tests/Bpcg.Tests/FeatureRunTests.cs`가 tiny 프로필에 설정 네 개를 덮어써(`FeatureRun.Overrides`) 세 기능이 생기게 합니다. 행성과 히어로 유역(행성에서 고른 강 유역 하나를 더 촘촘한 칸으로 다시 계산한 땅)을 메모리에서 만들고, 파일은 쓰지 않습니다.
+    - 정확한 값 대신 성질을 봅니다. 예를 들어 땅속으로 사라진 물과 샘에서 다시 솟은 물의 합이 같은지, 넘치지 못하는 호수가 들어오는 물보다 많이 증발시키지 않는지 봅니다. 그래서 기능을 고쳐 값이 바뀌어도, 성질을 지키면 시험은 그대로 통과합니다.
+    - 시험 세 개가 행성·히어로 유역·동굴 통로 그물을 함께 만들어 맥북 에어 M3에서 0.8~1.2초 걸립니다(다른 작업이 함께 돌던 상태, 2026-11-26).
 - **표시(marker).** 시험에 붙여 언제 돌지를 정하는 이름표입니다.
 
     | 표시 | 뜻 |
     |---|---|
-    | `slow` | 오래 걸림 |
-    | `data` | `data/pilot`이 필요함, 없으면 건너뜀 |
-    | `godot` | Godot .NET 판과 dotnet이 필요함, 없으면 건너뜀 |
+    | `slow` | 모든 시험이 같이 쓰는 tiny 실행 말고 C# 실행을 따로 돌려 몇 초 넘게 걸림. 손으로 빠르게 확인할 때 `uv run pytest -m "not slow"`로 뺌 |
+    | `godot` | Godot .NET 판과 dotnet이 필요함, 없으면 건너뜀 (`tests/test_engine.py`) |
 
-    지금 `slow`와 `data`는 `pyproject.toml`에 선언만 되어 있고, 이 표시를 붙인 시험은 없습니다. 붙여 쓰는 표시는 `tests/test_engine.py`의 `godot` 하나입니다. 그래서 CI가 돌리는 `-m "not slow"`는 지금 아무 시험도 빼지 않습니다. C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
+    `slow`는 시험 다섯 개에 붙어 있습니다. 스레드 수를 바꿔 돌린 결과 비교, ETOPO 없이 그린 결과 그림, 평면 히어로 크기 바꾸기, 방법 비교 서버, 파이썬 입구 `bpcg` 입니다. 다른 코드가 읽는 기록 줄을 보는 시험에는 붙이지 않습니다. 예를 들어 결과 그림의 마지막 줄 `그림을 썼습니다`는 스튜디오 진행률이 읽으므로, 그 줄을 보는 `test_figures_results_writes_every_figure`는 빠른 확인에 남깁니다. CI는 표시와 상관없이 모든 파이썬 시험을 돌립니다(`uv run pytest`). C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
 - **허용 오차.** 허용 오차(얼마나 틀려도 통과로 볼지)에는 근거를 주석으로 남깁니다. 예: `# 가이드 1장: 면적 합 상대 오차 < 1e-12`(1e-12는 1조분의 1). 리뷰에서 이 근거를 봅니다([CONTRIBUTING.md](../CONTRIBUTING.md) '리뷰할 때 확인하는 항목').
 - **시험 자료.** `tests/fixtures/`에 1 MB 이하로 두고, 출처를 `tests/fixtures/README.md`에 적습니다. 예를 들어 가봉 로페 숲의 30 m 지형 조각 `lope_tile512_30m.npz`는 약 0.87 MB입니다. 공개 저장소라 커밋하는 바이너리를 작게 둡니다(8절).
 - **GPL 도구와 비교.** `analysis/`에서 미리 계산해 결과만 `tests/fixtures/`에 저장합니다. 테스트는 GPL 도구를 import하지 않고 저장된 결과와 비교만 합니다. 9절의 라이선스 격리 때문입니다.
@@ -229,15 +238,26 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
 ## 9. 라이선스
 
-- **코드 라이선스.** 아직 정하지 않았습니다(개발 단계 0단계의 남은 일). 정하면 `LICENSE`에 적고, 데이터 라이선스와 분리합니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다(아래 '데이터').
+라이선스 글이 없으면 공개 저장소라도 남이 코드를 쓸 수 없습니다. 반대로 남의 코드나 자료를 원래 조건을 지키지 않고 넣으면, 이 저장소를 MIT로 나눠 줄 수 없게 됩니다. 그래서 무엇을 넣어도 되는지와, 넣으면 어디에 적는지를 정합니다.
+
+- **이 저장소의 라이선스.** 코드와 문서(그림과 로고 포함)는 MIT입니다(`LICENSE`, 저작권자 `B-PCG contributors`). MIT는 저작권 문구와 라이선스 글을 남기면 누구나 쓰고, 고치고, 다시 나눠 주고, 팔 수 있게 허락하는 라이선스입니다. PR로 올린 코드와 문서도 MIT로 들어갑니다.
+- **목록 파일.** 다른 프로젝트에서 옮겨 온 코드와 색표, 진짜 지구 자료에서 잘라 온 파일은 `THIRD_PARTY_NOTICES.md`에 적습니다. 라이선스 원문은 `docs/licenses/`에 둡니다. 이 파일들은 MIT가 아니라 원래 조건을 따릅니다.
+- **다른 프로젝트의 코드를 옮길 때.**
+    - MIT와 섞어 쓸 수 있는 허용형 라이선스(MIT, BSD, Apache-2.0, PSF, ISC 등)의 코드만 옮깁니다. GPL 코드와 비상업 조건의 코드는 옮기지 않습니다.
+    - 옮긴 파일의 머리 주석에 원본 프로젝트, 판, 파일 이름을 적습니다.
+    - `THIRD_PARTY_NOTICES.md` 2절 표에 한 줄을 더하고, 원문이 `docs/licenses/`에 없으면 함께 넣습니다.
+    - 예: `src/Bpcg/Numerics/Interp.cs`의 `Brentq`는 scipy의 `brentq.c`를 옮겼습니다. scipy 원문은 `docs/licenses/scipy_license.txt`에 있습니다.
 - **GPL 도구.** `analysis/`에서만 씁니다. GPL은 그 코드를 가져다 쓴 프로그램에도 GPL 조건을 따르게 하는 라이선스입니다. `analysis/` 밖에서 import하면 ruff가 막습니다(`TID251`).
-- **핵심 코드.** `src/Bpcg`는 직접 짠 C# 코드로 만들고, NuGet 패키지를 하나도 쓰지 않습니다. 다른 프로젝트가 쓰는 NuGet 패키지도 MIT·BSD·Apache-2.0 라이선스만 허용합니다. 프로젝트마다 쓰는 패키지는 그 폴더의 `packages.lock.json`에 있고, 라이선스(패키지 설명 파일 `.nuspec`에 적힌 값)는 이렇습니다.
+- **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
+- **패키지.** `src/Bpcg`는 NuGet 패키지를 하나도 쓰지 않습니다. 다른 프로젝트가 쓰는 NuGet 패키지도 MIT·BSD·Apache-2.0처럼 MIT 저장소와 섞어 쓸 수 있는 허용형 라이선스만 허용합니다. 프로젝트마다 쓰는 패키지는 그 폴더의 `packages.lock.json`에 있고, 라이선스(패키지 설명 파일 `.nuspec`에 적힌 값)는 이렇습니다.
     - 결과 그림 `src/Bpcg.Figures`: ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF, 모두 MIT. 명령줄 `src/Bpcg.Cli`와 C# 시험도 이 프로젝트를 거쳐 같은 패키지를 씁니다.
     - 엔진 `engine/`: GodotSharp·GodotSharpEditor·Godot.SourceGenerators(Godot을 C#에서 부르는 패키지), 모두 MIT.
     - C# 시험 `tests/Bpcg.Tests`: xunit.v3과 그 하위 패키지는 Apache-2.0, 함께 딸려 오는 Microsoft.Testing.Platform 등은 MIT.
-    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3 [확인 필요: ILGPU의 라이선스].
-- **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
-- **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다. OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
+    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3, University of Illinois/NCSA 라이선스(MIT와 거의 같은 허용형). nuget.org의 패키지 설명 파일이 가리키는 `LICENSE.txt`에서 확인했습니다. MIT처럼 쓰고 고치고 다시 나눠 줄 수 있고, BSD처럼 저작권 문구를 남기고 만든 사람의 이름을 홍보에 쓰지 않는다는 조건이 붙습니다.
+- **빌드한 프로그램을 나눠 줄 때.** Godot로 내보낸 게임이나 `dotnet publish` 결과에는 패키지와 Godot 엔진이 들어갑니다. 이런 실행 파일을 나눠 줄 때는 들어간 패키지와 Godot의 라이선스 글을 함께 넣습니다(`THIRD_PARTY_NOTICES.md` 4절).
+- **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다.
+    - 자료를 잘라 저장소에 넣으면 `THIRD_PARTY_NOTICES.md` 3절 표에 원자료, 조건, 인용을 적습니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다.
+    - OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
 
 ## 10. git과 협업 요약
 
@@ -266,28 +286,30 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
 - **설치.**
     - 설치는 `scripts/setup.sh`(맥·리눅스) 또는 `scripts/setup.ps1`(윈도우)로 합니다. .NET 10 SDK는 따로 설치하고(스크립트가 없으면 알려 줌), `tools/doctor.py`로 점검합니다.
+    - uv가 없으면 설치 스크립트가 GitHub 릴리스의 uv 압축 파일을 받아, 스크립트에 적어 둔 SHA-256(받은 파일이 원본과 같은지 보는 지문)과 같을 때만 풉니다. 받은 설치 스크립트를 바로 실행(`curl … | sh`)하지 않습니다. uv 판을 올리면 스크립트의 `UV_VERSION`과 SHA-256 값을 함께 바꿉니다. 값은 `gh api repos/astral-sh/uv/releases/tags/<판>` 의 `digest`에 있습니다.
     - 파이썬은 uv만 씁니다.
     - `pip install`은 쓰지 않습니다. `uv.lock`과 실제 설치가 어긋나, 팀원마다 설치된 판이 달라집니다. CI도 `uv.lock`이 `pyproject.toml`과 어긋나면 실패합니다(`UV_LOCKED=1`).
-- **의존성 묶음.** 파이썬 패키지는 쓰임새별로 묶어 설치합니다(`pyproject.toml`의 `[dependency-groups]`).
+- **의존성 묶음.** 파이썬 패키지는 쓰임새별로 묶어 설치합니다(`pyproject.toml`의 `[dependency-groups]`). 기본 설치(`uv sync`)에는 스튜디오와 시험이 쓰는 패키지만 둡니다. 선택 묶음에는 운영체제에 따라 설치 파일(wheel)이 없는 패키지가 있어서, 기본에 넣으면 그 컴퓨터에서는 설치 전체가 막히기 때문입니다.
 
     | 묶음 | 내용 | 설치 |
     |---|---|---|
-    | 기본 | numpy, scipy, numba | 늘 |
-    | `dev` | pytest, ruff, hypothesis, matplotlib | 늘(`uv sync`) |
-    | `data` | h5py, xarray, rasterio, pyogrio, geopandas 등 | 늘(`uv sync`) |
-    | `mesh` | scikit-image, trimesh | 늘(`uv sync`) |
-    | `analysis` | pyflwdir, landlab | `--group analysis` |
-    | `gpl` | fastscapelib, topotoolbox | `--group gpl`, analysis 전용 |
-    | `notebook` | jupyterlab | `--group notebook` |
+    | 기본 | numpy, scipy | 늘 |
+    | `dev` | pytest, ruff, hypothesis, matplotlib, pillow | 늘(`uv sync`) |
+    | `analysis` | pyflwdir, landlab, 그리고 `analysis/` 스크립트가 쓰는 numba, h5py | `setup.sh --analysis` |
+    | `data` | h5py, xarray, rasterio, pyogrio, geopandas 등 진짜 지구 자료(`data/pilot`)를 읽는 도구. 지금은 부르는 코드가 없음 | `setup.sh --all` |
+    | `gpl` | fastscapelib, topotoolbox | `setup.sh --gpl`, analysis 전용 |
+    | `notebook` | jupyterlab | `setup.sh --notebook` |
+
+    설치 스크립트 대신 uv로 바로 더할 때는 `uv sync --inexact --group <묶음>`처럼 `--inexact`를 붙입니다. 붙이지 않으면 `uv sync`가 이미 설치한 다른 선택 묶음을 지웁니다.
 
 - **패키지 추가.** 파이썬은 `uv add <패키지> --group <묶음>`, C#은 `dotnet add <프로젝트> package <패키지>`로 더하고, PR 설명에 이유를 씁니다. `uv.lock`·`packages.lock.json`도 같이 커밋합니다.
-- **지원 환경.**
-    - macOS 15 이상(Apple Silicon): 잠근 rasterio 바이너리가 macOS 15용입니다.
-    - Windows 10/11 x64.
-    - Linux x86_64(glibc 2.28 이상).
-    - Linux ARM에서는 `gpl` 묶음을 설치할 수 없습니다.
-    - Windows ARM64는 x64 파이썬을 에뮬레이션으로 씁니다(시험 안 함).
-    - Intel Mac은 지원하지 않습니다(numba 0.68에 macOS x86_64 바이너리가 없음).
+- **지원 환경.** 묶음마다 설치 파일이 나온 운영체제가 다릅니다. 표는 [README.md](../README.md) '지원 환경'에 있습니다. 설치 스크립트와 `tools/doctor.py`도 같은 값으로 미리 검사합니다.
+    - 기본 설치: Apple Silicon Mac은 macOS 12 이상(scipy), Intel Mac은 macOS 10.15 이상, Windows 10/11 x64·ARM64, Linux(glibc 2.28 이상).
+    - `analysis`: Intel Mac에서는 안 됩니다(numba 0.68에 macOS x86_64 설치 파일이 없음). Apple Silicon Mac은 macOS 14 이상(netcdf4).
+    - `gpl`, `data`: 맥은 macOS 15 이상(rasterio). Linux ARM64에서는 `gpl`을 설치할 수 없습니다.
+    - `notebook`: Intel Mac에서는 안 됩니다(argon2-cffi-bindings).
+    - Windows ARM64는 선택 묶음 때문에 x64 파이썬을 에뮬레이션으로 씁니다(시험 안 함).
+    - 패키지 판을 올리면 `uv sync --locked --no-build --dry-run --python-platform <플랫폼> --group <묶음>`으로 다시 확인합니다. 맥의 판은 `MACOSX_DEPLOYMENT_TARGET=14.0`처럼 정합니다. 아무것도 설치하지 않습니다.
 - **파이썬 3.13인 이유.** fastscapelib과 TopoToolbox가 3.14용 바이너리를 내지 않습니다. 그래서 세 운영체제 모두에서 바이너리로 설치되는 가장 새 버전이 3.13입니다. 올릴 때는 `tools/check_wheels.py`로 먼저 확인합니다.
 - **Godot.** 4.7.2 **.NET 판**(`4.7.2.stable.mono`)을 모두 같은 버전으로 씁니다.
     - 표준판으로는 C# 엔진이 열리지 않습니다.
