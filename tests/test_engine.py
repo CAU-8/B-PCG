@@ -12,10 +12,14 @@ Godot 는 사용자 폴더에 설정과 user:// 를 쓰므로 HOME (리눅스 XD
 
 검사
 - test_engine_imports_cleanly: 가져오기가 프로젝트 폴더(.godot/ 밖)에 .uid·.import 만 만듦.
-- test_engine_without_bake: 빈 굽기 폴더로 회랑(표본 지형만)과 지구본('자료가 없습니다').
+- test_engine_without_bake: 빈 굽기 폴더로 회랑(표본 지형만, 화면의 '불러오기 문제' 상자)과
+  지구본('자료가 없습니다').
 - test_engine_generates_and_loads: 엔진 안에서 tiny 를 만들고(처음 화면의 --generate),
   그 실행으로 회랑·지구본 검사를 돌려 레이어·동굴 삼각형·입구 수·지구본 필드 수가 굽기 결과와
-  같은지 봄.
+  같은지 봄. 회랑을 여러 프레임에 나눠 불러오는지, 지형을 한 번만 만드는지, 충돌면 조각의 솔기를
+  넘어 걷는지, --baked-dir 로 띄워도 처음 화면으로 돌아오는지도 봄.
+- test_engine_shows_load_problems: 망가진 동굴 메시와 빠진 지하수면 파일을 화면의 '불러오기 문제'
+  상자에 띄우고, 나머지 레이어로 회랑을 여는지 봄.
 - test_engine_matches_cli: 엔진 안 생성 결과가 C# 콘솔(Bpcg.Cli all)과 파일까지 같은지 봄
   (manifest 의 걸린 시간 'seconds'·'*_seconds' 만 뺌).
 - test_engine_loads_console_bake: 콘솔로 구운 동굴 회랑과 지구본 약속 대체 자료도 읽는지 봄.
@@ -245,6 +249,9 @@ def test_engine_without_bake(engine, tmp_path):
     empty.mkdir()
     out = _scene(engine, SMOKE_SCENE, _baked(empty), ok="BPCG_SMOKE_OK")
     assert "표본 지형만 검사했습니다" in out
+    # 구운 회랑이 없다는 사실을 콘솔만이 아니라 화면의 '불러오기 문제' 상자에도 띄웁니다.
+    shown = "불러오기 문제 화면: 불러오기 문제 1개 | • 구운 회랑의 목차 파일이 없어"
+    assert f"{shown} 작은 표본 지형만 보여 줍니다" in out
     out = _scene(engine, GLOBE_SCENE, _baked(empty), ok="BPCG_GLOBE_OK (no data)")
     assert "자료 없음 알림: 지구본 자료가 없습니다" in out
 
@@ -261,6 +268,11 @@ def test_engine_generates_and_loads(engine, generated_run):
     assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
     assert f"입구 {man['caves']['n_entrances']}," in out
     assert "프랙탈 디테일: 켜짐 (처음)" in out
+    # 다른 스레드와 여러 프레임에 나눠 불러오고, 회랑 지형은 디테일 하나만 만들고,
+    # 충돌면은 정사각 조각입니다.
+    assert "불러오기: " in out and "지형 메시 1번 만듦" in out
+    assert "충돌 조각: " in out and "솔기 걷기: " in out
+    assert "처음 화면: --baked-dir 건너뛰기는 처음 한 번만" in out
 
     # 굽기 폴더가 실행의 corridor/ 이면 지구본은 옆의 globe/ 에서 찾습니다.
     out = _scene(engine, GLOBE_SCENE, _baked(corridor), "--expect-globe", ok="BPCG_GLOBE_OK")
@@ -273,6 +285,29 @@ def test_engine_generates_and_loads(engine, generated_run):
     )
     if globe.get("hero"):
         assert "이름표 '히어로 유역 (" in out
+
+
+def test_engine_shows_load_problems(engine, generated_run, tmp_path):
+    """망가진 동굴 메시와 빠진 지하수면 파일을 화면의 '불러오기 문제' 상자에 띄웁니다.
+
+    나머지 레이어로는 회랑을 엽니다.
+    """
+    baked = tmp_path / "broken"
+    shutil.copytree(generated_run / "corridor", baked)
+    glb = baked / "caves.glb"
+    glb.write_bytes(glb.read_bytes()[: glb.stat().st_size // 2])  # 뒤 절반을 잘라 망가뜨림
+    (baked / "water_table.bin").unlink()
+    godot, env, _ = engine
+    expect = "동굴 메시를 읽지 못해|지하수면 파일이 없어"
+    args = [SMOKE_SCENE, "--", _baked(baked), f"--expect-problems={expect}"]
+    proc = _godot(godot, env, args, SCENE_TIMEOUT_S)
+    # 망가진 glb 는 Godot 의 glTF 해석기가 'ERROR:' 줄을 찍으므로 _check_clean 을 쓰지 않습니다.
+    out = proc.stdout + proc.stderr
+    assert "BPCG_SMOKE_OK" in out, f"검사 실패:\n{_tail(proc)}"
+    assert proc.returncode == 0, f"종료 코드 {proc.returncode}:\n{_tail(proc)}"
+    assert "SCRIPT ERROR" not in out
+    assert "불러오기 문제 화면: 불러오기 문제 2개" in out
+    assert "[회랑] 불러오기 문제: 동굴 메시를 읽지 못해 동굴 레이어 없이 엽니다" in out
 
 
 def test_engine_matches_cli(engine, generated_run, csharp_cli, tmp_path):
