@@ -253,7 +253,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 결과 그림 `src/Bpcg.Figures`: ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF, 모두 MIT. 명령줄 `src/Bpcg.Cli`와 C# 시험도 이 프로젝트를 거쳐 같은 패키지를 씁니다.
     - 엔진 `engine/`: GodotSharp·GodotSharpEditor·Godot.SourceGenerators(Godot을 C#에서 부르는 패키지), 모두 MIT.
     - C# 시험 `tests/Bpcg.Tests`: xunit.v3과 그 하위 패키지는 Apache-2.0, 함께 딸려 오는 Microsoft.Testing.Platform 등은 MIT.
-    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3, University of Illinois/NCSA 라이선스(MIT와 거의 같은 허용형). nuget.org의 패키지 설명 파일이 가리키는 `LICENSE.txt`에서 확인했습니다.
+    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3, University of Illinois/NCSA 라이선스(MIT와 거의 같은 허용형). nuget.org의 패키지 설명 파일이 가리키는 `LICENSE.txt`에서 확인했습니다. MIT처럼 쓰고 고치고 다시 나눠 줄 수 있고, BSD처럼 저작권 문구를 남기고 만든 사람의 이름을 홍보에 쓰지 않는다는 조건이 붙습니다.
 - **빌드한 프로그램을 나눠 줄 때.** Godot로 내보낸 게임이나 `dotnet publish` 결과에는 패키지와 Godot 엔진이 들어갑니다. 이런 실행 파일을 나눠 줄 때는 들어간 패키지와 Godot의 라이선스 글을 함께 넣습니다(`THIRD_PARTY_NOTICES.md` 4절).
 - **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다.
     - 자료를 잘라 저장소에 넣으면 `THIRD_PARTY_NOTICES.md` 3절 표에 원자료, 조건, 인용을 적습니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다.
