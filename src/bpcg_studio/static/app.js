@@ -1188,7 +1188,9 @@ function renderOverview() {
       "p",
       { class: "explain" },
       h("b", null, "검사(check)"),
-      "는 꼭 지켜야 하는 규칙입니다(예: 거꾸로 흐르는 강 0칸). ",
+      "는 결과를 다시 재어 확인하는 규칙입니다(예: 솔버가 다 풀었는지, 강이 바둑판 방향을 따르지 않는지). ",
+      h("b", null, "자기 검사(self)"),
+      "는 만드는 코드가 늘 맞게 짠 규칙입니다(예: 거꾸로 흐르는 강 0칸). 어기면 코드 결함이고, 맞아도 지구와 닮았다는 근거가 아닙니다. ",
       h("b", null, "결과(emergent)"),
       "는 입력에 없던 성질이 결과로 나온 값이라 지구 값과 비교하고, '지구답다'는 근거로는 이것만 씁니다. ",
       h("b", null, "반쯤 입력(forced)"),
@@ -1198,9 +1200,14 @@ function renderOverview() {
       h("span", { class: "pill bad" }, "불합격"),
       " ",
       h("span", { class: "pill info" }, "판정 없음"),
+      " ",
+      h("span", { class: "pill bad" }, "계산 실패"),
+      "(계산이 오류로 끝남, 메모 줄에 오류 글)",
     ),
   );
-  const pillFor = (x) => (x == null ? "" : x.pass === true ? h("span", { class: "pill ok" }, "통과") : x.pass === false ? h("span", { class: "pill bad" }, "불합격") : h("span", { class: "pill info" }, "판정 없음"));
+  // note 머리 '계산 실패: ' 는 Scorecard.cs 의 ErrorPrefix 와 같습니다 (종류와 상관없이 계산이 오류로 끝난 항목).
+  const computeFailed = (x) => x != null && typeof x.note === "string" && x.note.startsWith("계산 실패: ");
+  const pillFor = (x) => (x == null ? "" : computeFailed(x) ? h("span", { class: "pill bad" }, "계산 실패") : x.pass === true ? h("span", { class: "pill ok" }, "통과") : x.pass === false ? h("span", { class: "pill bad" }, "불합격") : h("span", { class: "pill info" }, "판정 없음"));
   // 값이 null 이면 계산하지 못했거나 건너뛴 항목입니다 (판정과 메모 줄에 이유가 있음).
   const val = (x, key) => {
     if (!x || x.value == null) return "—";

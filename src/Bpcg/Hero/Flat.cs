@@ -227,7 +227,7 @@ public static class Flat
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = Pipeline.ScorecardSummary(card);
-        Pipeline.Say(log, $"[평면 히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
+        Pipeline.Say(log, $"[평면 히어로] 끝: {(double)sec["total"]!:F2} s, 점수표 {Pipeline.ScorecardLogText(summary)}");
         var stages = new OrderedDictionary<string, object?>();
         foreach (KeyValuePair<string, object?> kv in st.Diag)
         {
