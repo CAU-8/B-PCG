@@ -60,7 +60,7 @@ public sealed record CaveShape(
 /// 3. 통로 굵기는 두 한계 가운데 작은 쪽입니다 (Radius). 큰비 때의 물을 가득 채워 흘릴 수 있는 굵기, 그리고 통로가 물에 잠겨
 ///    있는 동안 벽이 녹아 물러난 거리.
 /// 4. 아래층 통로는 지층이 쌓인 면(층리면)을 따라갑니다. 층리면이 기울어 있으면 통로가 물 높이 아래로 내려갔다가 틈을 타고
-///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth).
+///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth 가 폭, SawtoothDepth 가 깊이).
 /// 길을 고르는 비교에는 더하기, 곱하기만 씁니다. 지수·로그 함수는 운영체제마다 끝자리가 달라 길이 달라질 수 있기 때문입니다.
 /// 굵기와 깊이(길을 고른 뒤의 모양)에만 거듭제곱을 씁니다.
 /// </remarks>
@@ -274,6 +274,32 @@ public sealed class CaveNetwork
         }
         double span = 2.0 * LoopCoefficient * Math.Pow(x, LoopExponent);
         return span < LoopMinM ? 0.0 : Math.Min(span, LoopMaxM);
+    }
+
+    /// <summary>
+    /// 통로가 층리면을 따라 물 높이 아래로 내려간 깊이 [m] (sawtooth_depth, 샘 쪽을 자르기 전). 층리면은 폭 span [m] 간격으로
+    /// 겹겹이 있다고 봅니다. 통로는 한 면을 따라가다가, 그 면이 물 높이보다 폭만큼 깊어지면 세로 틈을 타고 위의 면으로 옮겨 탑니다.
+    /// 면이 물 높이 위로 올라가면 아래의 면으로 옮겨 탑니다. 그래서 깊이는 물길을 따라 0 에서 폭까지 톱니 꼴로 오르내립니다.
+    /// 칸마다 따로 (물 높이 − 층리면 높이) 를 폭으로 나눈 나머지를 쓰면, 그 값이 폭의 수십 배라 폭이 조금만 달라도 나머지가 크게
+    /// 바뀝니다. 그래서 하류 칸(샘 쪽 이웃)의 깊이 downstreamDepth 에 두 칸 사이에서 (물 높이 − 층리면 높이) 가 바뀐 만큼만 더하고,
+    /// 0 이상 폭 미만이 되도록 폭을 더하거나 뺍니다. 두 칸이 같은 면 위에 있으면 통로의 높이 차는 층리면의 높이 차와 같습니다.
+    /// aboveBed, downstreamAboveBed: 이 칸과 하류 칸에서 물 높이 − 층리면 높이 [m]. 하류 칸이 없거나(샘) 그 칸의 층리면을 모르면
+    /// (NaN) aboveBed 를 폭으로 나눈 나머지, 곧 물 높이 바로 아래의 면에서 시작합니다. 폭이 0 이거나 층리면을 모르면 0 (물 높이를 따라감).
+    /// 예: 폭 10 m. 샘 칸에서 물 높이가 층리면보다 123 m 위면 깊이는 123 − 120 = 3 m 입니다. 상류 칸에서 그 차가 127 m 면 7 m 이고,
+    /// 그다음 칸에서 135 m 면 7 + 8 = 15 m 로 폭을 넘으므로 위의 면으로 옮겨 타 5 m 입니다.
+    /// </summary>
+    public static double SawtoothDepth(double span, double aboveBed, double downstreamAboveBed, double downstreamDepth)
+    {
+        if (!(span > 0.0) || !double.IsFinite(aboveBed))
+        {
+            return 0.0;
+        }
+        double x = double.IsFinite(downstreamDepth) && double.IsFinite(downstreamAboveBed)
+            ? downstreamDepth + (aboveBed - downstreamAboveBed)
+            : aboveBed;
+        double depth = x - (span * Math.Floor(x / span));
+        // 반올림으로 span 과 같아진 값은 위의 면(깊이 0)으로 봅니다.
+        return depth < span ? depth : 0.0;
     }
 
     /// <summary>잡음 값(대략 −1~1)을 저항으로 바꿉니다. 0 이하의 잡음은 잘 통하는 자리, 큰 잡음은 덜 통하는 자리입니다.</summary>
@@ -678,18 +704,38 @@ public sealed class CaveNetwork
                     fromSink[q] = Math.Max(fromSink[q], fromSink[c] + Step(c, q));
                 }
             }
+            // 층리면을 따라 물 높이 아래로 내려간 깊이 (샘 쪽을 자르기 전). 하류 칸의 깊이에 이어 붙이므로(SawtoothDepth), 샘까지의
+            // 길이처럼 하류 칸부터 채웁니다. 폭은 칸마다 다를 수 있지만, 같은 면 위의 두 칸 사이에서는 통로가 면을 그대로 따라갑니다.
+            double[] span = new double[n];
+            double[] saw = new double[n];
             foreach (int c in cells)
             {
-                double span = LoopDepth(toSpring[c] + fromSink[c], more.DipSin is null ? 0.0 : more.DipSin[c]);
-                double drop = 0.0;
-                if (span > 0.0 && double.IsFinite(more.BedZ[c]))
+                span[c] = LoopDepth(toSpring[c] + fromSink[c], more.DipSin is null ? 0.0 : more.DipSin[c]);
+            }
+            Array.Clear(done);
+            foreach (int c0 in cells)
+            {
+                chain.Clear();
+                int c = c0;
+                while (c >= 0 && !done[c])
                 {
-                    // 물 높이 바로 아래의 층리면까지의 깊이: 층리면이 span 간격으로 놓였다고 보고, 물 높이에서 가장 가까운 아래쪽 면.
-                    double t = (levels[c] - more.BedZ[c]) / span;
-                    drop = (t - Math.Floor(t)) * span;
-                    // 샘에서는 물이 지표로 나와야 하므로, 샘에 가까울수록 얕게 둡니다 (샘까지 거리 × SpringRiseSlope 보다 깊지 않게).
-                    drop = Math.Min(drop, SpringRiseSlope * toSpring[c]);
+                    chain.Add(c);
+                    c = parent[c];
                 }
+                for (int t = chain.Count - 1; t >= 0; t--)
+                {
+                    int a = chain[t];
+                    int q = parent[a];
+                    double above = levels[a] - more.BedZ[a];
+                    double aboveDown = q >= 0 ? levels[q] - more.BedZ[q] : double.NaN;
+                    saw[a] = SawtoothDepth(span[a], above, aboveDown, q >= 0 ? saw[q] : double.NaN);
+                    done[a] = true;
+                }
+            }
+            foreach (int c in cells)
+            {
+                // 샘에서는 물이 지표로 나와야 하므로, 샘에 가까울수록 얕게 둡니다 (샘까지 거리 × SpringRiseSlope 보다 깊지 않게).
+                double drop = Math.Min(saw[c], SpringRiseSlope * toSpring[c]);
                 axis[c] -= drop;
                 meanLoop += drop;
                 nLower++;
