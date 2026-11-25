@@ -257,8 +257,13 @@ def test_engine_generates_and_loads(engine, generated_run):
     globe = json.loads((generated_run / "globe" / "globe.json").read_text(encoding="utf-8"))
 
     out = _scene(engine, SMOKE_SCENE, _baked(corridor), "--expect-baked", ok="BPCG_SMOKE_OK")
-    assert "레이어: terrain, surround, water, water_table, caves, section" in out
-    assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
+    # tiny 시드 0 히어로 유역은 화강암만 드러나 동굴 메시가 없을 수 있습니다.
+    # 동굴 메시를 읽는 길은 test_engine_loads_console_bake 가 동굴이 꼭 생기는 실행으로 봅니다.
+    if "caves" in man["file_meta"]:
+        assert "레이어: terrain, surround, water, water_table, caves, section" in out
+        assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
+    else:
+        assert "레이어: terrain, surround, water, water_table, section" in out
     assert f"입구 {man['caves']['n_entrances']}," in out
     assert "프랙탈 디테일: 켜짐 (처음)" in out
 

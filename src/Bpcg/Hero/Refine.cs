@@ -24,20 +24,24 @@ public static class Refine
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
 
-    /// <summary>L0 필드를 구면 점 unit (M, 3) 에서 읽습니다 (sample_l0_fields).</summary>
+    /// <summary>
+    /// L0 필드를 구면 점 unit (M, 3) 에서 읽습니다 (sample_l0_fields). L0 값은 노드 흔들기로 옮긴 대표점의 값이므로,
+    /// 연속 값(LinearFields)은 대표점을 꼭짓점으로 하는 삼각형 안에서 섞고, 템플릿(NearestFields)은 가장 가까운 대표점의 값을
+    /// 씁니다(<see cref="NodeStencil"/>). 대표점 위의 점은 그 대표점의 값을 그대로 받습니다.
+    /// </summary>
     public static FieldSet SampleL0Fields(PlanetState planet, double[] unit)
     {
-        int nL0 = (int)planet.Graph.Shape[1];
         FieldSet f = planet.Fields;
         var missing = LinearFields.Concat(NearestFields).Where(k => !f.Contains(k)).ToList();
         if (missing.Count > 0)
         {
             throw new ArgumentException($"planet.fields 에 히어로 표본에 필요한 필드가 없습니다: {Pipeline.PyListRepr(missing)}");
         }
+        NodeStencil stencil = NodeStencil.Build(planet.Graph, unit);
         var output = new FieldSet();
         foreach (string name in LinearFields)
         {
-            double[] v = Resample.SampleSphereReal(f[name], nL0, unit);
+            double[] v = stencil.Linear(f[name]);
             if (v.Any(x => !double.IsFinite(x)))
             {
                 throw new ArgumentException($"L0 '{name}' 을 히어로로 보간한 값에 NaN 이나 inf 가 있습니다");
@@ -46,7 +50,7 @@ public static class Refine
         }
         foreach (string name in NearestFields)
         {
-            output[name] = Resample.SampleSphereNearest((byte[])FieldSet.CastTo(f[name], typeof(byte)), nL0, unit);
+            output[name] = stencil.Nearest((byte[])FieldSet.CastTo(f[name], typeof(byte)));
         }
         return output;
     }
@@ -97,7 +101,8 @@ public static class Refine
             isOutlet[c] = true;
         }
         double[] pOut = Domain.LocalToUnit(site, [hit.X], [hit.Y], r);
-        double zOut = Resample.SampleSphereReal(f0["z_m"], (int)g0.Shape[1], pOut)[0];
+        // L0 높이도 대표점의 값이라 SampleL0Fields 와 같은 방법으로 읽습니다.
+        double zOut = NodeStencil.Build(g0, pOut).Linear(f0["z_m"])[0];
         if (!double.IsFinite(zOut))
         {
             throw new NoHeroSiteException("출구 위치의 L0 고도가 NaN 입니다");
