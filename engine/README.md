@@ -42,7 +42,7 @@ dotnet build engine/Bpcg.Engine.csproj
 $GODOT --path engine -- --baked-dir="$(pwd)/out/earth/corridor"
 ```
 
-처음 화면을 건너뛰고 바로 회랑이 열립니다. `--baked-dir` 에는 실행 폴더 안의 `corridor/` 를 절대 경로로 줍니다.
+처음 화면을 건너뛰고 바로 회랑이 열립니다. `--baked-dir` 에는 실행 폴더 안의 `corridor/` 를 절대 경로로 줍니다. 회랑에서 N을 누르면 처음 화면으로 돌아가고, 거기서 고르거나 새로 만든 실행이 `--baked-dir` 보다 앞섭니다.
 
 걸어 볼 강 유역(히어로 유역)은 생성기가 점수로 자동으로 고릅니다. 원하는 곳에 두려면 첫 줄에 위도와 경도를 넘깁니다. 좌표는 스튜디오의 행성 지도나 `[히어로] 후보:` 기록 줄에서 읽습니다.
 
@@ -93,7 +93,7 @@ uv run bpcg bake --hero out/earth/hero
 | F | 손전등 (동굴 안에서) |
 | Tab / H | 레이어 패널 / 도움말 숨기기 |
 | M | 지구본 장면(행성 전체)으로. 지구본에서 M을 누르면 돌아옴 |
-| N | 처음 화면(새 행성 만들기·지난 결과)으로. 지구본에서도 같음 |
+| N | 처음 화면(새 행성 만들기·지난 결과)으로. 지구본과 회랑을 불러오는 화면에서도 같음 |
 | - / = | 글자·패널 크기를 10%씩 줄이기 / 키우기 (60~250%). 고른 크기는 다음 실행에도 씀 |
 
 지구본 장면의 조작(끌어서 돌리기, 휠, Space 자동 회전, F 유역으로, 1~9 레이어 등)은 [GLOBE.md](GLOBE.md)에 있습니다.
@@ -118,7 +118,7 @@ uv run bpcg bake --hero out/earth/hero
 - 물가, 동굴 입구 둘레, 원래 웅덩이(사방이 더 높은 땅에 막혀 물이 고이는 자리), 회랑 가장자리에는 더하지 않습니다.
 - 보기용이고 솔버(지형 높이를 구하는 계산기) 결과가 아닙니다. 점수표(만든 지형이 물리 법칙과 지구 통계에 맞는지 채점한 표)도 바꾸지 않습니다.
 - 다른 세기로 보려면 다시 굽습니다: `uv run bpcg bake --hero <실행>/hero --set detail.fractal_gain=1.0`.
-- 엔진은 두 지형의 메시를 한 번씩 만들어 두므로, 켜고 끄기는 바로 됩니다.
+- 회랑에 들어갈 때는 디테일 지형 하나만 만듭니다. 기본 지형은 다 불러온 뒤 다른 스레드에서 미리 계산해 두었다가 처음 끌 때 만들고, 그다음부터는 만들어 둔 두 지형을 바꿔 끼우므로 바로 바뀝니다.
 
 ## 화면 크기
 
@@ -130,9 +130,37 @@ uv run bpcg bake --hero out/earth/hero
 - `-` / `=` 로 더 키우거나 줄이고, 고른 크기는 `user://settings.cfg` 에 남습니다.
 - 마우스 둘러보기와 지구본 끌기는 화면 픽셀 기준이라, 배율을 바꿔도 감도가 같습니다.
 
+## 회랑을 불러오는 동안
+
+laptop 회랑 폴더는 파일이 약 108 MB입니다. 엔진은 이 파일을 읽고, 지형 메시와 충돌면, 땅속 암석 텍스처를 만들어야 걸어 다닐 수 있습니다. 이 일을 한 프레임에 다 하면 그동안 화면이 멈춥니다. 그래서 회랑 장면은 불러오는 동안 화면 가운데에 진행 막대를 띄우고, 일을 둘로 나눕니다.
+
+1. **다른 스레드에서 읽기.** 파일을 읽고, 지형 메시의 꼭짓점 배열과 충돌면 조각을 계산하고, 동굴 메시(`caves.glb`)를 해석합니다(`Scripts/CorridorFiles.cs`). 화면은 계속 그려집니다.
+2. **주 스레드에서 조금씩 만들기.** 메시 덩어리(꼭짓점 약 10만 개)나 충돌 조각 하나씩, 한 프레임에 약 25 ms만큼 만들고 화면을 그립니다(`BakedLayers.Build`, `HeightmapTerrain.ApplySteps`).
+
+진행 막대 아래 글은 지금 하는 일과 단계 번호를 `회랑 지형 메시와 충돌면 만드는 중 (9/13단계) · 1.2 s` 꼴로 보여 줍니다. 기다리지 않으려면 N(처음 화면)이나 M(지구본)을 누릅니다.
+
+**충돌면은 왜 조각으로 나누나.** Godot의 물리 엔진(Jolt)은 정사각 높이맵만 빠른 높이장(height field)으로 만들고, 가로·세로가 다른 높이맵은 삼각형 메시로 바꿉니다. laptop 회랑은 3,001 × 501 표본이라 메시로 바꾸는 데 한 번에 수 초 걸렸습니다. 그래서 충돌면을 한 변이 많아야 257 표본인 정사각 조각으로 나눕니다. 이웃 조각은 경계 표본 한 줄을 같이 써서 틈이 없습니다(`HeightmapLoader.BuildShapeTiles`).
+
+**잰 시간.** laptop 시드 0 회랑(파일 108 MB)을 맥북 에어 M3(8코어, 16 GB)에서 화면 없이 쟀습니다(2026-11-26, `Tests/load_timing.tscn`). 그때 다른 작업이 함께 돌아 부하 평균이 39~113이었습니다. 그래서 고치기 전 코드와 고친 코드를 번갈아 돌려 가운데값을 비교했습니다. 괄호 안은 가장 작은 값~가장 큰 값입니다.
+
+| 잰 값 | 고치기 전 | 고친 뒤 |
+|---|---|---|
+| 회랑에 들어가는 시간 (8번) | 25.0 s (11.9~36.7 s) | 3.8 s (1.5~7.4 s) |
+| 그동안 그린 프레임 | 1개. 그동안 화면이 멈춤 | 284개 (136~456개) |
+| 가장 긴 프레임 | 들어가는 시간 전체 | 0.51 s (0.17~1.43 s) |
+| 같은 실행에서 두 번째로 들어가는 시간 (3번) | 21.2 s | 2.0 s, 가장 긴 프레임 0.13 s |
+| 프랙탈 디테일을 처음 끄는 시간 (8번) | 0.002 s | 0.43 s (0.21~1.29 s) |
+
+- 가장 긴 프레임은 여덟 번 모두 장면을 붙이는 첫 프레임이었습니다. 이 프레임은 첫 진입에서만 길고, 같은 실행에서 두 번째로 들어갈 때(지구본에서 M으로 돌아올 때와 같음)는 8~28 ms입니다.
+- 회랑 장면 안에서 잰 만들기 단계의 가장 긴 프레임은 가운데값 0.11 s입니다(콘솔의 `[회랑] 불러오기 끝:` 줄).
+- 프랙탈 디테일을 처음 끌 때는 기본 지형을 그때 만들어 잠깐 멈춥니다. 전에는 들어갈 때 두 지형을 다 만들어 두었기 때문에 바로 바뀌었습니다.
+- 화면 없이 재면 텍스처와 메시를 그래픽 카드로 올리는 시간이 빠집니다. 창을 띄우면 더 걸립니다 [확인 필요: 창을 띄운 실행은 재지 않았습니다].
+
+**불러오기 문제.** 목차 파일(`manifest.json`)이 없거나, 목차에 있는 파일이 없거나, 파일을 읽지 못하면 멈추지 않습니다. 그 레이어 없이 회랑을 열고, 화면 가운데의 '불러오기 문제' 상자에 줄마다 무엇이 없는지, 받은 경로나 값, 다시 굽는 명령을 적습니다. 같은 줄이 콘솔에 `[회랑] 불러오기 문제:` 로 나옵니다. 상자는 Esc로 마우스를 놓고 '닫기'를 눌러 닫습니다.
+
 ## 지구본과 구운 폴더를 찾는 순서
 
-- **회랑 폴더.** 명령줄 `--baked-dir` → 처음 화면이 고른 실행 → `res://baked`(`engine/baked/`) 순서로 찾습니다(`Scripts/BakedPaths.cs`).
+- **회랑 폴더.** 처음 화면이 고른 실행 → 명령줄 `--baked-dir` → `res://baked`(`engine/baked/`) 순서로 찾습니다(`Scripts/BakedPaths.cs`). `--baked-dir` 로 띄우면 처음 한 번만 처음 화면을 건너뜁니다. N으로 처음 화면에 돌아와 다른 실행을 고르거나 새로 만들면 그 실행이 열립니다.
 - **지구본.** `<회랑 폴더>/globe` 에서 읽고, 없으면 `<회랑 폴더>/../globe` 에서 읽습니다. 그래서 `bpcg bake --engine` 결과(`engine/baked/globe`)와 실행 폴더(`<실행>/globe`)를 둘 다 엽니다.
 
 ---
@@ -142,9 +170,10 @@ uv run bpcg bake --hero out/earth/hero
 | 보이는 현상 | 까닭 | 고치는 법 |
 |---|---|---|
 | 편집기가 C# 스크립트를 읽지 못함 | Godot 표준판으로 열었음 | `.tools/godot-net/` 의 .NET 판(이름에 `mono`)으로 엽니다 |
-| 처음 열 때 1분 넘게 멈춘 듯함 | 100 MB가 넘는 동굴 메시를 가져오는 중 (통로를 물길로 바꾸기 전에 구운 폴더가 `engine/baked/` 에 남아 있을 때) | 기다립니다. 다음부터는 캐시를 씁니다. 새로 구우면 동굴 메시가 1~6 MB라 금방 끝납니다 |
+| 편집기를 처음 열 때 1분 넘게 멈춘 듯함 | 편집기가 100 MB가 넘는 동굴 메시를 가져오는 중 (통로를 물길로 바꾸기 전에 구운 폴더가 `engine/baked/` 에 남아 있을 때). 게임은 이 가져온 사본을 쓰지 않고 파일을 직접 읽습니다 | 기다립니다. 다음부터는 캐시를 씁니다. 새로 구우면 동굴 메시가 1~6 MB라 금방 끝납니다 |
+| 회랑 가운데에 '불러오기 문제' 상자가 뜸 | 회랑 폴더의 파일이 없거나 망가짐 | 상자의 줄마다 빠진 파일과 다시 굽는 명령이 있습니다. 그 명령으로 다시 굽거나, N으로 처음 화면에 가서 새로 만듭니다 |
 | 지구본에 '자료가 없습니다' | 굽기 폴더 옆에 `globe/` 가 없음 | `bpcg all` 로 다시 만들거나, 처음 화면에서 행성을 만듭니다(`bake --no-globe` 는 지구본을 쓰지 않음) |
-| 회랑에 작은 표본 지형만 보임 | 구운 폴더를 찾지 못함 | `--baked-dir` 에 `corridor/` 를 절대 경로로 줍니다 |
+| 회랑에 작은 표본 지형만 보임 | 구운 폴더를 찾지 못함 ('불러오기 문제' 상자에 찾은 경로가 나옴) | `--baked-dir` 에 `corridor/` 를 절대 경로로 줍니다 |
 | 새 스크립트를 더했더니 장면 참조가 깨짐 | `.uid` 파일이 없음 | `HOME=$(mktemp -d) $GODOT --headless --path engine --import` 를 돌리고 생긴 `.uid` 를 같이 커밋합니다 |
 
 ## 검사
@@ -160,8 +189,9 @@ Godot .NET 판이나 dotnet이 없으면 건너뜁니다.
 | 검사 | 확인하는 내용 |
 |---|---|
 | `test_engine_imports_cleanly` | 가져오기가 프로젝트 폴더에 `.uid`·`.import` 만 만드는지 |
-| `test_engine_without_bake` | 빈 굽기 폴더: 회랑은 표본 지형만, 지구본은 '자료가 없습니다' 알림 |
-| `test_engine_generates_and_loads` | 엔진 안 tiny 생성 → 회랑·지구본 검사. 동굴 삼각형·입구 수·필드 수가 굽기 결과와 같은지 |
+| `test_engine_without_bake` | 빈 굽기 폴더: 회랑은 표본 지형만('불러오기 문제' 상자에 까닭), 지구본은 '자료가 없습니다' 알림 |
+| `test_engine_generates_and_loads` | 엔진 안 tiny 생성 → 회랑·지구본 검사. 동굴 삼각형·입구 수·필드 수가 굽기 결과와 같은지. 회랑을 여러 프레임에 나눠 불러오는지, 지형을 한 번만 만드는지, 충돌 조각의 솔기를 넘어 걷는지, `--baked-dir` 로 띄워도 처음 화면으로 돌아오는지 |
+| `test_engine_shows_load_problems` | 동굴 메시를 망가뜨리고 지하수면 파일을 지운 묶음: 두 문제가 화면 상자에 나오고, 나머지 레이어로 회랑이 열리는지 |
 | `test_engine_matches_cli` | 엔진 안에서 만든 결과 = 명령줄 `all` 결과 (목록 파일의 `seconds` 만 뺌) |
 | `test_engine_loads_console_bake` | 명령줄로 구운 동굴 회랑과 지구본 대체 자료(`tests/globe_fixture.py`)도 읽는지 |
 | `test_engine_globe_malformed` | 크기가 틀린 지구본 자료에 '읽지 못했습니다' 알림 |
@@ -177,9 +207,10 @@ HOME=$H $GODOT --headless --path . -- --generate --profile=tiny --quit-when-done
 HOME=$H $GODOT --headless --path . res://Tests/smoke.tscn -- --baked-dir=<실행>/corridor --expect-baked
 HOME=$H $GODOT --headless --path . res://Tests/globe_smoke.tscn -- --baked-dir=<실행>/corridor --expect-globe
 HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --shots-dir=/절대/경로 --baked-dir=<실행>/corridor
+HOME=$H $GODOT --headless --path . res://Tests/load_timing.tscn -- --baked-dir=<실행>/corridor       # BPCG_LOAD_TIMING 1번째 진입 … ms
 ```
 
-화면 캡처(`Tests/screenshots.tscn`)는 회랑·지구본을 여러 시점과 레이어 조합으로 찍어 PNG로 남깁니다. 창을 띄우며, 찍는 동안 키보드·마우스 입력을 받지 않습니다.
+화면 캡처(`Tests/screenshots.tscn`)는 회랑·지구본을 여러 시점과 레이어 조합으로 찍어 PNG로 남깁니다. 창을 띄우며, 찍는 동안 키보드·마우스 입력을 받지 않습니다. 진입 시간 재기(`Tests/load_timing.tscn`)는 회랑 장면을 붙인 때부터 다 불러올 때까지 걸린 시간과, 그동안 가장 길게 멈춘 프레임을 찍습니다. 같은 실행에서 두 번 들어가고, 첫 진입 뒤에는 프랙탈 디테일을 처음 끄는 시간도 잽니다. 화면 없이 돌리면 텍스처와 메시를 그래픽 카드로 올리는 시간이 빠집니다.
 
 ---
 
@@ -202,8 +233,8 @@ HOME=$H $GODOT --path . --resolution 1600x900 res://Tests/screenshots.tscn -- --
 |---|---|
 | `project.godot`, `Bpcg.Engine.csproj`, `Bpcg.Engine.sln`, `packages.lock.json` | Godot 프로젝트와 C# 프로젝트 (sln은 편집기 빌드용) |
 | `scenes/` | `start.tscn`, `main.tscn`, `globe.tscn` |
-| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`, 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui`·`UiScale`(창·글자 배율) |
-| `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn` 과 그 C# |
+| `Scripts/` | 처음 화면 `StartMenu`·`StageProgress`·`EnginePaths`, 회랑 `Main`·`CorridorFiles`(다른 스레드에서 회랑 파일 읽기)·`HeightmapTerrain`·`HeightmapLoader`·`BakedLayers`·`StrataVolume`·`Player`·`Hud`·`LoadScreen`(불러오기 진행 막대와 문제 상자), 지구본 `GlobeMain`·`GlobeView`·`GlobeData`·`GlobeCamera`·`GlobeHud`, 공용 `BakedPaths`·`Files`(파일·JSON)·`Ui`·`UiScale`(창·글자 배율) |
+| `Tests/` | 검사 장면 `smoke.tscn`·`globe_smoke.tscn`·`screenshots.tscn`·`load_timing.tscn` 과 그 C# |
 | `shaders/` | 단면·지층·동굴·물·지구본·대기 셰이더 (`.gdshader`, `.gdshaderinc`) |
 | `samples/` | 굽기 폴더가 없을 때 쓰는 작은 표본 높이맵 (`make_sample.py` 로 만듦) |
 | `GLOBE.md` | 지구본 장면과 `globe/` 파일 형식 |
@@ -255,13 +286,13 @@ C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.Lo
 | `water_table_lower` | (있으면) 아래 지하수면: 막는 층 아래 녹는 암석의 물 높이. 단면은 이 아래를 젖은 땅으로 칠합니다. 없는 옛 굽기는 `water_table` 과 같다고 봅니다 |
 | `strata.u8` + `strata.json` + `strata_top` | `R8` 3D 텍스처(가로 = 열, 세로 = 층, 깊이 = 행)와 윗면 `RF` 텍스처. 한 변이 2,048을 넘으면 쓰지 않습니다. 색은 `strata.json` 의 `legend`(재질 번호 → 색)로 칠합니다: 암석 0~11, 층리의 어두운 띠 17~26, 물 254, 공기 255 |
 | `cave_mouth` | `RF` 텍스처. 음수인 곳의 지형을 뚫음 |
-| `caves.glb` | 편집기가 가져왔으면 `GD.Load()`, 아니면 실행 중 `GltfDocument` |
+| `caves.glb` | 늘 실행 중에 `GltfDocument` 로 읽습니다(다른 스레드). 편집기가 가져온(import) 사본은 다시 구운 뒤 가져오기를 돌리지 않으면 옛 동굴일 수 있어 쓰지 않습니다 |
 | `entrances.json` | 동굴 입구로 옮겨 가기 (T) |
 | `globe/` | 지구본 장면의 자료 (`globe.json` + 필드 `.bin`, [GLOBE.md](GLOBE.md)) |
 
 ### glb
 
-동굴처럼 높이맵으로 나타낼 수 없는 모양은 glb(glTF 2.0 바이너리)로 넘깁니다. `NORMAL` 을 꼭 넣고, 꼭짓점마다 붙는 값(재질 번호 등)은 `COLOR_0` 에 넣습니다. `res://` 안에 두면 편집기가 가져오고(`.import` 생김), git에서 빠지는 곳은 실행 중에 `GltfDocument.AppendFromFile()` 로 읽습니다.
+동굴처럼 높이맵으로 나타낼 수 없는 모양은 glb(glTF 2.0 바이너리)로 넘깁니다. `NORMAL` 을 꼭 넣고, 꼭짓점마다 붙는 값(재질 번호 등)은 `COLOR_0` 에 넣습니다. 엔진은 glb가 어디에 있든 실행 중에 `GltfDocument.AppendFromFile()` 로 읽습니다. `res://` 안에 두면 편집기가 가져오기도 하지만(`.import` 생김) 게임은 그 사본을 쓰지 않습니다.
 
 ## 커밋하는 파일과 제외하는 파일
 
