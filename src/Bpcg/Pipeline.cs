@@ -503,62 +503,126 @@ public static class Pipeline
 
         // --- 석회암 땅에서 땅속으로 사라지는 개울 (히어로 유역만): 지하수면보다 높이 떠 있는 작은 개울은 물을 잃고, 그 물은
         //     큰 강가에서 다시 솟습니다. 유량이 바뀌므로 강·호수를 다시 정합니다. 지형은 그대로라 물이 준 골짜기는 마른 골짜기로 남습니다.
-        t = Stopwatch.GetTimestamp();
-        KarstStreamResult? karst = null;
+        //     사라진 물은 아래층 동굴을 타고 샘까지 가야 합니다(굽기가 그 길에 통로를 둡니다). 그래서 흙·지하수면·동굴 층을 만든 뒤
+        //     샘까지 갈 수 없는 칸(KarstStreams.DrainsToSpring 이 거짓)에서 개울이 사라졌으면, 그런 칸을 모두 막고 네 계산을 다시
+        //     합니다. 막는 칸은 늘기만 하므로 끝나지만, KarstStreams.MaxCaveRounds 번에서 멈춥니다.
+        double[] qSolver = q;
+        FieldSet wbSolver = wb;
+        double[]? made = null;
         if (!sphere)
         {
-            double[] made = new double[n];
+            made = new double[n];
             for (int c = 0; c < n; c++)
             {
                 made[c] = (graph.Area[c] * rEff[c]) + (inflow is null ? 0.0 : inflow[c]);
             }
-            karst = KarstStreams.Apply(
-                graph, z, rcv, order, made, q, wb.Get<bool>("is_river"), wb.Get<bool>("is_lake"), ocean,
-                wb.Get<double>("water_level_m"), rock, u, columns, cfg);
-            if (karst is not null)
+        }
+        bool[]? noSink = null;
+        int nKept = 0;
+        int caveRounds = 0;
+        int[] stray = [];
+        double secKarst = 0.0;
+        double secSoil = 0.0;
+        double secGw = 0.0;
+        double secCaves = 0.0;
+        KarstStreamResult? karst;
+        FieldSet soil;
+        bool[] isLake;
+        bool[] isRiver;
+        double[] zGw;
+        double[] zGwLower;
+        double[] baseLevel;
+        OrderedDictionary<string, object?> gwDiag;
+        FieldSet caves;
+        while (true)
+        {
+            caveRounds++;
+            t = Stopwatch.GetTimestamp();
+            karst = null;
+            stray = [];
+            q = qSolver;
+            wb = wbSolver;
+            if (made is not null)
             {
-                for (int c = 0; c < n; c++)
+                karst = KarstStreams.Apply(
+                    graph, z, rcv, order, made, qSolver, wbSolver.Get<bool>("is_river"), wbSolver.Get<bool>("is_lake"), ocean,
+                    wbSolver.Get<double>("water_level_m"), rock, u, columns, cfg, noSink);
+                if (karst is not null)
                 {
-                    // 솔버가 쓴 물의 양에서 벗어난 칸 (사라진 아래쪽의 마른 골짜기, 솟은 아래쪽의 불어난 강).
-                    notSteady[c] |= Math.Abs(karst.Discharge[c] - q[c]) > LostFlowTolerance * q[c];
+                    q = karst.Discharge;
+                    wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr, closedLevel: balance?.Level);
                 }
-                q = karst.Discharge;
-                wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr, closedLevel: balance?.Level);
+            }
+            secKarst += Seconds(t);
+
+            // --- 흙과 충적층
+            t = Stopwatch.GetTimestamp();
+            soil = Soil.SoilAndAlluvium(z, slope, res.SCritSurface, u, temp, p, q, qs, fanRaise, rock, cfg, ocean, graph);
+            secSoil += Seconds(t);
+
+            // --- 지하수면
+            t = Stopwatch.GetTimestamp();
+            isLake = wb.Get<bool>("is_lake");
+            isRiver = wb.Get<bool>("is_river");
+            bool[] isWater = new bool[n];
+            for (int c = 0; c < n; c++)
+            {
+                isWater[c] = ocean[c] || isLake[c] || isRiver[c];
+            }
+            (zGw, zGwLower, baseLevel, gwDiag) = Groundwater.WaterTable(
+                graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean,
+                karstBase: karst?.Big);
+            secGw += Seconds(t);
+
+            // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
+            t = Stopwatch.GetTimestamp();
+            // 위층 높이 = 기준 물의 수면 + k·f_k·골짜기 깊이. 히어로에서는 수면(baseLevel)을 가장 가까운 큰 물(karst.Big)에서
+            // 가져오므로, 골짜기 깊이도 같은 큰 물의 값을 씁니다. 필드 valley_depth_m 은 가장 가까운 강(크기와 상관없음)의
+            // 값이라, 그대로 쓰면 수면과 골짜기 깊이가 서로 다른 강에서 와서 '마른 옛 강 높이'가 가까운 개울보다 낮아집니다.
+            double[] valleyDepth = wb.Get<double>("valley_depth_m");
+            if (karst?.Big is bool[] bigWater && Array.IndexOf(bigWater, true) >= 0)
+            {
+                (_, _, valleyDepth) = Distance.NearestSourceValues(graph, bigWater, valleyDepth);
+            }
+            caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, valleyDepth, columns, cfg);
+            secCaves += Seconds(t);
+
+            if (karst is null)
+            {
+                break;
+            }
+            // --- 사라지는 자리마다 아래층 동굴로 샘까지 갈 수 있는지 (굽기와 같은 판단). 길은 지표에서 300 m 보다 깊어
+            //     굽지 않는 석회암도 지날 수 있습니다(Caves.RouteLevel0).
+            t = Stopwatch.GetTimestamp();
+            double[] level0 = caves.Get<double>("cave_level_0_m");
+            double[] route0 = Caves.RouteLevel0(level0, zGwLower, z, columns, cfg.F("groundwater.max_depth_m"));
+            bool[] drains = KarstStreams.DrainsToSpring(graph, level0, route0, z, isWater, wb.Get<double>("water_level_m"));
+            stray = KarstStreams.WithoutSpring(karst.Exchange, drains);
+            secKarst += Seconds(t);
+            if (stray.Length == 0 || caveRounds >= KarstStreams.MaxCaveRounds)
+            {
+                break;
+            }
+            // 샘까지 갈 수 없는 칸을 모두 막습니다. 막은 개울은 아래로 흘러 샘까지 닿는 첫 떠 있는 칸에서 사라집니다.
+            noSink ??= new bool[n];
+            for (int c = 0; c < n; c++)
+            {
+                noSink[c] |= !drains[c];
+            }
+            nKept += stray.Length;
+        }
+        if (karst is not null)
+        {
+            for (int c = 0; c < n; c++)
+            {
+                // 솔버가 쓴 물의 양에서 벗어난 칸 (사라진 아래쪽의 마른 골짜기, 솟은 아래쪽의 불어난 강).
+                notSteady[c] |= Math.Abs(karst.Discharge[c] - qSolver[c]) > LostFlowTolerance * qSolver[c];
             }
         }
-        sec["karst_streams"] = Seconds(t);
-
-        // --- 흙과 충적층
-        t = Stopwatch.GetTimestamp();
-        FieldSet soil = Soil.SoilAndAlluvium(z, slope, res.SCritSurface, u, temp, p, q, qs, fanRaise, rock, cfg, ocean, graph);
-        sec["soil"] = Seconds(t);
-
-        // --- 지하수면
-        t = Stopwatch.GetTimestamp();
-        bool[] isLake = wb.Get<bool>("is_lake");
-        bool[] isRiver = wb.Get<bool>("is_river");
-        bool[] isWater = new bool[n];
-        for (int c = 0; c < n; c++)
-        {
-            isWater[c] = ocean[c] || isLake[c] || isRiver[c];
-        }
-        (double[] zGw, double[] zGwLower, double[] baseLevel, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
-            graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean,
-            karstBase: karst?.Big);
-        sec["groundwater"] = Seconds(t);
-
-        // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
-        t = Stopwatch.GetTimestamp();
-        // 위층 높이 = 기준 물의 수면 + k·f_k·골짜기 깊이. 히어로에서는 수면(baseLevel)을 가장 가까운 큰 물(karst.Big)에서
-        // 가져오므로, 골짜기 깊이도 같은 큰 물의 값을 씁니다. 필드 valley_depth_m 은 가장 가까운 강(크기와 상관없음)의
-        // 값이라, 그대로 쓰면 수면과 골짜기 깊이가 서로 다른 강에서 와서 '마른 옛 강 높이'가 가까운 개울보다 낮아집니다.
-        double[] valleyDepth = wb.Get<double>("valley_depth_m");
-        if (karst?.Big is bool[] bigWater && Array.IndexOf(bigWater, true) >= 0)
-        {
-            (_, _, valleyDepth) = Distance.NearestSourceValues(graph, bigWater, valleyDepth);
-        }
-        FieldSet caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, valleyDepth, columns, cfg);
-        sec["caves"] = Seconds(t);
+        sec["karst_streams"] = secKarst;
+        sec["soil"] = secSoil;
+        sec["groundwater"] = secGw;
+        sec["caves"] = secCaves;
 
         t = Stopwatch.GetTimestamp();
         List<long[]> rivers = Network.RiverSegments(rcv, order, isRiver);
@@ -661,17 +725,24 @@ public static class Pipeline
                 ["n_sinks"] = karst is null ? 0L : (long)karst.NSinks,
                 ["n_springs"] = karst is null ? 0L : (long)karst.NSprings,
                 ["lost_m3_per_yr"] = karst is null ? 0.0 : karst.LostM3PerYr,
-                ["passes"] = karst is null ? 0L : (long)karst.Passes,
-                ["settled"] = karst is null || karst.Settled,
+                ["risen_m3_per_yr"] = karst is null ? 0.0 : karst.RisenM3PerYr,
+                ["n_kept_without_spring"] = (long)nKept,
+                ["n_without_spring"] = (long)stray.Length,
+                ["cave_rounds"] = (long)caveRounds,
+                ["n_loops_cut"] = karst is null ? 0L : (long)karst.NLoopsCut,
             },
             ["caves"] = cavesDiag,
             ["z_land_max_m"] = anyLand ? zLandMax : double.NaN,
         };
         string caveText = string.Join("·", caveCells.Select((kv, k) => $"{LogText.CaveLevel(k)} {LogText.N((long)kv.Value!)}칸"));
+        string keptText = (nKept > 0 ? $", 동굴로 샘까지 물이 빠지지 않아 개울을 사라지게 하지 않은 자리 {LogText.N(nKept)}곳" : "")
+            + (stray.Length > 0
+                ? $", 동굴 층을 {KarstStreams.MaxCaveRounds}번 만들어도 샘까지 물이 빠지지 않는 자리 {LogText.N(stray.Length)}곳"
+                : "");
         string karstText = karst is null
-            ? ""
+            ? (nKept > 0 ? $"땅속으로 사라지는 개울 0곳({keptText[2..]}), " : "")
             : $"땅속으로 사라지는 개울 {LogText.N(karst.NSinks)}곳(모두 {karst.LostM3PerYr / Constants.SecondsPerYear:F1} m³/s, 다시 솟는 샘 {LogText.N(karst.NSprings)}곳"
-                + (karst.Settled ? "" : $", 물을 {karst.Passes}번 다시 모아도 자리를 못 잡아 사라진 물과 솟은 물의 합이 다를 수 있음") + "), ";
+                + keptText + "), ";
         Say(log, $"[4단계] 강 칸 {LogText.N(isRiver.Count(b => b))}개(강 구간 {LogText.N(rivers.Count)}개), 호수 칸 {LogText.N(isLake.Count(b => b))}개, "
             + $"{karstText}동굴 {caveText}, 2~4단계 {(double)sec["total"]!:F2} s");
         return new StageResult(output, rivers, apexes, res, diag);

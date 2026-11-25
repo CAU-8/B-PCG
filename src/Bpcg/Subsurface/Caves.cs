@@ -198,6 +198,64 @@ public static class Caves
     }
 
     /// <summary>
+    /// 개울이 사라지는 자리에서 샘까지 길을 찾을 때 쓰는 아래층 높이 (route_level_0) [m].
+    /// 동굴 층(CaveLevels)은 회랑 재질 부피를 굽는 깊이(groundwater.max_depth_m) 안에만 둡니다. 그보다 깊은 석회암에도 물이
+    /// 흐르는 길은 있으므로, 아래층이 비어 있는 까닭이 '지표에서 너무 깊어서'뿐인 칸은 아래 지하수면 높이를 씁니다.
+    /// - 아래층(level0)이 있는 칸: 그 높이.
+    /// - 아래층이 없고, 지표 z 에서 아래 지하수면 zLower 까지 maxDepth 보다 깊고, 그 높이의 암석이 물에 녹는 칸: zLower.
+    /// - 그 밖의 칸: NaN (그 높이의 암석이 녹지 않는 칸, 지하수면이 지표 가까이 있어 동굴 층을 두지 않은 칸 등).
+    /// 히어로 단계(KarstStreams.DrainsToSpring)와 굽기(CaveNetwork.Build)가 같은 값을 보도록 모든 높이를 32비트 실수로 줄여
+    /// 견줍니다. 굽기는 히어로 묶음에 32비트로 저장한 값을 읽기 때문입니다.
+    /// 예: 산등성이 밑이라 지표가 아래 지하수면보다 420 m 높은 석회암 칸은 아래층이 없지만, 이 함수는 그 칸에 아래 지하수면 높이를 줍니다.
+    /// level0·zLower·z: (N,) [m]. 반환: (N,) [m].
+    /// </summary>
+    public static double[] RouteLevel0(double[] level0, double[] zLower, double[] z, LayerColumns columns, double maxDepth)
+    {
+        int n = level0.Length;
+        if (zLower.Length != n || z.Length != n || columns.NCells != n)
+        {
+            throw new ArgumentException(
+                $"level0, zLower, z, columns 는 칸 수가 같아야 합니다. 받은 칸 수: {n}, {zLower.Length}, {z.Length}, {columns.NCells}");
+        }
+        if (!(maxDepth >= 0.0))
+        {
+            throw new ArgumentException($"groundwater.max_depth_m 은 0 이상이어야 합니다. 받은 값: {maxDepth}");
+        }
+        int nl = columns.NLayers;
+        double[] route = new double[n];
+        Parallelism.For(0, n, c =>
+        {
+            double lv = (float)level0[c];
+            if (double.IsFinite(lv))
+            {
+                route[c] = lv;
+                return;
+            }
+            route[c] = NpMath.NaN;
+            double zl = (float)zLower[c];
+            double zs = (float)z[c];
+            if (!double.IsFinite(zl) || !(zs - zl > maxDepth))
+            {
+                return;
+            }
+            int layer = nl;
+            for (int i = 0; i < nl; i++)
+            {
+                if ((double)(float)columns.Bottom[(c * nl) + i] < zl)
+                {
+                    layer = i;
+                    break;
+                }
+            }
+            if (Rocks.Soluble[columns.Rock[(c * (nl + 1)) + layer]])
+            {
+                route[c] = zl;
+            }
+        });
+        return route;
+    }
+
+    /// <summary>
     /// 동굴 층 높이와 입구 비트 (cave_levels). 반환: cave_level_&lt;k&gt;_m (동굴 없으면 NaN), cave_entrance.
     /// </summary>
     public static FieldSet CaveLevels(
