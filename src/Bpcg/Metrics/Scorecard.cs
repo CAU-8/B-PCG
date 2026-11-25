@@ -22,6 +22,8 @@ public static class Scorecard
         ["earth_ocean_fraction"] = 0.708,
         ["shelf_depth_m"] = 200.0,
         ["bimodal_min_separation_m"] = 1000.0,
+        ["bimodal_bin_m"] = Hypsometry.BimodalBinM,
+        ["bimodal_smooth_m"] = Hypsometry.BimodalSmoothM,
         ["flat_slope"] = 0.02,
         ["gw_surface_tol_m"] = 0.5,
         ["law_median_max"] = 1.0e-3,
@@ -320,10 +322,15 @@ public static class Scorecard
     {
         OrderedDictionary<string, double> th = l.Th;
         string p = l.Name;
-        Run(jobs, $"{p}.ocean_fraction", "emergent", "", l.Missing(["is_ocean"], graph: true), () =>
+        // 해수면을 바다가 덮는 비율로 정한 설정에서는 바다 비율이 입력 그대로라, 결과로 나온 값(emergent)이 아니라 정한 값(forced)입니다.
+        bool byFraction = l.Cfg is not null && Bpcg.Planet.Materials.UsesOceanFraction(l.Cfg);
+        Run(jobs, $"{p}.ocean_fraction", byFraction ? "forced" : "emergent", "", l.Missing(["is_ocean"], graph: true), () =>
         {
             double v = Hypsometry.OceanFraction(l.Bool("is_ocean"), l.Graph!.Area);
-            return (v, null, $"물 부피 보존 해수면으로 나온 값. 지구 {PyFormat.Repr(th["earth_ocean_fraction"])}");
+            string how = byFraction
+                ? "바다가 덮는 비율(ocean.target_fraction)을 정해 해수면을 잡았으므로 입력이 그대로 나온 값"
+                : "물 부피 보존 해수면으로 나온 값";
+            return (v, null, $"{how}. 지구 {PyFormat.Repr(th["earth_ocean_fraction"])}");
         });
         Run(jobs, $"{p}.shelf_area", "emergent", "km2", l.Missing(["z_m", "crust_type", "is_ocean"], graph: true), () =>
         {
@@ -337,7 +344,8 @@ public static class Scorecard
         Run(jobs, $"{p}.hypsometry_bimodal", "forced", "m", l.Missing([zname], graph: true), () =>
         {
             OrderedDictionary<string, object?> r = Hypsometry.Bimodality(
-                l.D(zname), l.Graph!.Area, minSeparationM: th["bimodal_min_separation_m"]);
+                l.D(zname), l.Graph!.Area, binM: th["bimodal_bin_m"], smoothM: th["bimodal_smooth_m"],
+                minSeparationM: th["bimodal_min_separation_m"]);
             string peaks = string.Join(", ", ((List<object?>)r["peaks"]!).Select(v => PyFormat.Fixed((double)v!, 0)));
             string note = $"{zname} 면적 가중 분포의 봉우리 [{peaks}] m (돌출 봉우리 {r["n_peaks"]}개), "
                 + $"간격 > {G(th["bimodal_min_separation_m"])} m 이면 합격. 지각 비율·지각평형으로 거의 정해지는 반쯤 입력";
@@ -652,7 +660,10 @@ public static class Scorecard
                 diag is not null && diag.TryGetValue(name, out IReadOnlyDictionary<string, object?>? d) && d is not null
                     ? d
                     : new Dictionary<string, object?>();
-            var l = new Level(name, fields ?? new FieldSet(), graph, levelDiag, cfg, th);
+            // 행성 단계는 행성 단계의 설정(퇴적 항을 끈 landscape.deposition_g_l0)으로 풀었으므로, 경사 법칙도 그 설정으로 다시 셈합니다.
+            // 히어로 단계의 값으로 셈하면 산비탈 항에 퇴적 항이 섞여, 칸이 작은 행성에서 법칙과 어긋난 것처럼 나옵니다.
+            Config? levelCfg = name == "planet" && cfg is not null ? Pipeline.L0Config(cfg) : cfg;
+            var l = new Level(name, fields ?? new FieldSet(), graph, levelDiag, levelCfg, th);
             if (graph is not null && fields is not null && fields.Count > 0)
             {
                 foreach (KeyValuePair<string, Array> kv in fields)

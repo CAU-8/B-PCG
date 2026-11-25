@@ -193,7 +193,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 - **도구와 위치.** 두 겹입니다.
     - C# 단위 시험: `tests/Bpcg.Tests/`(xunit v3). 함수 하나를 golden 자료와 비트 단위로 맞대어 봅니다. golden 자료는 옛 Python 판이 만든 기준 결과이고, `tests/golden/data/`에 있습니다(큰 사례는 `out/golden/`). C# 판이 옛 Python 판과 같은 답을 내는지 확인합니다. `dotnet test --solution Bpcg.slnx`로 돕니다. 큰 사례가 없으면 그 시험만 건너뜁니다.
     - 결과 검사: `tests/test_<대상>.py`(pytest). C# 콘솔(`bpcg all` 등)이 쓴 묶음·굽기 파일을 읽어 불변식(물은 아래로, 넓이 합, 형식 약속)을 봅니다. 엔진은 `tests/test_engine.py`가 Godot을 띄워 봅니다.
-- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 121개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
+- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 132개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
 - **표시(marker).** 시험에 붙여 언제 돌지를 정하는 이름표입니다.
 
     | 표시 | 뜻 |

@@ -252,6 +252,52 @@ public static class Cubesphere
         return cells;
     }
 
+    /// <summary>
+    /// 구면 위 점 하나 (x, y, z) → 그 점을 담은 셀 번호. 배열판 <see cref="CellOf(double[], int)"/> 과 같은 값을 돌려줍니다.
+    /// 점마다 배열을 만들지 않으므로, 점을 조금씩 옮겨 가며 칸을 찾을 때(예: 바다 위로 곧게 나아가며 뭍을 찾기) 씁니다.
+    /// 좌표는 유한한 값이어야 하고, 길이는 1 이 아니어도 됩니다(방향만 봅니다).
+    /// </summary>
+    public static int CellOf(double x, double y, double z, int n)
+    {
+        // 면: p·n_f 가 가장 큰 면, 같으면 번호가 작은 면. 면 법선이 좌표축이라 p·n_f 는 차례로 x, −x, y, −y, z, −z 입니다.
+        int f = 0;
+        double best = x;
+        if (-x > best)
+        {
+            best = -x;
+            f = 1;
+        }
+        if (y > best)
+        {
+            best = y;
+            f = 2;
+        }
+        if (-y > best)
+        {
+            best = -y;
+            f = 3;
+        }
+        if (z > best)
+        {
+            best = z;
+            f = 4;
+        }
+        if (-z > best)
+        {
+            f = 5;
+        }
+        int k = f * 3;
+        double pn = (x * FaceN[k]) + (y * FaceN[k + 1]) + (z * FaceN[k + 2]);
+        double pu = (x * FaceU[k]) + (y * FaceU[k + 1]) + (z * FaceU[k + 2]);
+        double pv = (x * FaceV[k]) + (y * FaceV[k + 1]) + (z * FaceV[k + 2]);
+        double fourOverPi = 4.0 / Math.PI;
+        double a = fourOverPi * Math.Atan(pu / pn);
+        double b = fourOverPi * Math.Atan(pv / pn);
+        long i = Math.Clamp((long)Math.Floor(n * (a + 1.0) / 2.0), 0, n - 1);
+        long j = Math.Clamp((long)Math.Floor(n * (b + 1.0) / 2.0), 0, n - 1);
+        return (int)(((long)f * n * n) + (j * n) + i);
+    }
+
     private static int[] IntRow(double[] table, int f) =>
         [(int)table[f * 3], (int)table[(f * 3) + 1], (int)table[(f * 3) + 2]];
 

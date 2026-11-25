@@ -48,6 +48,7 @@ FIELDS: dict[str, FieldInfo] = {
     "precip_m_per_yr": _f("climate", "m/yr", "float32", "연강수량"),
     "temperature_c": _f("climate", "°C", "float32", "연평균 기온 (최종 고도 반영)"),
     "pet_m_per_yr": _f("climate", "m/yr", "float32", "잠재 증발산"),
+    "biome": _f("climate", "", "uint8", "바이옴 번호 (Biomes: 0 바다, 1 빙원 … 9 열대우림)"),
     "runoff_m_per_yr": _f("climate", "m/yr", "float32", "Budyko 유출"),
     "runoff_eff_m_per_yr": _f("climate", "m/yr", "float32", "침식에 쓰는 유출 (바닥값 적용)"),
     "glaciated": _f(
@@ -56,6 +57,18 @@ FIELDS: dict[str, FieldInfo] = {
     # --- 사슬 2: 지질 (geology/)
     "template_id": _f("geology", "", "uint8", "0 탄산염 탁상지, 1 습곡충상대, 2 기반암 + 화산호"),
     "fold_phase": _f("geology", "rad", "float32", "습곡 위상"),
+    "prospect_lode": _f(
+        "geology",
+        "",
+        "float32",
+        "원래 광맥(구리·금) 가능성 0~1: 섭입대 위쪽 판의 화산호 띠에서 높음",
+    ),
+    "prospect_placer": _f(
+        "geology",
+        "",
+        "float32",
+        "사금 가능성 0~1: 상류에 원래 광맥이 있고 강물이 느려지는 강 칸에서 높음",
+    ),
     "surface_rock": _f("geology", "", "uint8", "지표에 드러난 암석 번호 (geology.rocks)"),
     "strata_bottom_m": _f("geology", "m", "float32", "(N, L) 층 바닥 고도, 위층부터"),
     "strata_rock": _f("geology", "", "uint8", "(N, L+1) 층 암석 번호, 마지막은 기반암"),
@@ -88,6 +101,36 @@ FIELDS: dict[str, FieldInfo] = {
         "float64",
         "지표의 물이 땅속과 주고받는 양: 음수는 개울이 사라지는 칸, 양수는 샘으로 솟는 칸 "
         "(L2, 그런 칸이 있을 때만)",
+    ),
+    # --- 바다 (Planet/SeaFields.cs, 행성 단계에만 있음)
+    "sea_temp_c": _f(
+        "water",
+        "°C",
+        "float32",
+        "바다 물의 연평균 온도: 해수면 높이의 기온, −1.8 °C 아래로 내려가지 않음 (뭍은 NaN)",
+    ),
+    "sea_ice": _f("water", "", "bool", "바다 얼음: 바다 물의 온도가 −1.5 °C 아래인 바다 칸"),
+    "river_plume": _f(
+        "water", "", "float32", "강물 퍼짐 0~1: 강어귀에서 나온 강물이 바다로 퍼진 정도 (뭍은 0)"
+    ),
+    "wave_exposure": _f(
+        "water",
+        "",
+        "float32",
+        "파도 받이 0~1: 열여섯 방향으로 바다가 트인 거리의 평균 ÷ 재는 거리 (뭍은 0)",
+    ),
+    "seabed": _f(
+        "water",
+        "",
+        "uint8",
+        "바다 밑 바닥 종류 (SeaFields: 0 뭍, 1 펄, 2 모래, 3 자갈, 4 바위, 5 석회 모래)",
+    ),
+    "coast_kind": _f(
+        "water",
+        "",
+        "uint8",
+        "해안 종류, 바다와 닿은 뭍 칸만 (SeaFields: 0 해안 아님, 1 모래 해변, 2 자갈 해변, "
+        "3 바위 해안, 4 갯벌, 5 흰 모래 해변)",
     ),
     # --- 사슬 3: 땅속 (subsurface/)
     "soil_thickness_m": _f("subsurface", "m", "float32", "흙 두께"),

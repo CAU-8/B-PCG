@@ -13,7 +13,10 @@ public static class Uplift
     public const long StreamOrogenNoise = 321;
     public const double CollisionWidthFactor = 1.5;
     public const double MinMountainUpliftMPerYr = 1e-9;
+    /// <summary>열곡 축에서 이 거리 안의 대륙 칸만 가라앉힙니다 (m). 설정 <c>uplift.rift_max_dist_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double RiftMaxDistM = 50_000.0;
+
+    /// <summary>열곡 침강이 퍼지는 가우스 폭 (m). 설정 <c>uplift.rift_width_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double RiftWidthM = 30_000.0;
     public const double OrogenNoiseAmplitude = 0.25;
     public const int OrogenNoiseOctaves = 4;
@@ -143,6 +146,13 @@ public static class Uplift
             }
         }
         double rs = cfg.F("uplift.rift_subsidence_m_per_yr");
+        double riftMax = cfg.FOr("uplift.rift_max_dist_m", RiftMaxDistM);
+        double riftWidth = cfg.FOr("uplift.rift_width_m", RiftWidthM);
+        if (!(riftMax > 0.0) || !(riftWidth > 0.0))
+        {
+            throw new ArgumentException(
+                $"uplift.rift_max_dist_m({riftMax} m)와 uplift.rift_width_m({riftWidth} m)는 0 보다 커야 합니다. 열곡 침강을 끄려면 uplift.rift_subsidence_m_per_yr 를 0 으로 두세요.");
+        }
         double dur = cfg.F("uplift.orogen_duration_myr");
         double capEx = cfg.F("uplift.exhumation_cap_m");
         double[] exhumation = new double[n];
@@ -150,9 +160,9 @@ public static class Uplift
         for (int c = 0; c < n; c++)
         {
             uplift[c] += mountain[c];
-            if (crustType[c] == 1 && dDiv[c] < RiftMaxDistM)
+            if (crustType[c] == 1 && dDiv[c] < riftMax)
             {
-                double q = dDiv[c] / RiftWidthM;
+                double q = dDiv[c] / riftWidth;
                 uplift[c] += rs * Math.Exp(-(q * q));
             }
             if (isOcean[c])
