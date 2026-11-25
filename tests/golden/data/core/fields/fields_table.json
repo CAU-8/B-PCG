@@ -102,6 +102,13 @@
         "융기 속도 U (침강은 음수)"
       ],
       [
+        "uplift_tectonic_m_per_yr",
+        "plates",
+        "m/yr",
+        "float32",
+        "판이 준 융기 속도 (지각 세기 한계로 줄이기 전, 습곡 변위가 씀)"
+      ],
+      [
         "exhumation_m",
         "plates",
         "m",

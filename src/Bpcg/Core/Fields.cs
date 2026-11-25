@@ -35,6 +35,7 @@ public static class Fields
         ["z_platform_m"] = new FieldInfo("plates", "m", "float32", "지각평형·나이-수심으로 정한 기준 고도 (해수면 0 이전)"),
         ["is_ocean"] = new FieldInfo("plates", "", "bool", "물 부피 보존 해수면 아래이고 큰 바다와 이어진 칸"),
         ["uplift_m_per_yr"] = new FieldInfo("plates", "m/yr", "float32", "융기 속도 U (침강은 음수)"),
+        ["uplift_tectonic_m_per_yr"] = new FieldInfo("plates", "m/yr", "float32", "판이 준 융기 속도 (지각 세기 한계로 줄이기 전, 습곡 변위가 씀)"),
         ["exhumation_m"] = new FieldInfo("plates", "m", "float32", "깎인 두께 = 누적 융기 (상한 있음)"),
         ["dist_arc_m"] = new FieldInfo("plates", "m", "float32", "해구에서 화산호까지 거리 (섭입 위판 쪽만)"),
         ["precip_m_per_yr"] = new FieldInfo("climate", "m/yr", "float32", "연강수량"),
