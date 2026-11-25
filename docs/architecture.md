@@ -194,7 +194,7 @@ K 배율은 뒤의 강 경사 식에 들어갑니다. 예를 들어 같은 융�
   → 물길 방향이 바뀐 칸이 0개이고 모든 칸의 높이 변화가 0.1 m 미만이면 멈춤, 아니면 ①로 돌아감
 ```
 
-반복 상한은 행성 지도 200번(`landscape.max_flow_iterations`), `laptop` 히어로 유역 800번(`profile.hero.max_flow_iterations`)입니다.
+반복 상한은 행성 지도 400번(`landscape.max_flow_iterations`), `laptop` 히어로 유역 800번(`profile.hero.max_flow_iterations`)입니다.
 
 #### ① 웅덩이 메우기 (`Hydro/Depressions.cs`)
 
