@@ -101,6 +101,33 @@ def test_planet_hero_site_and_grid(planet, hero):
     assert hero.graph.kind == "flat"
 
 
+def test_hero_strata_fold_like_planet(planet, hero):
+    """히어로 지층의 습곡 변위는 행성 1단계와 같은 규칙입니다 (docs/pipeline.md 9장 '지질 기둥').
+
+    변위 = A·min(U⁺/U_max, 1)·sin φ (습곡충상대만). U 는 판이 준 융기(지각 세기 한계로
+    줄이기 전)이고 U_max 는 행성 진단의 값입니다. 맨 위 층 바닥 − 깎인 두께 − 변위는
+    템플릿마다 맨 위 층 두께(음수) 하나여야 합니다. 묶음은 float32 라 0.01 m 까지 봅니다.
+    """
+    pf, hf = planet.fields, hero.fields
+    assert (pf["uplift_m_per_yr"] <= pf["uplift_tectonic_m_per_yr"]).all()  # 한계는 줄이기만 함
+    amp = planet.config["geology"]["fold_amplitude_m"]
+    u_max = planet.diag["geology"]["u_max_m_per_yr"]
+    tid = hf["template_id"]
+    fold = tid == 1  # Geology/Model.cs FoldThrust
+
+    def disp(uplift):
+        d = amp * np.minimum(np.maximum(uplift.astype(np.float64), 0.0) / u_max, 1.0)
+        return np.where(fold, d * np.sin(hf["fold_phase"].astype(np.float64)), 0.0)
+
+    rest = hf["strata_bottom_m"][:, 0] - hf["exhumation_m"].astype(np.float64)
+    for t in np.unique(tid):
+        r = (rest - disp(hf["uplift_tectonic_m_per_yr"]))[tid == t]
+        assert r.max() - r.min() < 0.01, t
+    # 시드 0 의 히어로 유역은 융기를 줄인 습곡대라, 줄인 융기를 쓰던 옛 규칙과 변위가 다릅니다.
+    assert fold.any()
+    assert np.abs(disp(hf["uplift_m_per_yr"]) - disp(hf["uplift_tectonic_m_per_yr"])).max() > 1.0
+
+
 @pytest.mark.parametrize("level", ["hero", "flat_hero"])
 def test_hero_grid_diag(request, level):
     b = request.getfixturevalue(level)

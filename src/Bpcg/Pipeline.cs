@@ -778,6 +778,9 @@ public static class Pipeline
         (FieldSet geoFields, LayerColumns columns, OrderedDictionary<string, object?> geoDiag) =
             Model.GenerateGeology(fields, cfg, l0.Unit());
         fields.Update(geoFields);
+        // 지각 세기 한계(2단계)가 uplift_m_per_yr 를 줄인 값으로 바꾸기 전에, 판이 준 융기를 따로 남깁니다. 지질 기둥의 습곡 변위가
+        // 이 값으로 정해졌으므로, 히어로도 이 값으로 같은 지층을 다시 만듭니다(Refine.HeroColumns).
+        fields["uplift_tectonic_m_per_yr"] = (double[])fields.GetFloat64("uplift_m_per_yr").Clone();
         sec["geology"] = Seconds(t);
         string[] templateNames = ["탄산염 탁상지", "습곡충상대", "기반암 + 화산호"];
         string counts = string.Join(", ", ((List<object?>)geoDiag["template_counts"]!).Select((v, k) =>
