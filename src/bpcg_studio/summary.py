@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from bpcg_studio.bundle import bundle_id, run_mismatches
 from bpcg_studio.jobs import JOB_FILE, LOG_FILE, _read_json, _tail
 from bpcg_studio.names import bare_name
 from bpcg_studio.params import config_diff_parts, flat_config
@@ -469,7 +470,9 @@ def run_summary(run_dir: Path, key: str) -> dict[str, Any]:
     log_tail = _tail(run_dir / LOG_FILE, 60) if (run_dir / LOG_FILE).exists() else []
     pcard = _read_json(run_dir / "planet" / "scorecard.json")
     hcard = _read_json(run_dir / "hero" / "scorecard.json")
-    warnings = _warnings(job, pm, hm, site, pdiag, hdiag, failed_checks(pcard, hcard))
+    gm = _manifest(run_dir / "globe" / "globe.json")
+    mismatches = run_mismatches(pm, hm, cm, gm, str(run_dir))
+    warnings = _warnings(job, pm, hm, site, pdiag, hdiag, failed_checks(pcard, hcard), mismatches)
     diff, diff_missing = config_diff_parts(config) if config else ([], [])
     return {
         "key": key,
@@ -522,12 +525,20 @@ def run_summary(run_dir: Path, key: str) -> dict[str, Any]:
 
 
 def _warnings(
-    job, pm, hm, site, pdiag: dict, hdiag: dict, failed: list[dict] | None = None
+    job,
+    pm,
+    hm,
+    site,
+    pdiag: dict,
+    hdiag: dict,
+    failed: list[dict] | None = None,
+    mismatches: list[str] | None = None,
 ) -> list[dict]:
     """개요 탭 위에 보여 줄 경고: 실행 기록의 경고 + 묶음에서 다시 확인한 것.
 
-    묶음에서 보는 것: 평면 히어로로 바뀜, 솔버 미수렴, 지각 세기 한계 첫 풀이 미수렴,
-    점수표 불합격·계산 실패 (failed_checks).
+    묶음에서 보는 것: 같은 폴더의 묶음이 서로 다른 실행에서 나옴 (bundle.run_mismatches),
+    평면 히어로로 바뀜, 솔버 미수렴, 지각 세기 한계 첫 풀이 미수렴, 점수표 불합격·계산 실패
+    (failed_checks).
     """
     out = list(((job or {}).get("progress") or {}).get("warnings") or [])
     seen = {w.get("message") for w in out}
@@ -537,7 +548,15 @@ def _warnings(
             out.append({"message": msg, "line": line, "stage": ""})
             seen.add(msg)
 
-    if pm and hm and not site and not any("평면 히어로" in (m or "") for m in seen):
+    # 실행 기록이 이미 평면 히어로로 바꿨다고 알렸는지 (묶음 대조 경고를 더하기 전에 봄).
+    logged_flat = any("평면 히어로" in (m or "") for m in seen)
+    for msg in mismatches or []:
+        add(msg)
+    # 행성에서 자리를 찾지 못해 바꾼 평면 히어로만 이 경고를 받습니다. 그 히어로는
+    # 같은 실행의 행성 표지를 parent 로 적습니다. parent 가 null 인 히어로는 행성 없이
+    # 따로 만든 묶음이라 위의 묶음 대조 경고가 맡습니다.
+    fallback = hm is not None and ("parent" not in hm or hm.get("parent") == bundle_id(pm))
+    if pm and hm and not site and fallback and not logged_flat:
         add(
             "행성은 만들었지만 히어로 유역을 행성 위에 놓지 못해, 정해 둔 융기와 출구로 만드는 "
             "평면 히어로로 바꿨습니다. 까닭은 실행 기록의 '[히어로]' 줄에 있습니다. 바다에서 먼 "

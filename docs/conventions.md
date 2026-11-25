@@ -189,6 +189,10 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - `System.Random`은 .NET 판마다 수열이 달라질 수 있어서 쓰지 않습니다.
     - 맥과 연구실 PC가 같은 무작위 값을 쓰려면 해시가 필요합니다.
 - **기록.** 생성 결과의 manifest에는 git 커밋, 그때 `src/`·`configs/`에 커밋하지 않은 변경이 있었는지(`git_dirty`, git이 없으면 null), 설정 파일 내용, 시드, bpcg 버전을 적습니다. 그래서 결과 폴더만 보고도 어떤 코드와 설정으로 만들었는지 알 수 있습니다.
+- **설정 해시.** manifest의 `config_digest`는 설정 내용으로 만든 12글자 값입니다. 두 결과의 설정 해시와 시드가 같으면 같은 설정으로 만든 결과입니다.
+    - 결과 파일을 바꾸지 않는 키는 빼고 셉니다(`Config.DigestIgnoredKeys`). 지금은 스레드 수 `profile.compute.numba_threads` 하나입니다. 위에 적은 대로 스레드 수가 달라도 결과 파일은 바이트까지 같기 때문입니다. 그래서 스레드 수만 다른 두 실행은 설정 해시가 같습니다.
+    - 키를 더 빼려면, 그 키만 바꿔 돌린 결과 파일이 바이트까지 같은지 시험으로 먼저 보입니다. 그리고 C#의 `Config.DigestIgnoredKeys`와 스튜디오의 `DIGEST_IGNORED_KEYS`(`src/bpcg_studio/config.py`)를 함께 고칩니다.
+    - 히어로·회랑·지구본의 manifest는 만들 때 읽은 위 단계 묶음의 설정 해시와 시드도 적습니다(`parent`). 명령줄과 스튜디오는 이 값으로 같은 실행 폴더의 묶음이 같은 실행에서 나왔는지 확인합니다([pipeline.md](pipeline.md) 11장 '실행 폴더').
 
 ## 7. 테스트
 

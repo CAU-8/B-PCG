@@ -346,23 +346,29 @@ public static class Program
         }
     }
 
+    // 회랑을 굽고, 히어로 옆에 행성 묶음이 있으면 지구본도 굽습니다. 행성 묶음이 이 히어로를 만든 행성이 아니면
+    // 아무것도 쓰기 전에 멈춥니다(Runs.RequireSameRun). 지구본을 굽지 않으면(--no-globe, 행성 없음) 실행 폴더와 엔진에
+    // 남은 지난 지구본 가운데 이 히어로와 함께 구운 지구본이 아닌 것을 지웁니다.
     private static int CmdBake(Args args)
     {
         string heroDir = HeroBundleDir(args.Hero!);
-        string outDir = args.Out ?? Path.Combine(Parent(heroDir), Runs.CorridorDir);
+        string runDir = Parent(heroDir);
+        string outDir = args.Out ?? Path.Combine(runDir, Runs.CorridorDir);
+        string planetDir = Path.Combine(runDir, Runs.PlanetDir);
+        bool globe = !args.NoGlobe && File.Exists(Path.Combine(planetDir, "manifest.json"));
+        if (globe)
+        {
+            Runs.RequireSameRun(planetDir, heroDir);
+        }
         Runs.RunBake(heroDir, outDir, args.Engine ? EngineBaked : null, Say, args.Seed, args.Set.Count > 0 ? args.Set : null);
-        string planetDir = Path.Combine(Parent(heroDir), Runs.PlanetDir);
-        if (args.NoGlobe)
+        string? engineGlobe = args.Engine ? Path.Combine(EngineBaked, Runs.GlobeDir) : null;
+        if (globe)
         {
-            return 0;
+            Runs.RunGlobe(planetDir, heroDir, runDir, engineGlobe, Say);
         }
-        if (File.Exists(Path.Combine(planetDir, "manifest.json")))
+        else
         {
-            Runs.RunGlobe(planetDir, Parent(heroDir), args.Engine ? Path.Combine(EngineBaked, Runs.GlobeDir) : null, Say);
-        }
-        else if (args.Engine)
-        {
-            Runs.DropEngineGlobe(EngineBaked, Say);
+            Runs.DropGlobesNotFor(heroDir, engineGlobe is null ? [Path.Combine(runDir, Runs.GlobeDir)] : [Path.Combine(runDir, Runs.GlobeDir), engineGlobe], Say);
         }
         return 0;
     }

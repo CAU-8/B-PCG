@@ -24,8 +24,34 @@ public sealed class ConfigTests
         Config cfg = Config.LoadConfig("earth", profile);
         Assert.Equal(g.Meta.GetProperty("sorted_json").GetString(), PyJson.DumpsSorted(cfg.AsDict()));
         Assert.Equal(g.Meta.GetProperty("manifest_json").GetString(), PyJson.DumpsManifest(cfg.AsDict()) + "\n");
-        Assert.Equal(g.Meta.GetProperty("digest").GetString(), cfg.Digest());
+        // golden 의 digest 는 Python 판처럼 설정 전체의 해시입니다. 목차의 설정 해시(Config.Digest)는
+        // 결과를 바꾸지 않는 키를 뺀 뒤 같은 해시 함수(HashOf)를 씁니다.
+        Assert.Equal(g.Meta.GetProperty("digest").GetString(), Config.HashOf(cfg.AsDict()));
         AssertTyped(g.Meta.GetProperty("typed"), cfg.AsDict(), "config");
+    }
+
+    // 스레드 수만 다른 두 실행은 결과 파일이 바이트까지 같으므로 설정 해시도 같아야 합니다. 결과를 바꾸는 키는 설정 해시를 바꿉니다.
+    [Fact]
+    public void DigestIgnoresOnlyKeysThatDoNotChangeResults()
+    {
+        Config base0 = Config.LoadConfig("earth", "tiny");
+        Assert.Equal(0L, base0["profile.compute.numba_threads"]);
+        foreach (long threads in new long[] { 1, 2, 8 })
+        {
+            Config other = base0.WithOverrides([new("profile.compute.numba_threads", threads)]);
+            Assert.Equal(base0.Digest(), other.Digest());
+            Assert.NotEqual(Config.HashOf(base0.AsDict()), Config.HashOf(other.AsDict()));
+        }
+        Assert.NotEqual(base0.Digest(), base0.WithOverrides([new("landscape.theta", 0.5)]).Digest());
+        Assert.NotEqual(base0.Digest(), base0.WithOverrides([new("planet.seed", 1L)]).Digest());
+
+        // [compute] 절이 아예 없는 설정(스레드 수를 정하지 않으면 모든 코어)도 같은 설정 해시를 받습니다.
+        OrderedDictionary<string, object?> noCompute = base0.AsDict();
+        ((OrderedDictionary<string, object?>)noCompute["profile"]!).Remove("compute");
+        Assert.Equal(base0.Digest(), new Config(noCompute).Digest());
+
+        // 설정 해시를 세도 설정 자체는 바뀌지 않습니다 (목차의 config 에는 스레드 수가 그대로 남음).
+        Assert.Equal(0L, base0["profile.compute.numba_threads"]);
     }
 
     [Fact]
@@ -49,7 +75,7 @@ public sealed class ConfigTests
                 result = base0.WithOverrides(checkedOv);
             }
             Assert.Equal(c.GetProperty("sorted_json").GetString(), PyJson.DumpsSorted(result.AsDict()));
-            Assert.Equal(c.GetProperty("digest").GetString(), result.Digest());
+            Assert.Equal(c.GetProperty("digest").GetString(), Config.HashOf(result.AsDict()));
         }
     }
 

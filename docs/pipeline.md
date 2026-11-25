@@ -1227,15 +1227,42 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 
 | 파일 | 함수 | 약속 |
 |---|---|---|
-| `Bake/Bundle.cs` | `Bundle.WriteBundle(path, graph, fields, meta)` / `Bundle.ReadBundle(path)` | `manifest.json`(bpcg 버전, git 커밋, 커밋하지 않은 변경 여부 `git_dirty`, 설정 해시, 그래프 종류·모양·R·간격, `face_basis`, 필드 목록: 이름·파일·dtype·단위·그룹·모양) + 그룹 폴더의 `<이름>.npy`. 그래프는 `graph.npz`(pos, nbr, dist, area) |
-| `Bake/Corridor.cs` | `Corridor.BakeCorridor(heroState, cfg, outDir, engineDir = null)` | 아래 표 |
+| `Bake/Bundle.cs` | `Bundle.WriteBundle(path, graph, fields, meta, cfg, rivers, kind, parent)` / `Bundle.ReadBundle(path)` | `manifest.json`(bpcg 버전, git 커밋, 커밋하지 않은 변경 여부 `git_dirty`, 설정 해시 `config_digest`, 시드, 만들 때 읽은 위 단계 묶음의 표지 `parent`, 그래프 종류·모양·R·간격, `face_basis`, 필드 목록: 이름·파일·dtype·단위·그룹·모양) + 그룹 폴더의 `<이름>.npy`. 그래프는 `graph.npz`(pos, nbr, dist, area) |
+| `Bake/Corridor.cs` | `Corridor.BakeCorridor(heroState, cfg, outDir, engineDir = null, log = null, parent = null)` | 아래 표 |
 | `Bake/Textures.cs` | `Textures.FaceTextures(planetState, outDir)` | 면 6개 × 층 4개(평균 고도 색, 판, 해양저 나이, 강수) = PNG 24장과 목차 `textures.json`을 행성 묶음의 `textures/`(`out/<run>/planet/textures/`)에 씁니다. 엔진은 이 그림을 읽지 않습니다. 엔진의 지구본 장면은 아래 `globe/`의 `.bin`을 읽습니다 |
-| `Bake/Globe.cs` | `Globe.BakeGlobe(planetState, cfg, outDir, faceRes = 256, hero, log, faceBasis, engineDir)` | 엔진 지구본 장면의 자료 `globe/`: `globe.json`(면 기저, 등각 대응 규칙, 필드마다 이름·단위·색표·설명·읽는 법) + 면당 N²(기본 256) 필드 `.bin`과 (N+1)² 모서리 고도. Godot 좌표 = (x, z, −y). 형식은 engine/GLOBE.md |
+| `Bake/Globe.cs` | `Globe.BakeGlobe(planetState, cfg, outDir, faceRes = 256, hero, log, faceBasis, engineDir, parent, heroBundle)` | 엔진 지구본 장면의 자료 `globe/`: `globe.json`(면 기저, 등각 대응 규칙, 필드마다 이름·단위·색표·설명·읽는 법) + 면당 N²(기본 256) 필드 `.bin`과 (N+1)² 모서리 고도. Godot 좌표 = (x, z, −y). 형식은 engine/GLOBE.md |
 
 **목차 파일.** 행성·히어로 묶음과 회랑의 `manifest.json`, 지구본의 `globe.json`이 목차 파일입니다.
 
 - 모든 목차에 `git_dirty`가 있습니다(`Bundle.GitDirty`). `src/`나 `configs/` 아래에 커밋하지 않은 변경이 있으면 true, 없으면 false, git이 없으면 null입니다. git 커밋만 적으면, 고치던 코드로 만든 결과와 그 커밋으로 만든 결과를 목차만 보고 구분할 수 없기 때문입니다.
 - 같은 폴더에 결과를 다시 쓸 때는 옛 목차를 먼저 지우고(`Bundle.InvalidateIndex`), 자료 파일을 다 쓴 뒤 목차를 맨 끝에 씁니다. 쓰다가 프로그램이 멈추면 목차 없는 폴더가 남습니다. 그래서 읽는 쪽이 옛 목차와 새 자료가 섞인 폴더를 그대로 읽지 않고, 목차가 없다는 오류로 멈춥니다.
+- 모든 목차에 설정 해시 `config_digest`가 있습니다. 두 결과를 같은 설정으로 만들었는지 목차만 보고 알 수 있게 하는 12글자 값입니다(`Config.Digest`). 설정 내용을 키 이름 순서로 정렬한 JSON 글자의 SHA-256 앞 12자입니다.
+    - 결과 파일을 바꾸지 않는 키는 빼고 셉니다(`Config.DigestIgnoredKeys`). 지금 빼는 키는 스레드 수 `profile.compute.numba_threads` 하나입니다. 스레드 수는 계산을 몇 갈래로 나눠 돌릴지만 정하고, 스레드 수가 달라도 결과 파일은 바이트까지 같기 때문입니다(`tests/test_cli.py`의 `test_single_and_auto_thread_results_match`).
+    - 그래서 스레드 수만 1과 0(모든 코어)으로 바꿔 돌린 두 실행은 설정 해시가 같습니다. 뺀 키도 목차의 `config`에는 그대로 남습니다.
+    - 키를 더 빼려면, 그 키만 바꿔 돌린 결과 파일이 바이트까지 같은지 시험으로 먼저 보입니다. 그리고 스튜디오의 같은 목록(`src/bpcg_studio/config.py`의 `DIGEST_IGNORED_KEYS`)도 함께 고칩니다.
+- 히어로·회랑·지구본의 목차에는 만들 때 읽은 위 단계 묶음의 표지가 있습니다. 표지는 그 묶음이 무엇인지 알아보는 세 값 `{kind, config_digest, seed}`(종류, 설정 해시, 시드)입니다(`RunFolder.BundleId`). 묶음끼리 같은 실행에서 나왔는지 확인할 때 씁니다(아래 '실행 폴더').
+
+    | 목차 | 키 | 담은 표지 |
+    |---|---|---|
+    | 행성 `manifest.json` | `parent` | null (위 단계가 없음) |
+    | 히어로 `manifest.json` | `parent` | 행성의 표지. `--flat`으로 만든 평면 히어로는 null. `bpcg all`이 행성에서 자리를 찾지 못해 바꾼 평면 히어로는 같은 실행의 행성 표지 |
+    | 회랑 `manifest.json` | `parent` | 구운 히어로의 표지 |
+    | 지구본 `globe.json` | `parent`, `hero_bundle` | 구운 행성의 표지, 함께 구운 히어로의 표지 |
+
+    - 히어로의 표지에는 그 히어로의 `parent`도 들어갑니다. 설정과 시드가 같아도 평면 히어로와 행성에서 만든 히어로는 다른 땅이라 구분해야 하기 때문입니다.
+    - 이 키를 적기 전에 만든 히어로 묶음은 어느 행성에서 만들었는지 알 수 없습니다. 그런 묶음은 시드만 비교합니다.
+
+**실행 폴더.** 한 번의 실행이 `planet/`, `hero/`, `corridor/`, `globe/`를 쓰는 폴더입니다(`--out`, 기본 `out/<행성 이름>`).
+
+- 왜 정리하나요? `--out`을 빼면 모든 명령이 같은 폴더에 씁니다. 지난 실행의 단계 폴더가 남으면, 스튜디오와 엔진이 서로 다른 실행의 행성·히어로·회랑·지구본을 한 실행처럼 보여 줍니다. 예를 들어 시드 0으로 `bpcg all`을 돌린 폴더에 시드 1로 `bpcg planet`만 다시 돌리면, 시드 0의 히어로와 지구본이 시드 1 행성 옆에 남습니다.
+- 규칙은 넷입니다(`src/Bpcg/Runs.cs`, `src/Bpcg/RunFolder.cs`).
+    1. 단계 하나를 새로 쓰면, 같은 폴더에서 그 단계로 만든 아래 단계 폴더를 지웁니다. `bpcg planet`은 `hero/`·`corridor/`·`globe/`를, `bpcg hero`는 `corridor/`·`globe/`를 지웁니다. `bpcg all`은 첫 묶음을 쓴 뒤 나머지를 지우고 차례로 다시 씁니다. 그래서 평면 히어로 실행(`--flat`)이 끝나면 `planet/`과 `globe/`가 남지 않습니다. 지운 폴더는 기록 줄 `[실행 폴더] 묵은 단계 폴더 3개를 지웠습니다: hero, corridor, globe (…) → <폴더>`로 알립니다.
+    2. 위 단계 묶음은 지우지 않습니다. 다시 만드는 데 오래 걸리기 때문입니다. 그래서 `bpcg hero`는 실행 폴더에 이 히어로를 만들 행성이 아닌 행성 묶음이 있으면, 아무것도 쓰기 전에 멈춥니다(`RunFolder.RequireHeroFitsRun`). 평면 히어로는 행성 묶음이 있기만 해도 멈춥니다. 오류 글은 그 행성의 시드·설정 해시와 고치는 법(다른 `--out`)을 알려 줍니다.
+    3. `bpcg bake`는 히어로 옆 `planet/`이 그 히어로를 만든 행성이 아니면, 굽기 전에 멈춥니다(`Runs.RequireSameRun`). 오류 글은 두 묶음의 시드·설정 해시와 고치는 법(그 행성에서 히어로를 다시 만들기, 지구본 없이 굽는 `--no-globe`)을 알려 줍니다.
+    4. 지구본을 굽지 않는 `bpcg bake`(`--no-globe`, 옆에 행성 없음)는 지난 지구본 가운데 이 히어로와 함께 구운 지구본만 남깁니다(`RunFolder.DropGlobeUnlessFor`). 실행 폴더의 `globe/`와, `--engine`이면 `engine/baked/globe/`를 봅니다. 함께 구운 히어로의 기록(`hero_bundle`)이 없는 지구본은 맞는지 알 수 없어 지웁니다.
+- 목차가 이 생성기의 형식인 폴더만 지웁니다. 목차가 없는 폴더(쓰다 멈춘 폴더, 사용자가 둔 같은 이름의 폴더)는 그대로 둡니다.
+- 지구본의 히어로 자리는 구운 히어로 묶음의 목차에서 읽습니다(`Globe.HeroFromBundle`). 실행 폴더에 남은 지난 회랑 목차는 읽지 않습니다.
+- 스튜디오도 같은 표지를 봅니다. 개요 탭은 같은 폴더의 묶음 표지가 서로 맞지 않으면, 받은 값과 고치는 법을 노란 경고로 보여 줍니다(`bundle.run_mismatches`). 'Godot로 보기'는 회랑과 다른 히어로로 구운 지구본을 엔진에 옮기지 않고, 끝 글에 그 까닭을 붙입니다(`godot.globe_mismatch`).
 
 **회랑 굽기.**
 
@@ -1281,7 +1308,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 | `heightmap_detail.bin/.json` | `heightmap`에 프랙탈 디테일을 더하고 새로 생긴 웅덩이를 채운 지표(같은 격자, `Bake/Detail.cs`). 보기용이고 솔버 결과가 아닙니다. `detail.fractal_gain` > 0일 때만 씁니다 |
 | `cave_mouth_detail.bin/.json` | `cave_mouth`와 같되 d_cave를 `heightmap_detail` 지표에서 잰 값. 엔진의 '프랙탈 디테일' 층이 켜져 있으면 이것으로 지형을 뚫습니다 |
 | `entrances.json` | 입구 굴(10장 4번)의 양 끝(엔진 좌표): `inside`는 통로 한가운데, `outside`는 산비탈 밖 공중. 굴의 가운데 점이 회랑 안에 있는 굴만 씁니다. 엔진의 입구로 옮겨 가기(T)가 씁니다. 목록을 줄이지 않고 씁니다 |
-| `manifest.json` | 국소 좌표 원점(구면 단위 벡터, 동·북 벡터, 위경도), 회랑 사각형과 점수(`corridor`), 파일 목록, 동굴 수치(`caves`: 싱크홀·샘·통로 길이 등. 샘까지 이을 동굴 층이 없어 싱크홀을 두지 못한 개울 수 `n_stream_sinks_without_cave`도 여기 있음, 10장 4번), 시드, 설정 해시, git 커밋, `git_dirty` |
+| `manifest.json` | 국소 좌표 원점(구면 단위 벡터, 동·북 벡터, 위경도), 회랑 사각형과 점수(`corridor`), 파일 목록, 동굴 수치(`caves`: 싱크홀·샘·통로 길이 등. 샘까지 이을 동굴 층이 없어 싱크홀을 두지 못한 개울 수 `n_stream_sinks_without_cave`도 여기 있음, 10장 4번), 시드, 설정 해시, 구운 히어로 묶음의 표지(`parent`), git 커밋, `git_dirty` |
 
 엔진 축은 X = 동, Y = 위, Z = 남입니다. 히어로 평면의 (동, 북)은 엔진의 (X, −Z)입니다.
 
@@ -1374,7 +1401,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 | `uv run bpcg planet --profile laptop --out out/earth` | 1~4단계, L0 묶음, 면 텍스처, 점수표 |
 | `uv run bpcg hero --from out/earth` | 히어로 L2 (L0 경계조건). 행성 묶음의 설정을 그대로 쓰고, `--set` 은 `hero.` 로 시작하는 키만 받습니다. 예: `--set 'hero.site_lat_lon_deg=[8.39, -0.92]'` 는 행성을 다시 만들지 않고 히어로 자리만 옮깁니다 (`Runs.HeroConfig`) |
 | `uv run bpcg hero --flat --out out/flat` | 평면 히어로 (가짜 경계조건) |
-| `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
+| `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. 그 행성이 히어로를 만든 행성이 아니면 굽기 전에 멈춤(11장 '실행 폴더'). `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
 | `uv run bpcg all --profile tiny --out out/tiny` | 전부 한 번 |
 
 **명령줄이 멈추거나 바꾸는 경우.**
@@ -1384,6 +1411,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 - `--planet`에 TOML 파일 경로를 주고 `--out`을 빼면, 결과를 `out/<확장자를 뺀 파일 이름>/`에 씁니다. 예: `--planet configs/planets/mars.toml`이면 `out/mars/`입니다.
 - `bpcg compare --help`와 `bpcg figures --help`는 사용법을 찍고 끝납니다. `-h`나 첫 낱말 `help`도 같습니다.
 - `bpcg hero --from`은 행성 묶음의 행성·프로필·시드로 히어로를 만듭니다. 명령줄에 준 `--planet`, `--profile`, `--seed`가 묶음과 다르면, 다른 값을 적은 메시지를 찍고 멈춥니다(`Program.CheckFromBundle`). 다른 행성·프로필·시드로 만들려면 `bpcg all`을 씁니다.
+- 같은 실행 폴더를 다시 쓰면, 이번 실행과 이어지지 않는 지난 단계 폴더를 지우거나, 다른 실행의 행성 묶음 옆에 쓰지 않고 멈춥니다. 규칙과 기록 줄은 11장 '실행 폴더'에 있습니다.
 - `bpcg all`은 행성에 히어로 자리가 없을 때만 평면 히어로로 바꿉니다(`NoHeroSiteException`). 자리가 없는 경우는 셋입니다: 후보 칸이 하나도 없을 때(9장), 고른 중심 L0 칸에서 물이 흘러 나갈 이웃이 없을 때(그 칸이 출구), 출구 자리의 L0 고도가 NaN일 때. 그 밖의 오류는 메시지를 찍고 실행을 멈춥니다.
 
 C#의 입구 함수는 `src/Bpcg/Pipeline.cs`의 `Pipeline.GeneratePlanet(cfg)`, `Pipeline.GenerateHero(cfg, planet = null)`입니다(Python 판 `bpcg/pipeline.py`의 `generate_planet(cfg)`, `generate_hero(cfg, planet=None)`). 명령줄과 엔진이 함께 쓰는 실행 순서는 `src/Bpcg/Runs.cs`(`Runs.All` 등)에 있습니다.
