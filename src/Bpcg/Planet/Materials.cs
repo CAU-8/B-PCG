@@ -36,10 +36,20 @@ public static class Materials
     /// <summary>부호 거리 보간을 믿는 범위: 거친 칸 2개 안.</summary>
     public const double SignedDistRangeCells = 2.0;
 
+    // 해수면: 설정에 ocean.target_fraction(바다가 덮는 비율)이 있으면 그 비율로, 없으면 ocean.water_volume_m3(물의 부피)로 정합니다.
     private static (double H, bool[] Ocean) SeaLevelAndMask(CellGraph graph, double[] zPlatform, Config cfg)
     {
-        double h = Ocean.SeaLevel(zPlatform, graph.Area, cfg.F("ocean.water_volume_m3"));
+        double h = UsesOceanFraction(cfg)
+            ? Ocean.SeaLevelForFraction(graph, zPlatform, cfg.F("ocean.target_fraction"))
+            : Ocean.SeaLevel(zPlatform, graph.Area, cfg.F("ocean.water_volume_m3"));
         return (h, Ocean.OceanMask(graph, zPlatform, h));
+    }
+
+    /// <summary>설정이 해수면을 바다가 덮는 비율(ocean.target_fraction)로 정하는지. 거짓이면 물의 부피로 정합니다.</summary>
+    public static bool UsesOceanFraction(Config cfg)
+    {
+        Section ocean = cfg.Sec("ocean");
+        return ocean.Contains("target_fraction") && ocean.Get("target_fraction") is not null;
     }
 
     // graph.area[mask].sum() / graph.area.sum() (둘 다 numpy pairwise 합)

@@ -605,6 +605,7 @@ public static class Pipeline
         output["fan"] = fan;
         output["dam"] = dam;
         output["temperature_c"] = temp;
+        output["biome"] = Biomes.Classify(temp, p, ocean, cfg);
         if (causes is not null)
         {
             output["glaciated"] = basins.Ice;
@@ -836,6 +837,12 @@ public static class Pipeline
         fields.Update(st.Fields);
         st.Diag["strength_limit"] = limitDiag;
         sec["stages"] = Seconds(t);
+        // 광상 가능성 값: 판과 물길이 다 정해진 뒤에 셈합니다. 판의 값(화산호까지 거리 등)이 있어야 하므로 행성 단계에만 있습니다.
+        fields.Update(Prospects.Compute(l0, fields, cfgL0));
+        // 바다 필드: 바다와 물길, 기온이 다 정해진 뒤에 셈합니다. 구면 격자에서 방향을 재므로 행성 단계에만 있습니다.
+        t = Stopwatch.GetTimestamp();
+        fields.Update(SeaFields.Compute(l0, fields, cfgL0));
+        sec["sea"] = Seconds(t);
         Fields.CheckFields(fields.Names);
 
         t = Stopwatch.GetTimestamp();

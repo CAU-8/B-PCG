@@ -17,6 +17,7 @@ public static class Crust
     public const double ContinentPlateBias = 0.3;
     public const double ContinentBiasSharpness = 12.0;
     public const double MarginEdgeFraction = 0.55;
+    /// <summary>대륙과 바다의 높이를 섞는 띠의 반폭 (m). 설정 <c>crust.transition_half_width_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double TransitionHalfWidthM = 50_000.0;
     public const double PsSqrtCoefM = 350.0;
     public const double PsBreakMyr = 70.0;
@@ -292,7 +293,12 @@ public static class Crust
             }
         }
 
-        double reach = NpMath.PyMax(margin, TransitionHalfWidthM) + (2.0 * graph.Spacing);
+        double transition = cfg.FOr("crust.transition_half_width_m", TransitionHalfWidthM);
+        if (!(transition > 0.0))
+        {
+            throw new ArgumentException($"crust.transition_half_width_m({transition} m)는 0 보다 커야 합니다. 대륙 가장자리에서 높이를 섞는 띠의 반폭입니다.");
+        }
+        double reach = NpMath.PyMax(margin, transition) + (2.0 * graph.Spacing);
         double[] signed = new double[n];
         for (int c = 0; c < n; c++)
         {
@@ -356,18 +362,18 @@ public static class Crust
             zOcean[c] = -OceanDepthM(cont[c] ? 0.0 : age[c], ridge);
             z[c] = cont[c] ? zCont[c] : zOcean[c];
         }
-        // 전이: 경계 양쪽 50 km 에서 smoothstep 으로 섞습니다. 반대쪽 값은 맞은편 지각의 가장 가까운 가장자리 칸 값입니다.
+        // 전이: 경계 양쪽 transition (지구 기본 50 km) 에서 smoothstep 으로 섞습니다. 반대쪽 값은 맞은편 지각의 가장 가까운 가장자리 칸 값입니다.
         // 바다 칸은 대륙 가장자리 칸(바다와 맞닿은 대륙 칸)의 대륙 높이를, 대륙 칸은 바다 가장자리 칸의 바다 높이를 씁니다.
         if (srcC is not null && srcO is not null)
         {
             for (int c = 0; c < n; c++)
             {
-                bool band = Math.Abs(signed[c]) < TransitionHalfWidthM;
+                bool band = Math.Abs(signed[c]) < transition;
                 if (!band)
                 {
                     continue;
                 }
-                double w = Smoothstep((signed[c] + TransitionHalfWidthM) / (2.0 * TransitionHalfWidthM));
+                double w = Smoothstep((signed[c] + transition) / (2.0 * transition));
                 if (!cont[c] && srcC[c] >= 0)
                 {
                     z[c] = (w * zCont[srcC[c]]) + ((1.0 - w) * zOcean[c]);
