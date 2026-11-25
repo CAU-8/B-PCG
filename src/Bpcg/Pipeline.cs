@@ -360,9 +360,10 @@ public static class Pipeline
                 touched[c] = fan[c] || dam[c] || valleyFill[c] || hollow[c] || pitFilled[c];
             }
             double[] zBed = z;
+            // 물 깊이가 lakes.min_depth_m 에 못 미치는 넘치지 못하는 호수는 마른 분지(소금 평지)로 셉니다. 작은 웅덩이 메우기와 같은 문턱입니다.
             balance = LakeBalance.Solve(
                 graph, z, isOutlet, rGw, p, Vector(pet, n, "pet"), inflow,
-                outlet => RerouteReceivers(graph, zBed, outlet, res.Receiver, touched, cfg));
+                outlet => RerouteReceivers(graph, zBed, outlet, res.Receiver, touched, cfg), lakeSettings.MinDepthM);
             if (Array.IndexOf(balance.Sink, true) >= 0)
             {
                 routeOutlet = new bool[n];
@@ -420,10 +421,14 @@ public static class Pipeline
         sec["fans"] = Seconds(t);
         string basinText = causes is null
             ? ""
-            : $"(가라앉는 땅 {LogText.N(basins.NTectonic)}개, 얼음이 긁은 땅 {LogText.N(basins.NGlacial)}개)";
+            : $"(가라앉는 땅 {LogText.N(basins.NTectonic)}개, 얼음이 긁은 땅 {LogText.N(basins.NGlacial)}개, "
+                + $"바닥이 바다 아래로 내려가지 않게 같은 비율로 얕게 누른 웅덩이 {LogText.N(basins.NSqueezed)}개)";
         string balanceText = balance is null
             ? ""
-            : $", 넘치지 못하는 호수 {LogText.N(balance.NClosed)}개, 마른 분지 {LogText.N(balance.NDry)}개";
+            : $", 넘치지 못하는 호수 {LogText.N(balance.NClosed)}개, 마른 분지 {LogText.N(balance.NDry)}개"
+                + $"(이 가운데 물 깊이가 {lakeSettings!.MinDepthM:G} m에 못 미친 호수 {LogText.N(balance.NShallow)}개), "
+                + $"호수 물수지: 웅덩이 바닥 {LogText.N(balance.NPits)}곳, 턱을 넘긴 물 {LogText.N(balance.NSpills)}번, "
+                + $"합친 호수 {LogText.N(balance.NMerges)}번";
         Say(log, $"[3단계] 선상지 {apexes.Count}개, 흙을 쌓아 올린 칸 {LogText.N(fan.Count(b => b))}개, 산사태 둑 {dams.Count}개"
             + $"(이 가운데 흙이 다 메우지 못한 둑 {damResult.Diag["n_lakes"]}개), 흙이 메운 칸 {LogText.N(valleyFill.Count(b => b))}개, "
             + $"낮춘 칸 {LogText.N(hollow.Count(b => b))}개{basinText}, 메운 작은 웅덩이 {LogText.N(nPitsFilled)}개{balanceText}, "
@@ -648,6 +653,12 @@ public static class Pipeline
                 ["n_closed_lakes"] = balance is null ? null : (long)balance.NClosed,
                 ["n_dry_basins"] = balance is null ? null : (long)balance.NDry,
                 ["n_closed_lake_cells"] = balance is null ? null : (long)balance.Closed.Count(b => b),
+                ["n_basins_squeezed"] = (long)basins.NSqueezed,
+                ["n_closed_lakes_too_shallow"] = balance is null ? null : (long)balance.NShallow,
+                ["n_lake_pits"] = balance is null ? null : (long)balance.NPits,
+                ["n_lake_spills"] = balance is null ? null : (long)balance.NSpills,
+                ["n_lake_merges"] = balance is null ? null : (long)balance.NMerges,
+                ["lake_balance_residual"] = balance is null ? null : LakeBalance.Residual(balance),
             },
             ["water"] = new OrderedDictionary<string, object?>
             {

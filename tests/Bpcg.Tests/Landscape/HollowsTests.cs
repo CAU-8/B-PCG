@@ -135,6 +135,45 @@ public sealed class HollowsTests
         Assert.Equal(0.5, Hollows.LoweredBed(0.5, 100.0));
     }
 
+    /// <summary>
+    /// 칸 7개가 한 줄로 놓인 땅 (칸 간격 1 km): 칸 0 이 출구(0 m), 칸 1 이 턱(rim m), 칸 2~4 가 웅덩이, 칸 5·6 이 높은 땅입니다.
+    /// 웅덩이 세 칸은 높이 9 m 를 depth 만큼 낮춘 땅이고, 들어오는 zNew 는 LoweredBed 로 낮춘 바닥입니다.
+    /// </summary>
+    private static (CellGraph Graph, double[] Z, double[] Depth, bool[] Outlet, double[] ZNew) Bowl(double rim, double[] depth3)
+    {
+        CellGraph g = Graph.FlatGraph(1, 7, 1000.0);
+        double[] z = [0.0, rim, 9.0, 9.0, 9.0, 20.0, 30.0];
+        double[] depth = [0.0, 0.0, depth3[0], depth3[1], depth3[2], 0.0, 0.0];
+        bool[] outlet = [true, false, false, false, false, false, false];
+        double[] zNew = z.Select((v, c) => Hollows.LoweredBed(v, depth[c])).ToArray();
+        return (g, z, depth, outlet, zNew);
+    }
+
+    [Fact]
+    public void ShapeBedsKeepsTheBowlShapeAndTheSpill()
+    {
+        // 넘칠 높이 6 m 인 웅덩이. 그냥 빼면 바닥이 −291, −391, −291 m 라 바다보다 낮으므로, 가장 낮은 칸이 1 m 에 닿게
+        // k = (6 − 1) ÷ (6 + 391) = 5 ÷ 397 로 누릅니다: 가운데 1 m, 양옆 6 − 297 × 5 ÷ 397 ≈ 2.26 m.
+        // LoweredBed 로는 1.157 m 와 1.208 m 라 바닥이 거의 평평했습니다.
+        (CellGraph g, double[] z, double[] depth, bool[] outlet, double[] zNew) = Bowl(6.0, [300.0, 400.0, 300.0]);
+        double[] before = (double[])zNew.Clone();
+        int squeezed = Hollows.ShapeBeds(g, z, depth, outlet, zNew);
+        Assert.Equal(1, squeezed);
+        Assert.Equal(Hollows.BedAboveSeaM, zNew[3], 12);
+        Assert.Equal(6.0 - (297.0 * 5.0 / 397.0), zNew[2], 12);
+        Assert.Equal(zNew[2], zNew[4]);
+        Assert.True(zNew[2] - zNew[3] > 1.0 && before[2] - before[3] < 0.06);
+        // 웅덩이 밖은 그대로이고, 넘칠 높이도 그대로입니다.
+        Assert.Equal(before.Where((_, c) => c < 2 || c > 4), zNew.Where((_, c) => c < 2 || c > 4));
+        Assert.Equal(
+            Depressions.FillDepressions(before, g.Nbr, outlet)[3], Depressions.FillDepressions(zNew, g.Nbr, outlet)[3]);
+        // 그냥 빼도 바다 1 m 위에 남는 웅덩이(턱 12 m, 깊이 3·5·3 m)는 누르지 않고 뺀 높이 6, 4, 6 m 를 그대로 씁니다.
+        (g, z, depth, outlet, zNew) = Bowl(12.0, [3.0, 5.0, 3.0]);
+        Assert.Equal(0, Hollows.ShapeBeds(g, z, depth, outlet, zNew));
+        Assert.Equal([6.0, 4.0, 6.0], zNew[2..5]);
+        Assert.Throws<ArgumentException>(() => Hollows.ShapeBeds(g, z, new double[3], outlet, zNew));
+    }
+
     [Fact]
     public void BasinsAppearOnlyWhereIceScouredOrTheLandSinks()
     {
@@ -179,7 +218,10 @@ public sealed class HollowsTests
         BasinResult t = Hollows.AddBasins(g, z, ocean, new double[n], whole, sinking);
         Assert.True(t.Hollow[warm]);
         Assert.Equal(1, t.NTectonic);
-        Assert.Equal(Hollows.LoweredBed(z[warm], 3.0e-5 * 3.0e7), t.Z[warm], 9);
+        // 900 m 를 그냥 빼면 바다보다 낮아지므로(높이 200~510 m), 웅덩이 바닥을 바다 1 m 위로 눌러 담습니다. 칸 하나뿐인 웅덩이라
+        // 그 칸이 가장 깊은 칸이고, 바닥은 정확히 1 m 입니다. (얼음이 긁은 웅덩이도 3,000 m 를 빼면 바다보다 낮아 함께 눌립니다.)
+        Assert.True(t.NSqueezed >= 1);
+        Assert.Equal(Hollows.BedAboveSeaM, t.Z[warm], 9);
         // 마디로 나누면(지구 설정 200 km) 그 칸의 가라앉는 몫만큼만 낮아져, 위보다 깊어지지 않습니다.
         BasinResult parted = Hollows.AddBasins(g, z, ocean, new double[n], cfg, sinking);
         Assert.True(parted.Z[warm] >= t.Z[warm] && parted.Z[warm] <= z[warm]);

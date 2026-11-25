@@ -39,7 +39,8 @@ public sealed record BasinCauses(long[] Receiver, long[] Order, double[] Uplift,
 /// <param name="Ice">(N,) 얼음이 덮였던 땅: Glaciation.None, IceAge, Now. 가리지 않았으면 모두 None.</param>
 /// <param name="NGlacial">얼음이 긁은 자리로 낮춘 칸 수.</param>
 /// <param name="NTectonic">가라앉는 땅이라 낮춘 칸 수.</param>
-public sealed record BasinResult(double[] Z, bool[] Hollow, byte[] Ice, int NGlacial, int NTectonic);
+/// <param name="NSqueezed">바닥이 바다 1 m 위보다 낮아질 웅덩이라, 바닥 전체를 같은 비율로 얕게 누른 웅덩이 수 (ShapeBeds).</param>
+public sealed record BasinResult(double[] Z, bool[] Hollow, byte[] Ice, int NGlacial, int NTectonic, int NSqueezed = 0);
 
 /// <summary>
 /// 호수가 생길 우묵한 자리 (docs/pipeline.md 7.5). 솔버가 만든 지형은 모든 칸이 아랫칸보다 높아서 물이 고일 자리가 없습니다.
@@ -228,12 +229,12 @@ public static class Hollows
     }
 
     /// <summary>
-    /// 땅 높이 z [m] 를 depth [m] 만큼 낮춘 바닥 높이 [m]. 우리 지도는 바다(0 m)보다 낮은 땅을 그리지 못하므로, 바닥이
+    /// 땅 높이 z [m] 를 depth [m] 만큼 낮춘 바닥 높이 [m] 의 첫 어림. 우리 지도는 바다(0 m)보다 낮은 땅을 그리지 못하므로, 바닥이
     /// 바다 높이에 가까워질수록 덜 낮춥니다: 바닥 = BedAboveSeaM + h² ÷ (h + depth), h = z − BedAboveSeaM.
-    /// 깊이가 땅 높이보다 훨씬 작으면 거의 그대로 낮추고, 훨씬 크면 바다 바로 위에서 멈춥니다. 깊이를 그냥 자르면 깊이 가라앉은
-    /// 분지의 바닥이 모두 같은 높이가 되어, 물이 어디부터 차는지 정할 수 없습니다.
+    /// AddBasins 는 이 바닥으로 물이 고이는 칸과 넘칠 높이만 정하고, 바닥 모양은 ShapeBeds 가 웅덩이마다 다시 정합니다.
+    /// 이 식만 쓰면 깊이가 땅 높이보다 훨씬 큰 칸들이 모두 바다 바로 위(1 m 남짓)에 몰려, 깊이 가라앉은 분지의 바닥이 거의 평평해집니다.
     /// 예: 높이 401 m 인 땅을 100 m 낮추면 1 + 400² ÷ 500 = 321 m (그냥 빼면 301 m), 700 m 낮추면 1 + 400² ÷ 1,100 ≈ 146 m.
-    /// 지구의 깊은 호수 바닥은 바다보다 낮기도 합니다 (바이칼호 −1,186 m). 그런 바닥은 만들지 못합니다.
+    /// 높이 9 m 인 땅을 400 m 낮추면 1 + 8² ÷ 408 ≈ 1.16 m, 300 m 낮추면 ≈ 1.21 m 라 두 바닥의 차이가 5 cm 뿐입니다.
     /// </summary>
     public static double LoweredBed(double z, double depth)
     {
@@ -243,6 +244,86 @@ public static class Hollows
             return z;
         }
         return BedAboveSeaM + ((h * h) / (h + depth));
+    }
+
+    /// <summary>
+    /// 웅덩이마다 바닥 모양을 다시 정합니다. z: (N,) 낮추기 전 땅 [m]. depth: (N,) 낮출 깊이 [m]. zNew: (N,) 물이 고이는 칸만
+    /// 낮춘 땅 [m] 이고, 이 함수가 그 자리에서 바꿉니다. 반환: 바닥을 바다 1 m 위로 눌러 담은 웅덩이 수.
+    /// 웅덩이(이웃한 고인 칸의 묶음)마다 넘칠 높이 σ 는 그대로 두고, 낮출 깊이만큼 그대로 낮춘 바닥 r = z − depth 를 씁니다.
+    /// r 이 BedAboveSeaM 보다 낮은 칸이 있는 웅덩이는 바닥 전체를 같은 비율로 얕게 눌러, 가장 낮은 칸이 BedAboveSeaM 에 닿게 합니다:
+    /// 바닥 = σ − (σ − r) × k, k = (σ − BedAboveSeaM) ÷ (σ − 가장 낮은 r). 그래서 깊이 가라앉은 분지도 바닥이 평평해지지 않고
+    /// 낮출 깊이의 모양(가운데가 깊은 그릇)을 그대로 지닙니다.
+    /// 예: 넘칠 높이 6 m 인 웅덩이에서 r 이 −391 m (높이 9 m 를 400 m 낮춤)와 −291 m (300 m 낮춤)인 두 칸은
+    /// k = 5 ÷ 397 ≈ 0.0126 이라 바닥이 1.00 m 와 2.26 m 가 됩니다 (LoweredBed 로는 1.16 m 와 1.21 m).
+    /// 모든 칸의 r 이 BedAboveSeaM 이상이면 k = 1 이라 그냥 뺀 높이 r 입니다.
+    /// 바닥은 모두 σ 보다 낮게 남으므로, 물이 고이는 칸과 넘칠 높이는 바뀌지 않습니다.
+    /// 지구의 깊은 호수 바닥은 바다보다 낮기도 합니다 (바이칼호 −1,186 m, 사해 둘레 땅 −430 m). 그런 바닥은 만들지 못합니다.
+    /// </summary>
+    public static int ShapeBeds(CellGraph graph, double[] z, double[] depth, bool[] isOutlet, double[] zNew)
+    {
+        int n = graph.NCells;
+        if (z.Length != n || depth.Length != n || isOutlet.Length != n || zNew.Length != n)
+        {
+            throw new ArgumentException(
+                $"z, depth, isOutlet, zNew 는 칸 수 ({n},) 와 같은 길이여야 합니다. 받은 길이: {z.Length}, {depth.Length}, {isOutlet.Length}, {zNew.Length}");
+        }
+        double[] filled = Depressions.FillDepressions(zNew, graph.Nbr, isOutlet);
+        bool[] seen = new bool[n];
+        var stack = new Stack<int>();
+        var cells = new List<int>();
+        int nSqueezed = 0;
+        for (int c0 = 0; c0 < n; c0++)
+        {
+            if (seen[c0] || isOutlet[c0] || !(filled[c0] - zNew[c0] > PondedM))
+            {
+                continue;
+            }
+            // 웅덩이 하나: 이웃한 고인 칸은 넘칠 높이가 같습니다.
+            cells.Clear();
+            seen[c0] = true;
+            stack.Push(c0);
+            while (stack.Count > 0)
+            {
+                int c = stack.Pop();
+                cells.Add(c);
+                for (int s = 0; s < CellGraph.NSlots; s++)
+                {
+                    int v = graph.Nbr[(c * CellGraph.NSlots) + s];
+                    if (v >= 0 && !seen[v] && !isOutlet[v] && filled[v] - zNew[v] > PondedM)
+                    {
+                        seen[v] = true;
+                        stack.Push(v);
+                    }
+                }
+            }
+            double sigma = filled[c0];
+            double lowest = double.PositiveInfinity;
+            foreach (int c in cells)
+            {
+                if (depth[c] > 0.0)
+                {
+                    lowest = Math.Min(lowest, z[c] - depth[c]);
+                }
+            }
+            if (!double.IsFinite(lowest) || !(sigma > BedAboveSeaM))
+            {
+                continue;
+            }
+            double k = 1.0;
+            if (lowest < BedAboveSeaM)
+            {
+                k = (sigma - BedAboveSeaM) / (sigma - lowest);
+                nSqueezed++;
+            }
+            foreach (int c in cells)
+            {
+                if (depth[c] > 0.0)
+                {
+                    zNew[c] = sigma - ((sigma - (z[c] - depth[c])) * k);
+                }
+            }
+        }
+        return nSqueezed;
     }
 
     /// <summary>
@@ -262,6 +343,7 @@ public static class Hollows
     /// causes 가 있고 설정에 lakes.lgm_cooling_c 가 있으면 두 원인으로 낮춥니다:
     /// 1. 얼음이 긁은 자리: 얼음이 덮인 적이 있는 땅(Glaciation.IceAge 와 Now)에서 노이즈 값이 큰 쪽부터 HollowFraction 만큼.
     /// 2. 가라앉는 땅: 흙이 메우지 못하고 남는 깊이 (StarvedDepth).
+    /// 이때 물이 고이는 칸과 넘칠 높이는 LoweredBed 로 낮춘 땅에서 정하고, 바닥 모양은 ShapeBeds 가 웅덩이마다 다시 정합니다.
     /// 그렇지 않으면 예전처럼 땅 어디에서나 노이즈로 고릅니다.
     /// 평면 그래프(걷는 유역)에는 만들지 않습니다: 파장이 유역보다 커서 유역 전체가 함께 내려갈 뿐입니다.
     /// </summary>
@@ -351,7 +433,18 @@ public static class Hollows
                 }
             }
         }
-        return new BasinResult(zNew, hollow, ice, nGlacial, nTectonic);
+        int nSqueezed = 0;
+        if (byCause)
+        {
+            // 물이 고이는 칸과 넘칠 높이는 위에서 정했습니다. 바닥 모양은 웅덩이마다 낮출 깊이의 모양대로 다시 정합니다.
+            double[] depth = new double[n];
+            for (int c = 0; c < n; c++)
+            {
+                depth[c] = glacial[c] + tectonic[c];
+            }
+            nSqueezed = ShapeBeds(graph, z, depth, isOutlet, zNew);
+        }
+        return new BasinResult(zNew, hollow, ice, nGlacial, nTectonic, nSqueezed);
     }
 
     /// <summary>
