@@ -50,6 +50,9 @@ FIELDS: dict[str, FieldInfo] = {
     "pet_m_per_yr": _f("climate", "m/yr", "float32", "잠재 증발산"),
     "runoff_m_per_yr": _f("climate", "m/yr", "float32", "Budyko 유출"),
     "runoff_eff_m_per_yr": _f("climate", "m/yr", "float32", "침식에 쓰는 유출 (바닥값 적용)"),
+    "glaciated": _f(
+        "climate", "", "uint8", "얼음이 덮였던 땅: 0 없음, 1 빙하기에만, 2 지금도 (L0)"
+    ),
     # --- 사슬 2: 지질 (geology/)
     "template_id": _f("geology", "", "uint8", "0 탄산염 탁상지, 1 습곡충상대, 2 기반암 + 화산호"),
     "fold_phase": _f("geology", "rad", "float32", "습곡 위상"),
@@ -73,9 +76,19 @@ FIELDS: dict[str, FieldInfo] = {
     # --- 물 (subsurface/water.py)
     "water_level_m": _f("water", "m", "float32", "수면 h_w (물 없으면 NaN)"),
     "is_lake": _f("water", "", "bool", "호수"),
+    "lake_closed": _f(
+        "water", "", "bool", "넘치지 못하는 호수 (들어오는 물보다 증발이 많아 물길이 여기서 끝남)"
+    ),
     "is_river": _f("water", "", "bool", "강"),
     "river_width_m": _f("water", "m", "float32", "강 폭 (강 아니면 0)"),
     "river_depth_m": _f("water", "m", "float32", "강 깊이 (강 아니면 0)"),
+    "karst_exchange_m3_per_yr": _f(
+        "water",
+        "m3/yr",
+        "float64",
+        "지표의 물이 땅속과 주고받는 양: 음수는 개울이 사라지는 칸, 양수는 샘으로 솟는 칸 "
+        "(L2, 그런 칸이 있을 때만)",
+    ),
     # --- 사슬 3: 땅속 (subsurface/)
     "soil_thickness_m": _f("subsurface", "m", "float32", "흙 두께"),
     "alluvium_m": _f("subsurface", "m", "float32", "충적층(퇴적층) 두께"),
@@ -96,6 +109,9 @@ FIELDS: dict[str, FieldInfo] = {
 }
 
 GROUPS = ("plates", "geology", "climate", "surface", "water", "subsurface")
+
+# 히어로 유역(L2)에서만 만드는 필드. 행성 지도(L0) 묶음에는 없습니다.
+HERO_ONLY = frozenset({"karst_exchange_m3_per_yr"})
 
 
 def check_fields(fields: dict) -> None:

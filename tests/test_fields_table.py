@@ -4,13 +4,16 @@ C# 이 쓴 묶음 manifest 의 fields 항목(이름·단위·dtype·묶음·설�
 바꾸면 두 표를 같이 고쳐야 이 시험이 통과합니다.
 """
 
-from bpcg_studio.fields import FIELDS
+from bpcg_studio.fields import FIELDS, HERO_ONLY
 
 
 def test_planet_manifest_fields_match_studio_table(planet):
+    """행성은 히어로 유역에서만 만드는 필드(HERO_ONLY)를 뺀 모든 필드를 만듭니다."""
     entries = {e["name"]: e for e in planet.manifest["fields"]}
-    assert set(entries) == set(FIELDS)
+    assert set(entries) == set(FIELDS) - HERO_ONLY
     for name, info in FIELDS.items():
+        if name in HERO_ONLY:
+            continue
         e = entries[name]
         assert (e["unit"], e["dtype"], e["group"]) == (info.unit, info.dtype, info.group), name
         assert e["description"] == info.description, name

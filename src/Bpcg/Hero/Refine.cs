@@ -310,7 +310,8 @@ public static class Refine
         StageResult st = Pipeline.RunStages2To4(
             graph, isOutlet, zOutlet, sampled.Get<double>("uplift_m_per_yr"), sampled.Get<double>("runoff_eff_m_per_yr"),
             sampled.Get<double>("precip_m_per_yr"), columns, cfg, extraInflow: inflow, latDeg: site.LatDeg, log: log,
-            runoff: sampled.Get<double>("runoff_m_per_yr"), maxIter: maxIter, zInit: zInit);
+            runoff: sampled.Get<double>("runoff_m_per_yr"), maxIter: maxIter, zInit: zInit,
+            pet: sampled.Contains("pet_m_per_yr") ? sampled.GetFloat64("pet_m_per_yr") : null);
         st.Diag["warm_start"] = warm;
         sec["stages"] = Seconds(t);
 

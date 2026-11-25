@@ -242,10 +242,12 @@ public static class Water
     /// 호수·강·수면·골짜기 깊이 (water_bodies). 반환: water_level_m, is_lake, is_river, river_width_m, river_depth_m, valley_depth_m.
     /// receiver·order·discharge 는 솔버 결과 또는 reroute 결과(order 없으면 null).
     /// valleyZ: 골짜기 깊이를 잴 때 '골짜기 가장자리' 높이로 쓸 고도 [m] (N,). null 이면 z 를 씁니다.
+    /// closedLevel: 넘치지 못하는 호수(LakeBalance)의 수면 [m] (N,), 그런 호수 칸이 아니면 NaN. 이 칸들은 물길이 끝나는
+    /// 칸(receiver 가 자기 자신)이라 웅덩이 채우기로는 호수가 되지 않으므로, 여기서 받은 수면으로 호수로 둡니다.
     /// </summary>
     public static FieldSet WaterBodies(
         CellGraph graph, double[] z, long[] receiver, long[]? order, double[] discharge, bool[] isOcean, Config cfg,
-        double[]? valleyZ = null)
+        double[]? valleyZ = null, double[]? closedLevel = null)
     {
         int n = graph.NCells;
         double[] zz = AsVector(z, n, "z");
@@ -266,6 +268,22 @@ public static class Water
             isOutlet[c] = ocean[c] || rcv[c] == c;
         }
         double[] zHat = Depressions.FillDepressions(zz, graph.Nbr, isOutlet);
+        if (closedLevel is not null)
+        {
+            if (closedLevel.Length != n)
+            {
+                throw new ArgumentException($"closedLevel 은 ({n},) 배열이어야 합니다 (받은 길이: {closedLevel.Length})");
+            }
+            // 닫힌 호수 칸은 받은 수면까지 물이 찹니다. 아래 식(zHat − z)이 그대로 호수로 가립니다.
+            zHat = (double[])zHat.Clone();
+            for (int c = 0; c < n; c++)
+            {
+                if (!ocean[c] && double.IsFinite(closedLevel[c]) && closedLevel[c] > zHat[c])
+                {
+                    zHat[c] = closedLevel[c];
+                }
+            }
+        }
         bool[] isLake = new bool[n];
         bool[] isRiver = new bool[n];
         double[] width = new double[n];

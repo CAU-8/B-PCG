@@ -190,15 +190,22 @@ def test_dug_entrances_open_outside_and_carry_water_from_a_sinkhole(cave_run, ca
         assert a[1] == b[1]  # 입구 굴은 수평입니다 (엔진 좌표의 둘째 값이 높이)
 
 
-def test_sinkholes_get_bowls_and_passages_get_lake_chambers(cave_run, cave_hero):
-    """싱크홀 둘레의 꺼진 땅과 동굴 호수가 생기는 방 (docs/pipeline.md 10장).
+def test_sinkholes_get_bowls_only_on_gentle_ground_and_cave_lakes_sit_at_the_water(
+    cave_run, cave_hero
+):
+    """싱크홀 둘레의 꺼진 땅과 동굴 호수 (docs/pipeline.md 10장).
 
-    꺼진 땅의 반지름은 15 m 와 설정 doline_radius_m 사이이고, 깊이는 깊이 비 × 지름을 넘지 않습니다.
-    회랑 안 동굴 호수의 물 높이는 그 자리의 아래층 높이(녹는 암석 안의 물 높이)입니다.
+    꺼진 땅은 둘레 땅의 평균 경사가 doline_max_slope 이하인 싱크홀에만 둡니다. 반지름은 15 m 와 설정
+    doline_radius_m 사이이고, 깊이는 깊이 비 × 지름을 넘지 않습니다.
+    동굴 호수는 아래층 통로가 물에 깊이 잠긴 구간이고, 물 높이는 그 자리의 아래층 높이
+    (녹는 암석 안의 물 높이)입니다.
     """
     caves = read_json(cave_run / "corridor" / "manifest.json")["caves"]
     cfg = cave_hero.config["caves"]
-    assert 0 < caves["n_dolines"] <= caves["n_sinkholes"]
+    # 싱크홀마다 그릇을 두거나(n_dolines), 가팔라서 구멍만 두거나(n_sinks_on_steep_ground),
+    # 그릇이 들어갈 깊이가 없습니다.
+    assert caves["n_dolines"] >= 0 and caves["n_sinks_on_steep_ground"] >= 0
+    assert caves["n_dolines"] + caves["n_sinks_on_steep_ground"] <= caves["n_sinkholes"]
     sinks = caves["sinkholes_in_corridor"]
     assert len(sinks) == caves["n_sinkholes_in_corridor"]
     for _east, _north, radius, depth in sinks:
@@ -206,7 +213,7 @@ def test_sinkholes_get_bowls_and_passages_get_lake_chambers(cave_run, cave_hero)
             continue
         assert 15.0 <= radius <= cfg["doline_radius_m"]
         assert 0 < depth <= cfg["doline_depth_ratio"] * 2 * radius + 1e-9
-    assert caves["n_cave_lakes"] > 0
+    assert caves["n_cave_lakes"] >= caves["n_cave_lakes_in_corridor"] >= 0
     lakes = caves["cave_lakes_in_corridor"]
     assert len(lakes) == caves["n_cave_lakes_in_corridor"]
     graph = cave_hero.manifest["graph"]
@@ -215,11 +222,33 @@ def test_sinkholes_get_bowls_and_passages_get_lake_chambers(cave_run, cave_hero)
     east0, north0 = graph["origin"]
     level0 = cave_hero["cave_level_0_m"].reshape(rows, cols)
     for east, north, water in lakes:
-        # 방의 가운데는 통로를 다듬으며 칸 중심에서 조금 옮겨집니다.
+        # 호수의 자리는 통로를 다듬으며 칸 중심에서 조금 옮겨집니다.
         # 그래서 둘레 3 × 3 칸 가운데 높이가 같은 칸을 찾습니다.
         i, j = int((east - east0) // dx), int((north0 - north) // dx)
         near = level0[max(j - 1, 0) : j + 2, max(i - 1, 0) : i + 2]
         assert np.isclose(near, water, atol=1e-3).any()
+
+
+def test_cave_network_numbers_add_up(cave_run):
+    """통로 그물을 잰 값 (docs/pipeline.md 10장 4번): 길이, 샘, 동굴 수가 서로 맞습니다."""
+    caves = read_json(cave_run / "corridor" / "manifest.json")["caves"]
+    assert caves["n_sinkholes"] > 0 and caves["passage_km"] > 0
+    # 물에 다 잠긴 길이 ≤ 아래층 길이 ≤ 모든 층의 길이.
+    assert 0.0 <= caves["flooded_km"] <= caves["lower_level_km"] <= caves["passage_km"] + 1e-9
+    assert caves["mean_loop_depth_m"] >= 0.0
+    # 동굴 하나는 샘 하나로 모이는 통로들입니다. 강둑의 샘은 샘의 일부입니다.
+    assert caves["n_caves"] == caves["n_springs"] > 0
+    assert 0 <= caves["n_bank_springs"] <= caves["n_springs"]
+    assert 0 <= caves["n_single_passage_caves"] <= caves["n_caves"]
+    # 통로가 한 번이라도 합쳐지는 동굴이 있으면, 마디에 이어진 가지 수의 평균은
+    # 1.5 이상 2 미만입니다 (고리가 없는 나뭇가지 꼴).
+    if caves["n_single_passage_caves"] < caves["n_caves"]:
+        assert 1.5 <= caves["mean_degree"] < 2.0
+    else:
+        assert caves["mean_degree"] == 0.0
+    assert caves["tortuosity"] >= 1.0
+    assert caves["sink_discharge_m3_per_s"] > 0.0
+    assert 0 <= caves["n_stream_sinks"] <= caves["n_sinkholes"]
 
 
 def test_face_textures(tiny_run, planet):

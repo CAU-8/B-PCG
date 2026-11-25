@@ -165,7 +165,7 @@ public static class Groundwater
     /// 반환:
     /// - ZGw: 맨 위 지하수면 [m]. 땅을 파면 처음 만나는 물이고, 셰일 같은 막는 층 위에 얹힌 물도 여기에 듭니다.
     /// - ZGwLower: 아래 지하수면 [m]. 막는 층 아래 녹는 암석이 강 높이까지 물을 빼면 그 높이, 아니면 ZGw 와 같습니다.
-    /// - BaseLevel: 가장 가까운 바다·호수·강 칸의 수면 [m] (없으면 NaN). 동굴 위층의 기준입니다.
+    /// - BaseLevel: 가장 가까운 바다·호수·강 칸의 수면 [m] (없으면 NaN). 동굴 위층의 기준입니다. karstBase 를 주면 그 칸들만 봅니다.
     /// 상류 면적이 groundwater.drain_area_m2 이상인 물길 칸은 지하수면이 바닥에 닿을 때만 물 빠지는 곳이 됩니다
     /// (큰 물만으로 풀고, 닿은 물길을 더해 다시 풂. 더 닿는 물길이 없거나 groundwater.drain_passes 번이면 멈춤).
     /// 지하수면은 깊이로 자르지 않습니다.
@@ -173,7 +173,7 @@ public static class Groundwater
     public static (double[] ZGw, double[] ZGwLower, double[] BaseLevel, OrderedDictionary<string, object?> Diag) WaterTable(
         CellGraph graph, double[] z, double[] waterLevel, bool[] isWater, byte[] surfaceRock, double[] slope,
         double[] runoff, double[] drainageArea, LayerColumns columns, Config cfg, double? gravity = null,
-        bool[]? isOcean = null)
+        bool[]? isOcean = null, bool[]? karstBase = null)
     {
         long t0 = Stopwatch.GetTimestamp();
         int n = graph.NCells;
@@ -237,7 +237,13 @@ public static class Groundwater
         // 녹는 암석: 통로가 물을 빼서 지하수면이 큰 물(바다·호수·강) 높이에 거의 평평합니다.
         // 가까운 큰 물 수면 + karst_gradient × 거리 높이가 녹는 암석 안이고 지표보다 낮으면 그 높이가 아래 지하수면입니다.
         // 기준은 가장 가까운 큰 물입니다. 동굴 위층도 같은 큰 물 수면에서 재므로 두 층이 같은 강에 짝지어집니다.
-        (double[] deltaW, _, double[] baseLevel) = Distance.NearestSourceValues(graph, water, waterLevel);
+        // karstBase 가 있으면 그 칸들(큰 물: 바다, 호수, 통로가 다 삼키지 못하는 강)만 기준으로 씁니다. 작은 개울은 석회암
+        // 지하수면보다 높이 떠 있을 수 있어 기준이 되지 못합니다 (KarstStreams).
+        if (karstBase is not null && karstBase.Length != n)
+        {
+            throw new ArgumentException($"karstBase 는 ({n},) bool 배열이어야 합니다 (받은 길이: {karstBase.Length})");
+        }
+        (double[] deltaW, _, double[] baseLevel) = Distance.NearestSourceValues(graph, karstBase ?? water, waterLevel);
         double[] zKarst = new double[n];
         for (int c = 0; c < n; c++)
         {

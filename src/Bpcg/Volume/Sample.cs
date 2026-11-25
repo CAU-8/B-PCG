@@ -281,6 +281,9 @@ public sealed class HeroVolume
     /// <summary>(N,) 칸마다 그 칸에서 하류로 나가는 층 통로의 길이 [m].</summary>
     public double[] PassageM { get; private set; } = [];
 
+    /// <summary>통로가 닿아 강둑에 열린 샘 수 (아래층).</summary>
+    public int NBankSprings { get; private set; }
+
     /// <summary>히어로 묶음의 입구 후보 수 (동굴 층마다 따로 셈).</summary>
     public long NEntranceCandidates { get; private set; }
 
@@ -452,7 +455,8 @@ public sealed class HeroVolume
     /// 반지름 = radiusMaxM × sqrt(싱크홀로 모인 넓이 ÷ FullSizeAreaM2) 를 DolineRadiusMinM 과 radiusMaxM 사이로 자른 값,
     /// 깊이 = depthRatio × 지름. 보기용입니다: 3D 샘플 함수의 지표만 낮추고 히어로 묶음의 z_m 은 바꾸지 않습니다.
     /// </summary>
-    private void BuildDolines(CellGraph graph, double[] areaM2, double sinkSpacingM, double radiusMaxM, double depthRatio)
+    private void BuildDolines(
+        CellGraph graph, double[] areaM2, double sinkSpacingM, double radiusMaxM, double depthRatio, double maxSlope, double[]? slope)
     {
         int n = Ny * Nx;
         int[] sinks = Network.Sinks;
@@ -492,6 +496,12 @@ public sealed class HeroVolume
             {
                 continue;
             }
+            // 가파른 땅에는 그릇이 생기지 않습니다: 그릇 넓이 안의 평균 경사가 maxSlope 를 넘으면 구멍만 둡니다.
+            if (slope is not null && double.IsFinite(maxSlope) && MeanSlopeAround(slope, pos[s * 3], pos[(s * 3) + 1], radius) > maxSlope)
+            {
+                NSteepSinks++;
+                continue;
+            }
             DolineRadius[i] = radius;
             DolineDepth[i] = depth;
             // 그릇이 걸칠 수 있는 칸에 이 싱크홀의 순번을 적습니다. 두 그릇이 한 칸에 걸치면 가운데가 더 가까운 쪽을 남깁니다.
@@ -521,6 +531,92 @@ public sealed class HeroVolume
                 }
             }
         }
+    }
+
+    /// <summary>싱크홀 가운데, 둘레 땅이 가팔라 그릇 모양으로 꺼뜨리지 않은 것의 수.</summary>
+    public int NSteepSinks { get; private set; }
+
+    /// <summary>점 (x, y) 에서 반지름 radiusM 안에 가운데가 드는 칸들의 경사 평균 [m/m]. 그런 칸이 없으면 그 점이 든 칸의 경사.</summary>
+    private double MeanSlopeAround(double[] slope, double x, double y, double radiusM)
+    {
+        int ci = Math.Clamp((int)Math.Floor((x - X0) / Dx), 0, Nx - 1);
+        int cj = Math.Clamp((int)Math.Floor((Y0 - y) / Dx), 0, Ny - 1);
+        int reach = (int)Math.Ceiling(radiusM / Dx);
+        double sum = 0.0;
+        int count = 0;
+        for (int jj = Math.Max(cj - reach, 0); jj <= Math.Min(cj + reach, Ny - 1); jj++)
+        {
+            for (int ii = Math.Max(ci - reach, 0); ii <= Math.Min(ci + reach, Nx - 1); ii++)
+            {
+                double ex = X0 + ((ii + 0.5) * Dx) - x;
+                double ey = Y0 - ((jj + 0.5) * Dx) - y;
+                if ((ex * ex) + (ey * ey) <= radiusM * radiusM)
+                {
+                    sum += slope[(jj * Nx) + ii];
+                    count++;
+                }
+            }
+        }
+        return count > 0 ? sum / count : slope[(cj * Nx) + ci];
+    }
+
+    /// <summary>
+    /// 동굴 층 k 가 놓인 지층의 층리면(지층이 쌓인 면) 높이 [m] 와 그 면이 기운 각의 sin. 층리면은 그 층 높이가 든 지층의
+    /// 바닥면으로 봅니다 (맨 아래 기반암 안이면 기반암의 윗면). 기울기는 양옆 칸과의 높이 차로 잽니다. 동굴 층이 없는 칸은 NaN, 0.
+    /// </summary>
+    private (double[] BedZ, double[] DipSin) BeddingAtLevel(int k)
+    {
+        int n = Ny * Nx;
+        int nL = NLayers;
+        double[] bed = new double[n];
+        double[] dip = new double[n];
+        Array.Fill(bed, NpMath.NaN);
+        if (nL == 0)
+        {
+            return (bed, dip);
+        }
+        Parallelism.For(0, n, c =>
+        {
+            double lv = CaveLevels[(k * n) + c];
+            if (!double.IsFinite(lv))
+            {
+                return;
+            }
+            int li = nL - 1;
+            for (int i = 0; i < nL; i++)
+            {
+                if (StrataBottom[(c * nL) + i] < lv)
+                {
+                    li = i;
+                    break;
+                }
+            }
+            double b = StrataBottom[(c * nL) + li];
+            if (!double.IsFinite(b))
+            {
+                return;
+            }
+            bed[c] = b;
+            int jj = c / Nx;
+            int ii = c % Nx;
+            int iw = Math.Max(ii - 1, 0);
+            int ie = Math.Min(ii + 1, Nx - 1);
+            int js = Math.Min(jj + 1, Ny - 1);
+            int jn = Math.Max(jj - 1, 0);
+            double bw = StrataBottom[(((jj * Nx) + iw) * nL) + li];
+            double be = StrataBottom[(((jj * Nx) + ie) * nL) + li];
+            double bs = StrataBottom[(((js * Nx) + ii) * nL) + li];
+            double bn = StrataBottom[(((jn * Nx) + ii) * nL) + li];
+            if (!(double.IsFinite(bw) && double.IsFinite(be) && double.IsFinite(bs) && double.IsFinite(bn)) || ie == iw || js == jn)
+            {
+                return;
+            }
+            double gx = (be - bw) / ((ie - iw) * Dx);
+            double gy = (bn - bs) / ((js - jn) * Dx);
+            double g2 = (gx * gx) + (gy * gy);
+            dip[c] = Math.Sqrt(g2 / (1.0 + g2));
+        });
+        return (bed, dip);
     }
 
     /// <summary>
@@ -1054,6 +1150,9 @@ public sealed class HeroVolume
             }
         }
 
+        // 입구 굴은 산 밖으로 열리는 입구 칸에만 팝니다. 아래에서 강가 샘을 더하기 전의 값을 따로 둡니다.
+        bool[] opensOut = (bool[])outlet.Clone();
+
         // --- 2. 싱크홀에서 샘까지의 통로 그물
         // 싱크홀은 지표 암석이 물에 녹는 암석이고 물에 잠기지 않은 육지 칸에만 둡니다.
         byte[] surfaceRock = (byte[])FieldSet.CastTo(fields["surface_rock"], typeof(byte));
@@ -1066,19 +1165,94 @@ public sealed class HeroVolume
         {
             sinkAllowed[c] = Rocks.Soluble[surfaceRock[c]] && !isRiver[c] && !isLake[c] && !isOcean[c];
         }
-        // 동굴 호수와 꺼진 땅의 설정 키가 없는 묶음(이 키가 생기기 전의 히어로 묶음)에서는 둘 다 만들지 않습니다.
+        // 강가 샘: 아래층(지금 물이 흐르는 층)의 물은 그 물 높이를 정한 큰 물(강·호수·바다)로 빠집니다. 아래층이 있는 칸이
+        // 물 칸이거나, 둘레 여덟 칸에 수면이 그 층 높이 이하인 물 칸이 있으면 샘입니다 (통로는 물 높이에서 저항이 가장 작은
+        // 끝으로 빠지고, 샘의 자리가 지하수면을 정함: Audra & Palmer 2011). 굴은 따로 파지 않고 물가로 짧게 잇습니다.
+        double[] wlev = fields.GetFloat64("water_level_m");
+        bool[] isWater = new bool[n];
+        for (int c = 0; c < n; c++)
+        {
+            isWater[c] = (isRiver[c] || isLake[c] || isOcean[c]) && double.IsFinite(wlev[c]);
+        }
+        int[] bankTo = new int[n];
+        Array.Fill(bankTo, -1);
+        for (int c = 0; c < n; c++)
+        {
+            double lv = CaveLevels[c];
+            if (outlet[c] || !double.IsFinite(lv))
+            {
+                continue;
+            }
+            if (isWater[c])
+            {
+                outlet[c] = true;
+                continue;
+            }
+            int cj = c / nx;
+            int ci = c % nx;
+            int best = -1;
+            for (int dj = -1; dj <= 1; dj++)
+            {
+                for (int di = -1; di <= 1; di++)
+                {
+                    int j2 = cj + dj;
+                    int i2 = ci + di;
+                    if ((dj == 0 && di == 0) || j2 < 0 || j2 >= ny || i2 < 0 || i2 >= nx)
+                    {
+                        continue;
+                    }
+                    int nb = (j2 * nx) + i2;
+                    // 수면이 가장 낮은 물 칸으로 잇습니다 (같으면 번호가 작은 칸).
+                    if (isWater[nb] && wlev[nb] <= lv + 1e-6 && (best < 0 || wlev[nb] < wlev[best]))
+                    {
+                        best = nb;
+                    }
+                }
+            }
+            if (best >= 0)
+            {
+                outlet[c] = true;
+                bankTo[c] = best;
+            }
+        }
+
+        // 아래층이 놓인 지층의 층리면 높이와 기운 정도. 통로가 층리면을 따라 물 높이 아래로 오르내리는 폭을 정합니다.
+        (double[] bedZ, double[] dipSin) = BeddingAtLevel(0);
+
+        // 지표의 개울이 땅속으로 사라지는 칸 (히어로 단계가 적은 값, 음수가 사라지는 물). 없는 묶음은 그런 칸이 없습니다.
+        double[]? streamLoss = null;
+        if (fields.Contains("karst_exchange_m3_per_yr"))
+        {
+            double[] exchange = fields.GetFloat64("karst_exchange_m3_per_yr");
+            streamLoss = new double[n];
+            for (int c = 0; c < n; c++)
+            {
+                streamLoss[c] = exchange[c] < 0.0 ? -exchange[c] : 0.0;
+            }
+        }
+        // 아래 설정 키가 없는 묶음(이 키가 생기기 전의 히어로 묶음)은 통로 굵기를 시간으로 막지 않고, 꺼진 땅을 만들지 않습니다.
         Section cavesCfg = cfg.Sec("caves");
         double sinkSpacing = cfg.F("caves.sink_spacing_m");
-        double lakeSpacing = cavesCfg.Contains("lake_spacing_m") ? cfg.F("caves.lake_spacing_m") : 0.0;
-        double chamberRadius = cavesCfg.Contains("chamber_radius_m") ? cfg.F("caves.chamber_radius_m") : 0.0;
-        Network = CaveNetwork.Build(graph, z, CaveLevels, outlet, sinkAllowed, area, new CaveNetworkParams(
-            RadiusMaxM: r, FullSizeAreaM2: FullSizeAreaM2, SinkSpacingM: sinkSpacing,
-            SinkMinAreaM2: cfg.F("caves.sink_min_area_m2"), PathWavelengthM: Wavelength, Seed: Seed,
-            LakeSpacingM: lakeSpacing, ChamberRadiusM: chamberRadius));
+        Network = CaveNetwork.Build(
+            graph, z, CaveLevels, outlet, sinkAllowed, area,
+            new CaveNetworkParams(
+                RadiusMaxM: r, SinkSpacingM: sinkSpacing, SinkMinAreaM2: cfg.F("caves.sink_min_area_m2"),
+                PathWavelengthM: Wavelength, Seed: Seed,
+                WallRetreatMPerYr: cavesCfg.Contains("wall_retreat_m_per_yr") ? cfg.F("caves.wall_retreat_m_per_yr") : 0.0,
+                ActiveZoneM: cavesCfg.Contains("active_zone_m") ? cfg.F("caves.active_zone_m") : 0.0,
+                HydraulicGradient: cfg.F("groundwater.karst_gradient"),
+                GravityMS2: Constants.Gravity(cfg.F("planet.radius_m"), cfg.F("planet.mean_density_kg_m3"))),
+            new CaveNetworkFields(
+                DischargeM3PerYr: fields.Contains("discharge_m3_per_yr") ? fields.GetFloat64("discharge_m3_per_yr") : null,
+                Receiver: rcv,
+                UpliftMPerYr: fields.Contains("uplift_m_per_yr") ? fields.GetFloat64("uplift_m_per_yr") : null,
+                BedZ: bedZ, DipSin: dipSin, StreamLossM3PerYr: streamLoss));
         BuildDolines(
             graph, area, sinkSpacing,
             cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,
-            cavesCfg.Contains("doline_depth_ratio") ? cfg.F("caves.doline_depth_ratio") : 0.0);
+            cavesCfg.Contains("doline_depth_ratio") ? cfg.F("caves.doline_depth_ratio") : 0.0,
+            cavesCfg.Contains("doline_max_slope") ? cfg.F("caves.doline_max_slope") : double.PositiveInfinity,
+            fields.Contains("slope") ? fields.GetFloat64("slope") : null);
 
         // --- 3. 캡슐 목록: 층 통로와 수직굴(그물), 그 뒤에 입구 굴
         var aL = new List<double>(Network.SegA);
@@ -1095,7 +1269,7 @@ public sealed class HeroVolume
                 {
                     continue;
                 }
-                if (!outlet[i])
+                if (!opensOut[i])
                 {
                     NUnopened++;
                     continue;
@@ -1106,8 +1280,8 @@ public sealed class HeroVolume
                     NNoPassage++;
                     continue;
                 }
-                double rr = CaveNetwork.Radius(Network.Flow[i], r, FullSizeAreaM2);
-                double zk = CaveLevels[i] + (k == 0 ? CaveNetwork.StreamLift * rr : 0.0);
+                double rr = Network.CellRadius[i];
+                double zk = Network.AxisZ[i];
                 entranceIdx.Add(rL.Count);
                 aL.AddRange([xc[c], yc[c], zk]);
                 bL.AddRange([xc[c] + (outDirX[i] * outDist[i]), yc[c] + (outDirY[i] * outDist[i]), zk]);
@@ -1115,6 +1289,24 @@ public sealed class HeroVolume
                 openL.Add(true);
                 EntranceOpen[c] = true;
             }
+        }
+        // 강가 샘: 통로가 닿은 샘 칸에서 물가의 물 칸 가운데까지 같은 높이로 잇습니다. 강둑에 샘 구멍이 열립니다.
+        NBankSprings = 0;
+        for (int c = 0; c < n; c++)
+        {
+            int nb = bankTo[c];
+            if (nb < 0 || !(Network.Flow[c] > 0.0))
+            {
+                continue;
+            }
+            NBankSprings++;
+            double zk = Network.AxisZ[c];
+            entranceIdx.Add(rL.Count);
+            EntranceOpen[c] = true;
+            aL.AddRange([xc[c], yc[c], zk]);
+            bL.AddRange([xc[nb], yc[nb], zk]);
+            rL.Add(Network.CellRadius[c]);
+            openL.Add(true);
         }
         foreach (int s in Network.Sinks)
         {
