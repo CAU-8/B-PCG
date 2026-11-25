@@ -38,6 +38,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from bpcg_studio.bundle import describe_bundle
 from bpcg_studio.csharp import CSharpError, dotnet
 from bpcg_studio.names import bare_name
 from bpcg_studio.paths import OUT, ROOT
@@ -344,27 +345,54 @@ def install_corridor(corridor_dir: Path, baked_dir: Path = BAKED, run_key: str =
         "seed": man.get("seed"),
         "profile": man.get("profile"),
     }
-    marker["globe"] = install_globe(src.parent / GLOBE_DIR, dst / GLOBE_DIR)
+    # 실행의 지구본이 이 회랑과 다른 히어로로 구운 지구본이면 옮기지 않습니다
+    # (엔진의 지난 지구본도 지움).
+    # 옮기면 지구본 장면이 지금 회랑과 다른 자리나 다른 행성을 보여 줍니다.
+    note = globe_mismatch(man, src.parent / GLOBE_DIR)
+    marker["globe"] = install_globe(None if note else src.parent / GLOBE_DIR, dst / GLOBE_DIR)
+    if note:
+        marker["globe_note"] = note
     tmp = dst / (MARKER + ".part")
     tmp.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, dst / MARKER)
     return marker
 
 
-def install_globe(globe_dir: Path, dst: Path) -> bool:
+def globe_mismatch(corridor_manifest: dict, globe_dir: Path) -> str | None:
+    """실행의 지구본이 이 회랑과 같은 히어로로 구운 지구본인지 봅니다.
+
+    반환: 맞거나 알 수 없으면 None, 다르면 알림 글.
+
+    회랑 목차의 parent(구운 히어로의 표지)와 globe.json 의 hero_bundle(지구본과 함께 구운 히어로의
+    표지)을 비교합니다. 둘 중 하나라도 이 기록을 적기 전에 구운 파일이면 비교하지 않습니다.
+    """
+    gm = _read_json(Path(globe_dir) / "globe.json")
+    if gm is None or "hero_bundle" not in gm or "parent" not in corridor_manifest:
+        return None
+    if gm["hero_bundle"] == corridor_manifest["parent"]:
+        return None
+    return (
+        f"지구본은 넣지 않았습니다: 실행의 지구본(globe/)은 다른 히어로 "
+        f"[{describe_bundle(gm['hero_bundle'])}]와 함께 구웠고, 이 회랑은 히어로 "
+        f"[{describe_bundle(corridor_manifest['parent'])}]로 구웠습니다. 지구본도 보려면 "
+        "bpcg bake --hero <실행 폴더>/hero 로 다시 구운 뒤 다시 여세요"
+    )
+
+
+def install_globe(globe_dir: Path | None, dst: Path) -> bool:
     """실행의 지구본 폴더(globe/)를 engine/baked/globe 로 통째로 바꿉니다. 반환: 복사했는지.
 
-    실행에 지구본이 없으면(평면 히어로 등) 엔진의 지난 지구본을 지웁니다. 남겨 두면 지구본
-    장면이 지금 회랑과 상관없는 행성을 보여 주기 때문입니다.
+    실행에 지구본이 없으면(평면 히어로 등, globe_dir 이 None 이어도) 엔진의 지난 지구본을 지웁니다.
+    남겨 두면 지구본 장면이 지금 회랑과 상관없는 행성을 보여 주기 때문입니다.
     """
-    src = Path(globe_dir)
     dst = Path(dst)
     if dst.exists() and not (dst / "globe.json").is_file() and any(dst.iterdir()):
         raise GodotError(f"지구본 자리에 알 수 없는 파일이 있습니다: {dst}")
-    if not (src / "globe.json").is_file():
+    if globe_dir is None or not (Path(globe_dir) / "globe.json").is_file():
         if dst.exists():
             shutil.rmtree(dst)
         return False
+    src = Path(globe_dir)
     names = globe_files(src)
     missing = [n for n in names if not (src / n).is_file()]
     if missing:
@@ -555,10 +583,14 @@ class GodotRunner:
             if not found["ok"]:
                 raise GodotError(found["message"])
             godot = Path(found["path"])
+            # 지구본을 옮기지 않은 까닭 (실행의 지구본이 다른 히어로로 구운 지구본일 때).
+            # 끝 글에도 붙입니다.
+            globe_note = ""
             if corridor_dir is not None:
                 self._set("copying", f"{run_key} 의 회랑 파일을 engine/baked 로 복사합니다")
                 marker = install_corridor(corridor_dir, self.baked_dir, run_key)
-                self._set("copying", f"파일 {len(marker['files'])}개를 복사했습니다")
+                globe_note = f". {marker['globe_note']}" if marker.get("globe_note") else ""
+                self._set("copying", f"파일 {len(marker['files'])}개를 복사했습니다{globe_note}")
             self._set("building", "엔진 C# 을 빌드합니다 (dotnet build)")
             built = build_engine(self.engine_dir / ENGINE_PROJECT.name)
             if built["returncode"] != 0:
@@ -576,7 +608,10 @@ class GodotRunner:
             with self.lock:
                 self.pid = pid
             what = "편집기" if mode == "editor" else "보기"
-            self._set("launched", f"Godot {what} 창을 띄웠습니다 (pid {pid}, {found['version']})")
+            self._set(
+                "launched",
+                f"Godot {what} 창을 띄웠습니다 (pid {pid}, {found['version']}){globe_note}",
+            )
         except GodotError as e:
             detail = e.args[1] if len(e.args) > 1 else None
             self._set("error", str(e.args[0]), detail)

@@ -90,9 +90,22 @@ public static class Runs
     public static Config WithSeed(Config cfg, long? seed) =>
         seed is long s ? cfg.WithOverrides([new("planet.seed", s)]) : cfg;
 
-    /// <summary>행성을 만들어 runDir/planet 에 묶음·면 텍스처를 씁니다 (run_planet). 반환: 묶음 폴더.</summary>
-    public static string RunPlanet(Config cfg, string runDir, Action<string> log) =>
-        GenerateAndSavePlanet(cfg, runDir, log).Output;
+    // 행성을 새로 쓰면, 같은 실행 폴더의 히어로·회랑·지구본은 옛 행성으로 만든 결과라 이 행성과 맞지 않습니다.
+    private static readonly string[] BelowPlanet = [HeroDir, CorridorDir, GlobeDir];
+
+    // 히어로를 새로 쓰면, 같은 실행 폴더의 회랑·지구본은 옛 히어로로 구운 결과라 이 히어로와 맞지 않습니다.
+    private static readonly string[] BelowHero = [CorridorDir, GlobeDir];
+
+    /// <summary>
+    /// 행성을 만들어 runDir/planet 에 묶음·면 텍스처를 씁니다 (run_planet). 반환: 묶음 폴더.
+    /// 다 쓴 뒤 같은 실행 폴더의 hero/, corridor/, globe/ 를 지웁니다. 옛 행성으로 만든 결과라 새 행성과 맞지 않기 때문입니다.
+    /// </summary>
+    public static string RunPlanet(Config cfg, string runDir, Action<string> log)
+    {
+        string output = GenerateAndSavePlanet(cfg, runDir, log).Output;
+        RunFolder.DropStages(runDir, BelowPlanet, "행성을 새로 만들어, 옛 행성으로 만든 결과임", log);
+        return output;
+    }
 
     private static (string Output, PlanetState State) GenerateAndSavePlanet(Config cfg, string runDir, Action<string> log)
     {
@@ -107,29 +120,44 @@ public static class Runs
         return (output, planet);
     }
 
-    /// <summary>히어로를 만들어 runDir/hero 에 묶음을 씁니다 (run_hero). planetDir 이 없거나 flat 이면 평면 히어로.</summary>
+    /// <summary>
+    /// 히어로를 만들어 runDir/hero 에 묶음을 씁니다 (run_hero). planetDir 이 없거나 flat 이면 평면 히어로.
+    /// 만들기 전에, runDir 에 다른 행성 묶음이 있으면 RunError 로 멈춥니다(<see cref="RunFolder.RequireHeroFitsRun"/>).
+    /// 다 쓴 뒤 같은 실행 폴더의 corridor/, globe/ 를 지웁니다. 옛 히어로로 구운 결과라 새 히어로와 맞지 않기 때문입니다.
+    /// </summary>
     public static string RunHero(Config cfg, string runDir, string? planetDir, bool flat, Action<string> log)
     {
         long t = Stopwatch.GetTimestamp();
         PlanetState? planet = null;
-        if (!flat)
+        OrderedDictionary<string, object?>? planetId = null;
+        if (flat)
+        {
+            RunFolder.RequireHeroFitsRun(runDir, null);
+        }
+        else
         {
             if (planetDir is null)
             {
                 throw new RunError("히어로를 만들려면 --from <행성 묶음> 이나 --flat 이 필요합니다");
             }
+            planetId = RunFolder.BundleId(Bundle.ReadManifest(planetDir));
+            RunFolder.RequireHeroFitsRun(runDir, planetId);
             log($"[히어로] 행성 묶음을 읽습니다: {planetDir}");
             planet = Bundle.LoadPlanetState(planetDir);
         }
-        return GenerateAndSaveHero(cfg, runDir, planet, log, t).Output;
+        string output = GenerateAndSaveHero(cfg, runDir, planet, planetId, log, t).Output;
+        RunFolder.DropStages(runDir, BelowHero, "히어로를 새로 만들어, 옛 히어로로 구운 결과임", log);
+        return output;
     }
 
+    // planetId: 히어로를 만들 때 읽은 행성 묶음의 표지. 평면 히어로는 null 이지만, all 이 행성에서 자리를 찾지 못해 바꾼
+    // 평면 히어로는 같은 실행의 행성 표지를 적습니다(그 행성과 함께 만든 히어로이기 때문).
     private static (string Output, HeroState State) GenerateAndSaveHero(
-        Config cfg, string runDir, PlanetState? planet, Action<string> log, long t)
+        Config cfg, string runDir, PlanetState? planet, OrderedDictionary<string, object?>? planetId, Action<string> log, long t)
     {
         HeroState hero = Pipeline.GenerateHero(cfg, planet, log);
         string output = Path.Combine(runDir, HeroDir);
-        Bundle.SaveHeroState(output, hero, cfg);
+        Bundle.SaveHeroState(output, hero, cfg, planetId);
         Bundle.WriteJson(Path.Combine(output, "scorecard.json"), hero.Diag.GetValueOrDefault("scorecard") ?? new OrderedDictionary<string, object?>());
         log($"[히어로] 묶음을 썼습니다: {output} ({Seconds(t):F1} s)");
         return (output, hero);
@@ -239,30 +267,69 @@ public static class Runs
         }
     }
 
-    /// <summary>히어로 묶음에서 회랑을 outDir 에 굽습니다 (run_bake). engineDir 이 있으면 그곳에도 씁니다.</summary>
+    /// <summary>
+    /// 히어로 묶음에서 회랑을 outDir 에 굽습니다 (run_bake). engineDir 이 있으면 그곳에도 씁니다.
+    /// 회랑 목차의 parent 에 이 히어로 묶음의 표지를 적습니다.
+    /// </summary>
     public static OrderedDictionary<string, object?> RunBake(
         string heroDir, string outDir, string? engineDir, Action<string> log, long? seed = null, IEnumerable<string>? sets = null)
     {
         Config cfg = BakeConfig(heroDir, log, seed, sets);
         RequireBakeKeys(cfg, heroDir);
         Pipeline.ApplyThreads(cfg);
+        OrderedDictionary<string, object?>? heroId = RunFolder.BundleId(Bundle.ReadManifest(heroDir));
         log($"[굽기] 히어로 묶음을 읽습니다: {heroDir}");
         HeroState hero = Bundle.LoadHeroState(heroDir);
-        return Corridor.BakeCorridor(hero, cfg, outDir, engineDir, log);
+        return Corridor.BakeCorridor(hero, cfg, outDir, engineDir, log, heroId);
     }
 
-    /// <summary>행성 묶음에서 runDir/globe 에 지구본 파일을 굽습니다 (run_globe). engineGlobeDir 이 있으면 그곳에도 씁니다.</summary>
-    public static string RunGlobe(string planetDir, string runDir, string? engineGlobeDir, Action<string> log)
+    /// <summary>
+    /// 지구본을 굽기 전에, 히어로 묶음이 이 행성 묶음에서 만든 묶음인지 봅니다. 다르면 지구본이 회랑과 상관없는 행성이나
+    /// 다른 자리를 보여 주므로, 무엇이 다른지·받은 값·고치는 법을 적은 RunError 로 멈춥니다.
+    /// </summary>
+    public static void RequireSameRun(string planetDir, string heroDir)
     {
+        OrderedDictionary<string, object?> planet = Bundle.ReadManifest(planetDir);
+        string? why = RunFolder.HeroPlanetMismatch(planet, Bundle.ReadManifest(heroDir));
+        if (why is not null)
+        {
+            throw new RunError(
+                $"지구본을 굽지 못합니다: 행성 묶음 {planetDir}({RunFolder.Describe(RunFolder.BundleId(planet))})은 "
+                + $"히어로 묶음 {heroDir} 를 만든 행성이 아닙니다. {why}. "
+                + $"이 행성에서 히어로를 다시 만들거나(bpcg hero --from {planetDir}), 지구본 없이 구우려면 --no-globe 를 붙이세요");
+        }
+    }
+
+    /// <summary>
+    /// 행성 묶음과 그 행성에서 만든 히어로 묶음으로 runDir/globe 에 지구본 파일을 굽습니다 (run_globe).
+    /// engineGlobeDir 이 있으면 그곳에도 씁니다. 두 묶음이 같은 실행이 아니면 RunError (<see cref="RequireSameRun"/>).
+    /// </summary>
+    public static string RunGlobe(string planetDir, string heroDir, string runDir, string? engineGlobeDir, Action<string> log)
+    {
+        RequireSameRun(planetDir, heroDir);
         OrderedDictionary<string, object?> man = Bundle.ReadManifest(planetDir);
+        OrderedDictionary<string, object?> heroMan = Bundle.ReadManifest(heroDir);
         Config cfg = Bundle.ConfigFromManifest(man);
         Pipeline.ApplyThreads(cfg);
         string output = Path.Combine(runDir, GlobeDir);
         Globe.BakeGlobe(
-            Bundle.LoadPlanetState(planetDir), cfg, output, hero: Globe.HeroFromRun(runDir), log: log,
+            Bundle.LoadPlanetState(planetDir), cfg, output, hero: Globe.HeroFromBundle(heroMan), log: log,
             faceBasis: man.GetValueOrDefault("face_basis") as OrderedDictionary<string, object?>,
-            engineDir: engineGlobeDir);
+            engineDir: engineGlobeDir, parent: RunFolder.BundleId(man), heroBundle: RunFolder.BundleId(heroMan));
         return output;
+    }
+
+    /// <summary>
+    /// 이번 굽기가 지구본을 굽지 않을 때(--no-globe, 행성 없음), globeDirs 의 지난 지구본 가운데 이 히어로 묶음과 함께
+    /// 구운 지구본이 아닌 것을 지웁니다 (<see cref="RunFolder.DropGlobeUnlessFor"/>). 실행 폴더의 globe/ 와 엔진의 globe/ 에 씁니다.
+    /// </summary>
+    public static void DropGlobesNotFor(string heroDir, IEnumerable<string> globeDirs, Action<string> log)
+    {
+        OrderedDictionary<string, object?>? heroId = RunFolder.BundleId(Bundle.ReadManifest(heroDir));
+        foreach (string dir in globeDirs)
+        {
+            RunFolder.DropGlobeUnlessFor(dir, heroId, log);
+        }
     }
 
     /// <summary>엔진 굽기 폴더의 지난 지구본을 지웁니다 (행성이 없는 실행, cli.py 의 _drop_engine_globe).</summary>
@@ -279,6 +346,8 @@ public static class Runs
     /// <summary>
     /// 행성 → 히어로 → 회랑 굽기 → 지구본 (all 명령). 행성에서 히어로 자리를 찾지 못하면 평면 히어로로 바꿉니다.
     /// engineDir 이 있으면 회랑과 지구본을 그곳에도 씁니다. 반환: runDir.
+    /// 실행 폴더 전체를 새로 쓰므로, 첫 묶음(행성, --flat 이면 히어로)을 쓴 뒤 나머지 단계 폴더를 지우고 차례로 다시 씁니다.
+    /// 평면 히어로 실행이 끝나면 planet/ 과 globe/ 가 남지 않습니다.
     /// </summary>
     public static string All(Config cfg, string runDir, bool flat, string? engineDir, Action<string> log)
     {
@@ -286,37 +355,45 @@ public static class Runs
         string heroDir;
         HeroState hero;
         PlanetState? planet = null;
-        string? planetDir = null;
+        OrderedDictionary<string, object?>? planetMan = null;
         if (flat)
         {
-            (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, log, Stopwatch.GetTimestamp());
+            (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, null, log, Stopwatch.GetTimestamp());
+            RunFolder.DropStages(runDir, [PlanetDir, CorridorDir, GlobeDir], "평면 히어로로 실행 폴더를 새로 써, 지난 실행의 결과임", log);
         }
         else
         {
+            string planetDir;
             (planetDir, planet) = GenerateAndSavePlanet(cfg, runDir, log);
+            RunFolder.DropStages(runDir, BelowPlanet, "행성을 새로 만들어, 옛 행성으로 만든 결과임", log);
             UseSavedPrecision(planet.Fields);
-            cfg = Bundle.ConfigFromManifest(Bundle.ReadManifest(planetDir));
+            planetMan = Bundle.ReadManifest(planetDir);
+            cfg = Bundle.ConfigFromManifest(planetMan);
+            OrderedDictionary<string, object?>? planetId = RunFolder.BundleId(planetMan);
             try
             {
-                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, planet, log, Stopwatch.GetTimestamp());
+                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, planet, planetId, log, Stopwatch.GetTimestamp());
             }
             catch (NoHeroSiteException e)
             {
                 // 자리가 없을 때만 바꿉니다. 설정 값 오류나 코드 결함으로 난 예외까지 잡으면,
                 // 오류가 알려지지 않고 행성과 상관없는 평면 히어로가 결과로 나갑니다.
+                // 바꾼 평면 히어로도 이 행성과 같은 실행이므로 행성의 표지를 적습니다.
                 log($"[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: {e.Message}");
-                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, log, Stopwatch.GetTimestamp());
+                (heroDir, hero) = GenerateAndSaveHero(cfg, runDir, null, planetId, log, Stopwatch.GetTimestamp());
             }
         }
         UseSavedPrecision(hero.Fields);
-        Corridor.BakeCorridor(hero, BakeConfig(heroDir, log), Path.Combine(runDir, CorridorDir), engineDir, log);
-        if (!flat)
+        OrderedDictionary<string, object?> heroMan = Bundle.ReadManifest(heroDir);
+        OrderedDictionary<string, object?>? heroId = RunFolder.BundleId(heroMan);
+        Corridor.BakeCorridor(hero, BakeConfig(heroDir, log), Path.Combine(runDir, CorridorDir), engineDir, log, heroId);
+        if (planet is not null && planetMan is not null)
         {
-            var man = Bundle.ReadManifest(planetDir!);
-            Globe.BakeGlobe(planet!, Bundle.ConfigFromManifest(man), Path.Combine(runDir, GlobeDir),
-                hero: Globe.HeroFromRun(runDir), log: log,
-                faceBasis: man.GetValueOrDefault("face_basis") as OrderedDictionary<string, object?>,
-                engineDir: engineDir is null ? null : Path.Combine(engineDir, GlobeDir));
+            Globe.BakeGlobe(planet, Bundle.ConfigFromManifest(planetMan), Path.Combine(runDir, GlobeDir),
+                hero: Globe.HeroFromBundle(heroMan), log: log,
+                faceBasis: planetMan.GetValueOrDefault("face_basis") as OrderedDictionary<string, object?>,
+                engineDir: engineDir is null ? null : Path.Combine(engineDir, GlobeDir),
+                parent: RunFolder.BundleId(planetMan), heroBundle: heroId);
         }
         else if (engineDir is not null)
         {

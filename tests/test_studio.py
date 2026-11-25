@@ -30,7 +30,13 @@ import bpcg_studio.views as views_mod
 from bpcg_studio import godot as gd
 from bpcg_studio import summary as sm
 from bpcg_studio.bundle import read_manifest
-from bpcg_studio.config import BareText, checked_overrides, load_config, parse_assignment
+from bpcg_studio.config import (
+    BareText,
+    Config,
+    checked_overrides,
+    load_config,
+    parse_assignment,
+)
 from bpcg_studio.jobs import (
     JobError,
     JobManager,
@@ -663,6 +669,63 @@ def test_install_corridor_brings_globe_and_drops_stale_one(runs, tmp_path):
     # 진행표: 지구본 단계는 행성 실행에서만 있고, 그 기록 줄에서 끝납니다.
     assert any(line.startswith("[지구본] 끝") for line in logs["tiny"])
     assert not any(line.startswith("[지구본]") for line in logs["flat"])
+
+
+def test_install_corridor_skips_a_globe_baked_with_another_hero(runs, tmp_path):
+    """실행의 지구본이 이 회랑과 다른 히어로로 구운 지구본이면 엔진으로 옮기지 않고 까닭을 알립니다.
+
+    옮기면 지구본 장면이 지금 회랑과 다른 자리를 보여 줍니다. 엔진의 지난 지구본도 지웁니다.
+    """
+    out, _ = runs
+    run = tmp_path / "mixed"
+    shutil.copytree(out / "flat" / "corridor", run / "corridor")
+    shutil.copytree(out / "tiny" / "globe", run / "globe")
+    baked = tmp_path / "baked"
+    gd.install_corridor(out / "tiny" / "corridor", baked, run_key="tiny")
+    assert (baked / "globe" / "globe.json").is_file()
+    marker = gd.install_corridor(run / "corridor", baked, run_key="mixed")
+    assert marker["globe"] is False and not (baked / "globe").exists()
+    assert marker["globe_note"].startswith("지구본은 넣지 않았습니다")
+    assert "행성 없이 만든 평면 히어로" in marker["globe_note"]
+    assert "bpcg bake --hero" in marker["globe_note"]
+    # 같은 실행의 회랑과 지구본은 그대로 옮깁니다.
+    assert "globe_note" not in gd.install_corridor(out / "tiny" / "corridor", baked, run_key="tiny")
+
+
+def test_summary_warns_when_bundles_come_from_different_runs(runs, tmp_path):
+    """같은 폴더의 행성·히어로가 서로 다른 실행에서 나왔으면 경고합니다.
+
+    경고 글에는 받은 값과 고치는 법이 들어갑니다.
+
+    이때 '행성에서 자리를 찾지 못해 평면 히어로로 바꿨다'는 경고는 내지 않습니다(그런 일이 없었음).
+    """
+    out, _ = runs
+    run = tmp_path / "mixed"
+    shutil.copytree(out / "tiny" / "planet", run / "planet")
+    shutil.copytree(out / "flat" / "hero", run / "hero")
+    messages = [w["message"] for w in sm.run_summary(run, "mixed")["warnings"]]
+    assert any(
+        m.startswith("히어로(hero/)는 행성 없이 만든 평면 히어로인데") and "bpcg hero --from" in m
+        for m in messages
+    ), messages
+    assert not any("행성 위에 놓지 못해" in m for m in messages), messages
+    same = [w["message"] for w in sm.run_summary(out / "tiny", "tiny")["warnings"]]
+    assert not any("(hero/)" in m or "(globe/)" in m or "(corridor/)" in m for m in same), same
+
+
+def test_studio_config_digest_matches_the_generator(runs):
+    """스튜디오의 Config.digest() 는 생성기가 목차에 적는 설정 해시와 같습니다.
+
+    스레드 수는 결과를 바꾸지 않아 설정 해시에서 빠집니다.
+    """
+    out, _ = runs
+    for name in ("planet", "hero"):
+        man = read_manifest(out / "tiny" / name)
+        cfg = Config(man["config"])
+        assert cfg.digest() == man["config_digest"], name
+        threads = cfg.with_overrides({"profile.compute.numba_threads": 3})
+        assert threads.digest() == man["config_digest"], name
+        assert cfg.with_overrides({"landscape.theta": 0.6}).digest() != man["config_digest"]
 
 
 def test_install_corridor_refuses_incomplete_corridor(runs, tmp_path):

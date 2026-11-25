@@ -813,8 +813,13 @@ public static class Corridor
 
     private static double Round3(double x) => Math.Round(x * 1000.0, MidpointRounding.ToEven) / 1000.0;
 
-    /// <summary>회랑을 골라 엔진 파일을 굽습니다 (bake_corridor). 반환: manifest.</summary>
-    public static OrderedDictionary<string, object?> BakeCorridor(HeroState heroState, Config cfg, string outDir, string? engineDir = null, Action<string>? log = null)
+    /// <summary>
+    /// 회랑을 골라 엔진 파일을 굽습니다 (bake_corridor). 반환: manifest.
+    /// parent 는 구운 히어로 묶음의 표지(<see cref="RunFolder.BundleId"/>)로, 목차의 parent 에 그대로 적습니다.
+    /// </summary>
+    public static OrderedDictionary<string, object?> BakeCorridor(
+        HeroState heroState, Config cfg, string outDir, string? engineDir = null, Action<string>? log = null,
+        OrderedDictionary<string, object?>? parent = null)
     {
         long tAll = Stopwatch.GetTimestamp();
         Directory.CreateDirectory(outDir);
@@ -1104,13 +1109,14 @@ public static class Corridor
         caves["entrances_file"] = "entrances.json";
         var manifest = new OrderedDictionary<string, object?>
         {
-            ["format"] = "bpcg-corridor",
+            ["format"] = RunFolder.CorridorFormat,
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = Bundle.GitCommit(),
             ["git_dirty"] = Bundle.GitDirty(),
             ["config_digest"] = cfg.Digest(),
             ["seed"] = cfg.I("planet.seed"),
             ["profile"] = cfg.Sec("profile").Get("name"),
+            ["parent"] = parent,
             ["frame"] = frame.AsDict(),
             ["site"] = SiteFrame(heroState, cfg, cx, cy),
             ["corridor"] = corDict,
