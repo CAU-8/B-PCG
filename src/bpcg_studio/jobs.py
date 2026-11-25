@@ -11,7 +11,7 @@
 → (그림을 켰고 평면 히어로가 아니면) [dotnet, Bpcg.Cli.dll, figures, results, <실행 폴더>].
 기록 줄은 스레드에서 한 줄씩 읽어 progress.ProgressTracker 에 넣습니다. 한 번에 한 실행만 돕니다
 (같은 서버 안에서는 잠금 하나로 검사와 등록을 함께 하고, 같은 out/ 을 보는 다른 스튜디오 서버가
-돌리는 실행은 job.json 의 server_pid 로 알아봅니다).
+돌리는 실행은 job.json 의 server_pid 와 server_start(그 서버 프로세스의 시작 시각)로 알아봅니다).
 
 실행 목록은 out/studio/* 와, out/* 중 planet/ 이나 hero/ 에 manifest.json 이 있는 폴더(읽기 전용,
 예: out/earth_v2)를 함께 보여 줍니다. 바깥 폴더 이름은 한글·공백도 받고, 경로 구분자·':'·앞의
@@ -20,6 +20,7 @@
 
 import collections
 import contextlib
+import functools
 import json
 import math
 import os
@@ -247,6 +248,107 @@ def pid_alive(pid: Any) -> bool:
     return True
 
 
+def process_start_mark(pid: Any) -> str | None:
+    """운영체제가 적어 둔 프로세스 pid 의 시작 시각 (운영체제마다 형식이 다른 글자). 모르면 None.
+
+    pid 는 프로세스가 끝나면 다른 프로세스가 다시 받을 수 있습니다. 그래서 job.json 에 pid 와
+    이 값을 함께 적어 두고, 나중에 둘 다 같을 때만 같은 스튜디오 서버로 봅니다. 값은 같은
+    프로세스면 언제 읽어도 같습니다.
+
+    - Linux: /proc/<pid>/stat 의 22번째 값 (부팅 뒤 프로세스가 시작한 때, 클록 틱)
+    - macOS: sysctl kern.proc.pid.<pid> 의 p_starttime (초, 마이크로초)
+    - Windows: GetProcessTimes 의 만든 시각 (FILETIME, 100 ns 단위)
+    """
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    try:
+        if sys.platform.startswith("linux"):
+            return _linux_start_mark(pid)
+        if sys.platform == "darwin":
+            return _darwin_start_mark(pid)
+        if sys.platform == "win32":
+            return _windows_start_mark(pid)
+    except (OSError, ValueError, AttributeError):
+        return None
+    return None
+
+
+def _linux_start_mark(pid: int) -> str | None:
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    # 2번째 값(실행 파일 이름)은 괄호 안에 빈칸이나 괄호가 들어갈 수 있어, 마지막 ')' 뒤만 나눕니다.
+    # 그 뒤의 첫 값이 3번째 값이므로 22번째 값은 [19] 입니다.
+    rest = text.rsplit(")", 1)[-1].split()
+    return f"linux:{rest[19]}" if len(rest) > 19 else None
+
+
+def _darwin_start_mark(pid: int) -> str | None:
+    import ctypes
+    import struct
+
+    libc = ctypes.CDLL(None)
+    mib = (ctypes.c_int * 4)(1, 14, 1, pid)  # CTL_KERN, KERN_PROC, KERN_PROC_PID, pid
+    buf = ctypes.create_string_buffer(1024)  # struct kinfo_proc (64비트 macOS 648 B) 보다 넉넉히
+    size = ctypes.c_size_t(len(buf))
+    if libc.sysctl(mib, 4, buf, ctypes.byref(size), None, ctypes.c_size_t(0)) != 0:
+        return None
+    if size.value < 16:  # 그런 pid 가 없으면 0 B 를 돌려줌
+        return None
+    # kinfo_proc 의 맨 앞 kp_proc.p_starttime: struct timeval (tv_sec 8 B, tv_usec 4 B)
+    sec, usec = struct.unpack_from("=qi", buf, 0)
+    return f"darwin:{sec}.{usec:06d}" if sec > 0 else None
+
+
+def _windows_start_mark(pid: int) -> str | None:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None
+    try:
+        created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        ok = kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(exited),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        )
+        if not ok:
+            return None
+        return f"win32:{(created.dwHighDateTime << 32) | created.dwLowDateTime}"
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+@functools.cache
+def own_start_mark() -> str | None:
+    """이 스튜디오 서버 프로세스의 시작 시각 표시 (job.json 의 server_start)."""
+    return process_start_mark(os.getpid())
+
+
+def server_alive(info: dict) -> bool:
+    """job.json 을 쓴 스튜디오 서버(server_pid)가 아직 돌고 있으면 True.
+
+    pid 만 보면, 서버가 꺼진 뒤 같은 pid 를 다시 받은 다른 프로세스를 서버로 잘못 봅니다. 그러면 그
+    실행이 '도는 중' 으로 굳고 새 실행도 막힙니다. 그래서 job.json 의 server_start 가 지금 그 pid 의
+    시작 시각과 다르면 다른 프로세스로 봅니다. server_start 가 없는 예전 job.json 이나, 시작 시각을
+    읽지 못하는 경우에는 pid 만 봅니다.
+    """
+    pid = info.get("server_pid")
+    if not pid_alive(pid):
+        return False
+    mark = info.get("server_start")
+    if not isinstance(mark, str) or not mark:
+        return True
+    now = process_start_mark(pid)
+    return now is None or now == mark
+
+
 def _now_iso(t: float | None = None) -> str:
     return datetime.fromtimestamp(time.time() if t is None else t).isoformat(timespec="seconds")
 
@@ -333,6 +435,7 @@ class Job:
         st.pop("log", None)
         st["cost"] = self.cost
         st["server_pid"] = os.getpid()
+        st["server_start"] = own_start_mark()
         tries = SAVE_TRIES if force else 1
         for k in range(tries):
             try:
@@ -426,7 +529,7 @@ class JobManager:
         return scale_weights(latest[0], latest[1], cost or {})
 
     def _foreign_active(self) -> dict | None:
-        """같은 out/ 을 보는 다른 스튜디오 서버(살아 있는 pid)가 돌리는 실행의 job.json."""
+        """같은 out/ 을 보는 다른 스튜디오 서버(server_alive 가 참)가 돌리는 실행의 job.json."""
         if not self.studio_dir.is_dir():
             return None
         me = os.getpid()
@@ -436,8 +539,7 @@ class JobManager:
             info = _read_json(d / JOB_FILE)
             if not info or info.get("status") not in ACTIVE:
                 continue
-            pid = info.get("server_pid")
-            if pid != me and pid_alive(pid):
+            if info.get("server_pid") != me and server_alive(info):
                 return info
         return None
 
@@ -646,9 +748,9 @@ class JobManager:
     def _mark_interrupted(self) -> None:
         """서버가 꺼질 때 돌던 실행은 '멈춤(서버 꺼짐)' 으로 적어 둡니다.
 
-        job.json 의 server_pid 가 살아 있는 다른 프로세스이면 다른 스튜디오 서버가 아직 돌리는
-        실행이므로 건드리지 않습니다. 저장된 진행 상태(도는 단계, 남은 시간)도 함께 멈춤으로
-        고칩니다.
+        job.json 의 server_pid·server_start 가 살아 있는 다른 스튜디오 서버를 가리키면(server_alive)
+        그 서버가 아직 돌리는 실행이므로 건드리지 않습니다. 저장된 진행 상태(도는 단계, 남은 시간)도
+        함께 멈춤으로 고칩니다.
         """
         if not self.studio_dir.is_dir():
             return
@@ -658,8 +760,7 @@ class JobManager:
             info = _read_json(path)
             if not info or info.get("status") not in ACTIVE:
                 continue
-            pid = info.get("server_pid")
-            if pid != me and pid_alive(pid):
+            if info.get("server_pid") != me and server_alive(info):
                 continue
             try:
                 finished = path.stat().st_mtime

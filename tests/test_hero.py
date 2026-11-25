@@ -60,6 +60,7 @@ def test_flat_hero_with_low_river_threshold_has_rivers_and_caves(cave_hero):
     assert not cave_hero["is_lake"].any()
 
 
+@pytest.mark.slow  # 따로 C# 실행을 돌려 몇 초 걸림 (CI 는 돌림)
 def test_flat_hero_domain_size_is_adjustable(csharp_cli, tmp_path):
     """한 변·간격을 바꾸면 격자가 따라옴: 12.8 km, 50 m → 256²."""
     csharp_cli(

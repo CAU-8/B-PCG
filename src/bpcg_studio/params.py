@@ -145,6 +145,7 @@ UNIT_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("_fraction", "비율 0~1"),
     ("_iterations", "회"),
     ("_m3", "m³"),
+    ("_m2", "m²"),
     ("_km", "km"),
     ("_myr", "Myr"),
     ("_deg", "°"),
@@ -171,10 +172,8 @@ UNIT_OVERRIDES: dict[str, str] = {
     "dams.blocking_fraction": "비율 0~1",
     "dams.persistence_yr": "년",
     "dams.fill_slope_ratio": "배",
-    "dams.min_drainage_area_m2": "m²",
     "lakes.hollow_fraction": "비율 0~1",
     "lakes.hollow_age_yr": "년",
-    "lakes.min_area_m2": "m²",
     "soil.bare_slope_ratio": "배",
     "detail.slope_ref": "m/m",
     "detail.hillslope_smooth_passes": "번",
@@ -188,6 +187,9 @@ UNIT_OVERRIDES: dict[str, str] = {
     "lakes.rift_segment_m": "m",
     "lakes.summer_amplitude_c": "°C",
     "profile.compute.numba_threads": "개 (0 = 모두)",
+    # 투수율 k(m²)의 log10 값이라 이름 끝 _m2 의 m² 가 아닙니다.
+    "groundwater.surface_log10_perm_m2": "log10 k (k: m²)",
+    "groundwater.aquitard_log10_perm_m2": "log10 k (k: m²)",
 }
 
 # 주석이 없는 행성 키의 설명

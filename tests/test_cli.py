@@ -8,6 +8,7 @@ import shutil
 import subprocess
 
 import numpy as np
+import pytest
 from bundles import CONFIGS, ROOT, cli_env, load_bundle, read_json, run_cli
 
 from bpcg_studio.cli import main as bpcg_main
@@ -41,6 +42,7 @@ def test_all_matches_independent_commands(csharp_cli, tiny_run, tmp_path):
             assert expected.read_bytes() == actual.read_bytes(), expected.relative_to(tiny_run)
 
 
+@pytest.mark.slow  # 따로 C# 실행을 돌려 몇 초 걸림 (CI 는 돌림)
 def test_single_and_auto_thread_results_match(csharp_cli, tmp_path):
     outputs = []
     modes = (
@@ -305,6 +307,7 @@ def test_planet_toml_path_runs_into_a_folder_named_after_the_file(csharp_cli, tm
     assert toml.is_file()
 
 
+@pytest.mark.slow  # 따로 C# 실행을 돌려 몇 초 걸림 (CI 는 돌림)
 def test_python_entry_forwards_to_csharp(csharp_cli, tmp_path, capfd):
     """Python 입구 `bpcg` 의 planet·hero·bake·all 은 C# 콘솔로 넘어갑니다."""
     assert bpcg_main(["hero", "--flat", "--profile", "tiny", "--out", str(tmp_path)]) == 0

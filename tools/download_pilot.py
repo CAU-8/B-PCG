@@ -16,6 +16,9 @@
 올립니다. 표준 라이브러리만 쓰므로 패키지를 설치하기 전에도 돌아갑니다. 내려받을 때는 curl 이
 필요합니다 (macOS, Windows 10 이상, 대부분의 Linux 에 들어 있습니다).
 
+새로 받은 파일은 크기와 sha256 이 data/manifest.json 과 같을 때만 제 이름으로 바꿉니다. 이미 있는
+파일은 크기만 보고, --verify-hash 를 주면 sha256 까지 봅니다.
+
 실행 (저장소 루트에서):
   uv run python tools/download_pilot.py                    없는 파일만 받습니다
   uv run python tools/download_pilot.py --verify-only      네트워크 없이 크기만 검사합니다
@@ -376,11 +379,15 @@ def run_curl(url, out, resume=False, retry_all=True):
     return (int(code) if code.isdigit() else 0), r.returncode, (r.stderr or "").strip()
 
 
-def download(url, dest, expected=None, allow_404=False, retry_all=True, accept_new=False):
+def download(
+    url, dest, expected=None, allow_404=False, retry_all=True, accept_new=False, sha256=None
+):
     """url 을 <dest>.part 로 받고, 다 받으면 dest 로 이름을 바꿉니다. (상태, 설명)을 돌려줍니다.
 
     상태는 "got"(받음), "no_tile"(서버에 없음, allow_404 일 때 HTTP 404), "error" 중 하나입니다.
-    .part 가 이미 있으면 이어받습니다.
+    .part 가 이미 있으면 이어받습니다. 받은 파일은 크기(expected)와, manifest 에 값이 있으면
+    sha256 까지 맞춰 본 뒤에만 dest 로 바꿉니다. sha256 이 다른 파일은 이어받아도 고쳐지지 않으므로
+    지웁니다(다음 실행이 처음부터 받음). accept_new(--write-manifest)면 두 검사를 하지 않습니다.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = part_path(dest)
@@ -401,8 +408,18 @@ def download(url, dest, expected=None, allow_404=False, retry_all=True, accept_n
             f"받은 크기 {size:,} B 가 manifest 의 {expected:,} B 와 다릅니다. "
             f"{part.name} 로 남겨 둡니다. 원본이 바뀐 것이 맞으면 --write-manifest 로 받아들이세요."
         )
+    if sha256 and not accept_new:
+        got = sha256_file(part)
+        if got != sha256:
+            part.unlink()
+            return "error", (
+                f"받은 파일의 sha256 {got[:16]}… 이 manifest 의 {sha256[:16]}… 와 다릅니다. "
+                "받은 파일은 지웠고, 다시 실행하면 처음부터 받습니다. 계속 다르면 원본이 바뀐 "
+                "것이니, 확인한 뒤 --write-manifest 로 받아들이세요."
+            )
     os.replace(part, dest)
-    return "got", f"{size / 1e6:,.1f} MB 받음"
+    note = ", sha256 맞음" if sha256 and not accept_new else ""
+    return "got", f"{size / 1e6:,.1f} MB 받음{note}"
 
 
 def ensure_file(
@@ -410,15 +427,17 @@ def ensure_file(
 ):
     """dest 가 manifest 와 맞으면 건너뛰고, 아니면 받습니다. (상태, 설명)을 돌려줍니다.
 
-    상태는 "ok"(이미 있음)와 download() 의 상태 중 하나입니다.
+    상태는 "ok"(이미 있음)와 download() 의 상태 중 하나입니다. 이미 있는 파일은 크기만 보고,
+    check_hash(--verify-hash)면 sha256 도 봅니다. 새로 받은 파일은 늘 sha256 까지 봅니다.
     """
     expected = entry.get("bytes") if entry else None
+    digest = entry.get("sha256") if entry else None
     if dest.exists():
         size = dest.stat().st_size
         if expected is None:
             return "ok", "이미 있음 (manifest 에 크기가 없어 검사하지 않음)"
         if size == expected:
-            if check_hash and entry.get("sha256") and sha256_file(dest) != entry["sha256"]:
+            if check_hash and digest and sha256_file(dest) != digest:
                 return "error", "크기는 맞지만 sha256 이 다릅니다. 파일을 지우고 다시 받으세요."
             return "ok", "이미 있음"
         if size > expected or part_path(dest).exists():
@@ -428,7 +447,7 @@ def ensure_file(
             )
         # 예전 스크립트는 최종 이름으로 바로 받았습니다. 작으면 끊긴 파일로 보고 이어받습니다.
         os.replace(dest, part_path(dest))
-    return download(url, dest, expected, allow_404, retry_all, accept_new)
+    return download(url, dest, expected, allow_404, retry_all, accept_new, sha256=digest)
 
 
 def fetch_text(url):
@@ -767,7 +786,8 @@ def parse_args(argv=None):
     ap.add_argument(
         "--verify-hash",
         action="store_true",
-        help="크기와 함께 sha256 도 비교합니다 (디스크에 따라 몇 초에서 몇 분 걸립니다).",
+        help="이미 있는 파일도 크기와 함께 sha256 을 비교합니다 (새로 받은 파일은 이 옵션 없이도 "
+        "비교합니다). 디스크에 따라 몇 초에서 몇 분 걸립니다.",
     )
     ap.add_argument(
         "--reselect",

@@ -74,7 +74,7 @@ CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험) 초록은 자동 �
 | 할 일 | 왜 | 상태 | 확인 방법 |
 |---|---|---|---|
 | 루트 폴더 하나(`b-pcg`)로 통일, 명령 이름 `bpcg`(파이썬 패키지 `bpcg_studio`, C# 라이브러리 `Bpcg`) | 세 사람이 같은 이름과 경로로 명령을 돌림 | 끝 | `uv run pytest` |
-| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 6개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
+| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 5개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
 | 설치 스크립트(맥·리눅스 `setup.sh`, 윈도우 `setup.ps1`)와 점검 도구(`tools/doctor.py`) | 명령 하나로 설치하고, 빠진 항목을 점검함 | 끝(맥에서 시험, 윈도우·리눅스는 팀원 컴퓨터에서 첫 시험 필요) | `./scripts/setup.sh --check` |
 | 개발 규칙(`docs/conventions.md`), 협업 순서(`CONTRIBUTING.md`), PR 양식, CI 설정 | 규칙을 글로 정하고, 깨진 코드가 `main`에 들어가지 않게 함 | 끝 | GitHub에 올린 뒤 CI 초록 |
 | 파일럿 자료 4.5 GB와 `data/manifest.json`(크기·해시) | 3단계의 θ 파일럿(진짜 지구 자료로 강 규칙의 숫자를 처음 재 보는 일)에 씀. 크기·해시로 받은 파일이 온전한지 확인함 | 끝 | `uv run python tools/download_pilot.py --verify-only` |
