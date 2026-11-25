@@ -19,4 +19,5 @@
 - [ ] 함수 설명 주석에 단위와 배열 모양을 적음
 - [ ] 절대 경로, `System.Random`·전역 난수, GPL import 없음 (analysis/ 제외)
 - [ ] 1 MB 넘는 파일을 커밋하지 않음
+- [ ] 다른 프로젝트의 코드나 자료를 넣었으면 THIRD_PARTY_NOTICES.md 에 적음
 - [ ] 문서·화면 글을 바꿨으면 CLAUDE.md 의 친절함 기준을 따름 (새 용어는 docs/glossary.md 에)

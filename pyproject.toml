@@ -3,6 +3,8 @@ name = "b-pcg"
 version = "0.1.0"
 description = "판·비·강이 만든 지구 크기 행성과 그 땅속을 함께 만드는 절차적 행성 생성기"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "numpy>=2.5",
