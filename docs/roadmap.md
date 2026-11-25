@@ -8,7 +8,17 @@
 
 **역할.** A = 행성 핵심(격자, 판, 지질, 기후, 지구 기준선, 점수표(만든 지형이 물리 법칙과 지구 통계에 맞는지 채점한 표)), B = 물·지형·땅속(물길, 솔버(지형 높이를 구하는 계산기), 히어로 유역(행성에서 골라 25 m 간격으로 다시 푼 강 유역 하나), 흙, 지하수, 동굴), C = 엔진·데모입니다. 솔버와 지질 모델은 두 사람이 함께 맡습니다.
 
-**코드 위치 읽는 법.** 1~5단계의 코드 위치(`core/cubesphere.py` 등)와 'numba로 옮기기'는 생성기를 C#으로 옮기기 전에 세운 계획의 Python 이름입니다([history.md](history.md)의 2026-10-03 줄). 지금 생성기 코드는 `src/Bpcg/` 아래의 C# 폴더에 있습니다(예: `core/cubesphere.py` → `src/Bpcg/Core/Cubesphere.cs`).
+**코드 위치 읽는 법.** 1~5단계의 코드 위치(`core/cubesphere.py` 등)와 'numba로 옮기기'는 생성기를 C#으로 옮기기 전에 세운 계획의 Python 이름입니다([history.md](history.md)의 2026-10-03 줄). 지금 생성기 코드는 `src/Bpcg/` 아래의 C# 폴더에 있고, 대부분 같은 이름으로 옮겼습니다(예: `core/cubesphere.py` → `src/Bpcg/Core/Cubesphere.cs`). 이름이 다르거나 코드가 없는 곳은 아래 표에 있습니다.
+
+| 계획의 위치 | 지금 코드 |
+|---|---|
+| `core/neighbors.py` | `src/Bpcg/Core/Cubesphere.cs`의 `Cubesphere.NeighborTable` |
+| `earth/etopo.py` | ETOPO(진짜 지구의 육지·해저 높이 지도) 읽기만 결과 그림 프로젝트에 있음(`src/Bpcg.Figures/Etopo.cs`, 고도 분포 그림용). 진짜 지구를 우리 격자에 옮겨 담는 코드(격자 위 지구)와, 비교하려고 노이즈(무작위 값을 매끈하게 겹쳐 만든 높이 무늬)만으로 따로 만든 행성은 없음 |
+| `analysis/compare_routing.py` | 없음. 미리 계산한 비교 결과도 `tests/fixtures/`에 없음 |
+| `landscape/steady_state.py` | `src/Bpcg/Landscape/Solver.cs` |
+| `landscape/deposition.py` | 따로 없음. `src/Bpcg/Landscape/Solver.cs` 안에서 `CellLaw.Update`가, 강이 나르는 흙이 많을수록 강을 더 가파르게 하는 퇴적 항(G-법칙)을 더함 |
+| `analysis/theta_pilot/` | 없음. `configs/learned/`에도 맞춘 값 파일이 없음 |
+| `analysis/hero_finder.py` | 생성기 안의 `src/Bpcg/Hero/Finder.cs` (`Finder.FindHero`) |
 
 ## 한눈에 보기
 

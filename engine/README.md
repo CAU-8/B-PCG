@@ -32,7 +32,7 @@ $GODOT --path engine -e     # 편집기로 열기
 
 1. 편집기에서 실행(F5, 맥은 Cmd+B)을 누르면 편집기가 C#을 빌드하고 처음 화면이 뜹니다.
 2. 프로필(격자 크기와 해상도를 미리 묶어 둔 설정 이름)을 `tiny`로 두고 '행성 만들기'를 누릅니다.
-3. 단계별 진행 막대가 끝까지 차면 회랑 장면이 열립니다. tiny는 개발 맥(M4 Pro)에서 약 3초입니다.
+3. 단계별 진행 막대가 끝까지 차면 회랑 장면이 열립니다. 같은 tiny 생성을 명령줄로 돌리면 맥북 에어 M3(8코어, 16 GB)에서 1.2 s 걸립니다(2026-11-26, 마지막 줄 `[전체] 끝: 1.2 s`). 엔진에서는 위 1번의 C# 빌드와 회랑 장면을 여는 시간이 더 듭니다.
 
 ### 3. 명령줄로 구운 결과 보기
 
@@ -50,7 +50,7 @@ $GODOT --path engine -- --baked-dir="$(pwd)/out/earth/corridor"
 uv run bpcg all --profile tiny --set 'hero.site_lat_lon_deg=[8.39, -0.92]'
 ```
 
-그 자리가 바다이거나 해안에 너무 가까우면, 실행이 멈추고 가장 가까운 후보 자리를 `hero.site_lat_lon_deg 를 [위도, 경도] 로 바꾸세요` 꼴로 알려 줍니다.
+그 자리가 바다나 호수 위이거나, 물이 빠져나가지 못하는 분지의 바닥이거나, 위도 55° 밖이거나, 해안에 너무 가까우면, 실행이 멈추고 가장 가까운 후보 자리를 `hero.site_lat_lon_deg 를 [위도, 경도] 로 바꾸세요` 꼴로 알려 줍니다.
 
 이미 만든 행성에서 자리만 옮길 때는 행성을 다시 만들지 않습니다. 히어로 유역과 회랑만 다시 만듭니다.
 
@@ -65,8 +65,10 @@ uv run bpcg bake --hero out/earth/hero
 | 다른 실행 방법 | 명령 |
 |---|---|
 | 편집기 없이 처음 화면부터 | `dotnet build engine/Bpcg.Engine.csproj` 뒤 `$GODOT --path engine` |
-| 화면 없이 생성만 (자동 실행·시험용) | `$GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-when-done`. 끝나면 `BPCG_GENERATE_OK <실행 폴더>` 를 찍습니다 |
-| 새 파일 가져오기 (처음 한 번, 장면·셰이더를 바꾼 뒤) | `$GODOT --headless --path engine --import`. 큰 동굴 메시가 있으면 1분 안팎 걸립니다 |
+| 화면 없이 생성만 (자동 실행·시험용) | `HOME=$(mktemp -d) $GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-when-done`. 끝나면 `BPCG_GENERATE_OK <실행 폴더>` 를 찍습니다 |
+| 새 파일 가져오기 (처음 한 번, 장면·셰이더를 바꾼 뒤) | `HOME=$(mktemp -d) $GODOT --headless --path engine --import`. 동굴 메시가 100 MB를 넘으면 1분 안팎 걸립니다 |
+
+화면 없이 돌리는 두 명령은 `HOME` 을 임시 폴더로 바꿔서 돌립니다. `--import` 는 편집기를 화면 없이 띄우는 명령이라, `HOME` 을 그대로 두면 내 Godot 편집기 설정 파일을 덮어씁니다([docs/history.md](../docs/history.md)의 2026-10-02 줄). 리눅스에서 `XDG_CONFIG_HOME`·`XDG_DATA_HOME` 을 쓰고 있다면 그 둘도, 윈도우에서는 `APPDATA`·`LOCALAPPDATA` 를 임시 폴더로 바꿉니다(시험이 쓰는 방법: [tests/test_engine.py](../tests/test_engine.py)의 `_isolated_env`).
 
 ---
 
@@ -79,7 +81,7 @@ uv run bpcg bake --hero out/earth/hero
 | V | 날기 ↔ 걷기. 날기는 땅과 동굴 벽을 뚫고 지나갑니다. 땅속에서 걷기로 바꾸면 지면 위로 올라옵니다 |
 | W A S D | 이동 (날기는 바라보는 방향, 걷기는 수평) |
 | Space · E / Q · Ctrl | 위 / 아래 (걷기에서 Space는 뛰기) |
-| Shift, 마우스 휠 | 5배 빠르게, 나는 속력을 1.25배씩 바꾸기 (1~3,000 m/s) |
+| Shift, 마우스 휠(트랙패드는 두 손가락 스크롤) | 5배 빠르게, 나는 속력을 1.25배씩 바꾸기 (1~3,000 m/s) |
 | 화면 클릭 / Esc | 마우스로 둘러보기 / 마우스 놓기 (패널 단추를 누를 때) |
 | 1 ~ 8 | 레이어 켜기·끄기 (번호는 오른쪽 패널과 도움말 줄에 나옴) |
 | Shift + 1 ~ 6 | 그 레이어만 보기 (나머지 숨김) |
@@ -140,10 +142,10 @@ uv run bpcg bake --hero out/earth/hero
 | 보이는 현상 | 까닭 | 고치는 법 |
 |---|---|---|
 | 편집기가 C# 스크립트를 읽지 못함 | Godot 표준판으로 열었음 | `.tools/godot-net/` 의 .NET 판(이름에 `mono`)으로 엽니다 |
-| 처음 열 때 1분 넘게 멈춘 듯함 | 큰 동굴 메시를 가져오는 중 | 기다립니다. 다음부터는 캐시를 씁니다 |
+| 처음 열 때 1분 넘게 멈춘 듯함 | 100 MB가 넘는 동굴 메시를 가져오는 중 (통로를 물길로 바꾸기 전에 구운 폴더가 `engine/baked/` 에 남아 있을 때) | 기다립니다. 다음부터는 캐시를 씁니다. 새로 구우면 동굴 메시가 1~6 MB라 금방 끝납니다 |
 | 지구본에 '자료가 없습니다' | 굽기 폴더 옆에 `globe/` 가 없음 | `bpcg all` 로 다시 만들거나, 처음 화면에서 행성을 만듭니다(`bake --no-globe` 는 지구본을 쓰지 않음) |
 | 회랑에 작은 표본 지형만 보임 | 구운 폴더를 찾지 못함 | `--baked-dir` 에 `corridor/` 를 절대 경로로 줍니다 |
-| 새 스크립트를 더했더니 장면 참조가 깨짐 | `.uid` 파일이 없음 | `$GODOT --headless --path engine --import` 를 돌리고 생긴 `.uid` 를 같이 커밋합니다 |
+| 새 스크립트를 더했더니 장면 참조가 깨짐 | `.uid` 파일이 없음 | `HOME=$(mktemp -d) $GODOT --headless --path engine --import` 를 돌리고 생긴 `.uid` 를 같이 커밋합니다 |
 
 ## 검사
 

@@ -11,7 +11,7 @@ uv run python tools/download_pilot.py            # 없는 파일만 받기 (처�
 uv run python tools/download_pilot.py --verify-only
 ```
 
-- 맞게 받았으면: 점검이 `맞음 (크기): 63개` 와 `검사 통과.` 로 끝납니다.
+- 맞게 받았으면: 점검이 `검사 통과.` 로 끝납니다. 스크립트로만 받았으면 그 위에 `맞음 (크기): 62개` 와 `없음 (손으로 받는 선택 자료, 문제 아님): 1개` 가 나옵니다. 없다고 나오는 1개는 AfriSAR zip(가봉 숲을 항공 레이더로 찍은 자료, NASA Earthdata 계정으로 손으로 받음)이고, 받아서 `external/afrisar/` 에 두면 `맞음 (크기): 63개` 가 됩니다(`manifest.json` 의 파일 63개).
 - 걸리는 시간: 점검은 1초 안. 받기는 인터넷 속도에 따라 다릅니다.
 
 ## 낯선 말

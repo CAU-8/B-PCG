@@ -54,7 +54,7 @@ b-pcg/
 ├── engine/              Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) 4.7.2 .NET 프로젝트. 처음 화면에서 생성하고, 구운 파일을 보여 줌
 ├── tests/               pytest: C# 콘솔·엔진 결과 검사. Bpcg.Tests/: C# 단위·golden 대조 시험
 ├── analysis/            한 번 돌리는 연구 스크립트(파이썬). GPL 도구 허용
-├── tools/               설치 전에도 도는 스크립트 (자료 받기, 환경 점검)
+├── tools/               설치 전에도 도는 스크립트 (자료 받기, 환경 점검). ComputeBench/ 는 계산 속도를 비교하는 C# 도구 (Bpcg.slnx 밖)
 ├── scripts/             설치 스크립트 (setup.sh, setup.ps1)
 ├── configs/             planets/(행성 값), profiles/(해상도), learned/(맞춘 값), compare/(방법 비교 설정)
 ├── docs/                규칙, 개발 단계, 설계도(원본), 가이드, 그림, 라이선스 원문
@@ -99,13 +99,13 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 | C# 상수·static readonly | PascalCase | `FaceU`, `SecondsPerYear` |
 | 파이썬 모듈·함수·변수 | snake_case, 함수는 동사로 시작 | `hero_grid_size`, `load_bundle` |
 | 필드·설정 키·파일 이름 | snake_case (묶음·TOML·JSON 형식 그대로) | `z_m`, `is_ocean`, `rivers.min_discharge_m3_per_s` |
-| 참·거짓 | `Is`·`Has`(C#), `is_`·`has_`(파이썬, 필드)로 시작 | `IsOcean`, `has_cave` |
-| 테스트 | C# `tests/Bpcg.Tests/<폴더>/<모듈>Tests.cs`, pytest `tests/test_<대상>.py`, `test_<무엇이_어떻다>` | `Core/CubesphereTests.cs`, `test_area_sum_equals_sphere` |
+| 참·거짓 | `Is`·`Has`(C#, 인자는 `is`·`has`), `is_`·`has_`(파이썬, 필드)로 시작 | `Corridor.HasBeds`, 인자 `isOcean`, 필드 `is_ocean` |
+| 테스트 | C# `tests/Bpcg.Tests/<폴더>/<모듈>Tests.cs`, pytest `tests/test_<대상>.py`, `test_<무엇이_어떻다>` | `Core/CubesphereTests.cs`, `test_drainage_area_is_accumulated_area` |
 | 브랜치 | `종류/짧은-영어-설명` | `feat/priority-flood`, `fix/seam-areas` |
 
 - **지역 변수에 규칙을 두지 않는 까닭.** 옛 Python 판 이름과 수식 기호(z, Q, A, k_s …)를 그대로 쓰기 위해서입니다(`.editorconfig` 주석).
 - **필드·설정 키.** C#과 스튜디오(파이썬)가 같은 파일을 같은 이름으로 읽습니다. 그래서 한쪽 형식에 맞춰 이름을 바꾸지 않고, 묶음·TOML·JSON에 적힌 이름을 그대로 씁니다.
-- **참·거짓.** 이름만 보고 참·거짓 값인지 알 수 있습니다.
+- **참·거짓.** 이름만 보고 참·거짓 값인지 알 수 있습니다. 다만 묶음 필드 가운데 `bare_rock`, `fan`, `dam`, `lake_closed`, `not_steady`는 참·거짓 값인데 `is_`로 시작하지 않습니다. C# 필드 표(`src/Bpcg/Core/Fields.cs`)와 스튜디오 필드 표(`src/bpcg_studio/fields.py`)가 같은 이름을 쓰므로, 바꾸려면 두 곳을 같은 PR에서 고칩니다.
 - **테스트.** `<폴더>`는 `src/Bpcg`의 폴더 이름입니다. pytest는 `test_`로 시작하는 파일과 함수를 찾아 돌립니다.
 - **브랜치.** 종류는 커밋 종류와 같습니다([CONTRIBUTING.md](../CONTRIBUTING.md) '커밋 종류').
 
@@ -161,14 +161,17 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 - **설명 주석.** 다른 곳에서 부르는 형·메서드에는 `/// <summary>`를 붙입니다(파이썬은 타입 힌트와 docstring). 첫 줄에 한 문장 요약을 쓰고, 단위와 배열 모양을 적습니다. 배열 형식만 보고는 단위와 모양을 알 수 없고, 리뷰에서도 단위가 있는지 봅니다.
 
     ```csharp
-    /// <summary>웅덩이를 채워 모든 셀이 바다로 흐르게 합니다.
-    /// z: (n_cells,) 고도 [m]. nbr: (n_cells, 8) 이웃 셀 번호, 없으면 -1. 반환: 채운 고도 [m], 늘 z 이상.</summary>
-    public static double[] FillDepressions(double[] z, int[] nbr)
+    /// <summary>웅덩이를 채워 모든 칸이 출구로 흐르게 합니다.
+    /// z: (n_cells,) 고도 [m]. nbr: (n_cells, 8) 이웃 칸 번호, 없으면 -1. isOutlet: (n_cells,) 바다나 유역 출구 칸.
+    /// 반환: 채운 고도 [m], 늘 z 이상이고 출구에서는 z 와 같음.</summary>
+    public static double[] FillDepressions(double[] z, int[] nbr, bool[] isOutlet)
     ```
 
 - **주석.** '무엇'보다 '왜'를 씁니다. 무엇을 하는지는 코드에 보이지만, 왜 그렇게 하는지는 보이지 않습니다. 근거가 논문이면 `// Yuan 2019 식 (7)`처럼 출처를 남깁니다. 그래야 다른 사람이 원문과 맞대어 확인할 수 있습니다.
 - **병렬.** 같은 시드면 몇 개의 코어로 돌려도 같은 행성이 나와야 합니다(6절). 그런데 소수 덧셈은 순서에 따라 마지막 자리가 달라집니다. 예를 들어 double로 (0.1 + 0.2) + 0.3은 0.6000000000000001이고, 0.1 + (0.2 + 0.3)은 0.6입니다. 그래서 병렬은 이렇게만 씁니다.
-    - `Parallel.For`는 칸마다 독립이고 경쟁 조건이 없을 때만 씁니다(예전 numba `prange` 자리). 경쟁 조건은 여러 스레드가 같은 자리를 동시에 읽고 써서 결과가 실행마다 달라지는 현상입니다.
+    - 병렬 반복은 .NET의 `Parallel.For`를 바로 부르지 않고, `Bpcg.Core.Parallelism`의 `For`·`ForChunks`·`ForTasks`·`ForEach`·`ForCoarse`·`ForLevels`로 씁니다. 이 함수들은 설정 `profile.compute.numba_threads`로 정한 스레드 수를 지키고, 병렬 반복 안에서 다시 부른 반복은 한 스레드로 돌립니다.
+    - 이 함수들은 반복 안에서 예외가 나면, .NET이 여러 스레드의 예외를 묶어 던지는 `AggregateException` 대신 원래 예외를 다시 던집니다. 그래서 스레드 수가 달라도 예외의 형이 같고, 부르는 쪽의 `catch`가 똑같이 동작합니다.
+    - 칸마다 독립이고 경쟁 조건이 없는 계산에만 씁니다. 경쟁 조건은 여러 스레드가 같은 자리를 동시에 읽고 써서 결과가 실행마다 달라지는 현상입니다. 다만 `ForLevels`는 솔버가 출구에서 상류로 높이를 쌓을 때처럼, 아래 칸이 끝나야 위 칸을 계산할 수 있는 일에 씁니다. 출구에서 같은 칸 수만큼 떨어진 칸들(한 층)끼리만 동시에 돌리므로, 같은 층 안의 칸끼리만 독립이면 됩니다.
     - 합처럼 순서에 따라 값이 달라지는 계산은 병렬로 나누지 않거나, 나눈 순서를 고정해 결과가 늘 같게 합니다.
     - 같은 높이일 때의 순서는 칸 번호로 정해 결과가 늘 같게 합니다.
 - **예외.**
@@ -177,20 +180,20 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 
 ## 6. 재현성과 설정
 
-같은 설정과 시드로 돌리면, 어느 컴퓨터에서 몇 개의 코어로 돌려도 같은 행성이 나와야 합니다.
+같은 설정과 시드로 돌리면, 몇 개의 코어로 돌려도 같은 행성이 나와야 합니다. 같은 운영체제와 같은 종류의 CPU에서는 결과 파일이 바이트까지 같습니다. 운영체제가 다르면 지수·로그 같은 계산의 마지막 자리가 운영체제의 수학 라이브러리를 따라 달라, 값이 아주 조금 다를 수 있습니다.
 
 - **설정 파일.** 값은 `configs/`의 TOML에서 읽습니다. 행성 값은 `planets/`, 해상도는 `profiles/`, 맞춘 값은 `learned/`에 둡니다. 코드 안에 숫자를 흩어 두지 않습니다. 값이 설정 파일에 있어야 `--set 키=값`으로 코드를 고치지 않고 바꿔 돌릴 수 있고, 결과의 manifest에 쓴 값이 남습니다.
 - **난수와 노이즈.** 지형 모양을 바꾸는 노이즈와 노드 흔들기는 시드를 받은 정수 해시(`Bpcg.Core.Hashing`의 SplitMix64)로 만듭니다. 정수 해시는 같은 수를 넣으면 늘 같은 수를 내는 계산입니다.
     - `System.Random`은 .NET 판마다 수열이 달라질 수 있어서 쓰지 않습니다.
-    - 맥과 연구실 PC가 같은 행성을 만들려면 해시가 필요합니다.
-- **기록.** 생성 결과의 manifest에는 git 커밋, 설정 파일 내용, 시드, bpcg 버전을 적습니다. 그래서 결과 폴더만 보고도 어떤 코드와 설정으로 만들었는지 알 수 있습니다.
+    - 맥과 연구실 PC가 같은 무작위 값을 쓰려면 해시가 필요합니다.
+- **기록.** 생성 결과의 manifest에는 git 커밋, 그때 `src/`·`configs/`에 커밋하지 않은 변경이 있었는지(`git_dirty`, git이 없으면 null), 설정 파일 내용, 시드, bpcg 버전을 적습니다. 그래서 결과 폴더만 보고도 어떤 코드와 설정으로 만들었는지 알 수 있습니다.
 
 ## 7. 테스트
 
 - **도구와 위치.** 두 겹입니다.
     - C# 단위 시험: `tests/Bpcg.Tests/`(xunit v3). 함수 하나를 golden 자료와 비트 단위로 맞대어 봅니다. golden 자료는 옛 Python 판이 만든 기준 결과이고, `tests/golden/data/`에 있습니다(큰 사례는 `out/golden/`). C# 판이 옛 Python 판과 같은 답을 내는지 확인합니다. `dotnet test --solution Bpcg.slnx`로 돕니다. 큰 사례가 없으면 그 시험만 건너뜁니다.
     - 결과 검사: `tests/test_<대상>.py`(pytest). C# 콘솔(`bpcg all` 등)이 쓴 묶음·굽기 파일을 읽어 불변식(물은 아래로, 넓이 합, 형식 약속)을 봅니다. 엔진은 `tests/test_engine.py`가 Godot을 띄워 봅니다.
-- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 116개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
+- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 121개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
 - **표시(marker).** 시험에 붙여 언제 돌지를 정하는 이름표입니다.
 
     | 표시 | 뜻 |
@@ -199,7 +202,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     | `data` | `data/pilot`이 필요함, 없으면 건너뜀 |
     | `godot` | Godot .NET 판과 dotnet이 필요함, 없으면 건너뜀 |
 
-    CI는 `-m "not slow"`로 돕니다. C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
+    지금 `slow`와 `data`는 `pyproject.toml`에 선언만 되어 있고, 이 표시를 붙인 시험은 없습니다. 붙여 쓰는 표시는 `tests/test_engine.py`의 `godot` 하나입니다. 그래서 CI가 돌리는 `-m "not slow"`는 지금 아무 시험도 빼지 않습니다. C# 시험은 CI의 `csharp` 작업(macOS)이 돌립니다. golden 비트 일치는 macOS arm64에서 확인했습니다. golden 자료는 macOS arm64의 Python이 만든 값이고, 삼각함수 같은 계산은 운영체제의 수학 라이브러리(libm)를 따르기 때문입니다(`.github/workflows/ci.yml` 주석).
 - **허용 오차.** 허용 오차(얼마나 틀려도 통과로 볼지)에는 근거를 주석으로 남깁니다. 예: `# 가이드 1장: 면적 합 상대 오차 < 1e-12`(1e-12는 1조분의 1). 리뷰에서 이 근거를 봅니다([CONTRIBUTING.md](../CONTRIBUTING.md) '리뷰할 때 확인하는 항목').
 - **시험 자료.** `tests/fixtures/`에 1 MB 이하로 두고, 출처를 `tests/fixtures/README.md`에 적습니다. 예를 들어 가봉 로페 숲의 30 m 지형 조각 `lope_tile512_30m.npz`는 약 0.87 MB입니다. 공개 저장소라 커밋하는 바이너리를 작게 둡니다(8절).
 - **GPL 도구와 비교.** `analysis/`에서 미리 계산해 결과만 `tests/fixtures/`에 저장합니다. 테스트는 GPL 도구를 import하지 않고 저장된 결과와 비교만 합니다. 9절의 라이선스 격리 때문입니다.
@@ -222,13 +225,17 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 크기도 큽니다. 파일럿 자료만 약 4.5 GB입니다.
 - **경로.** 코드에 절대 경로를 쓰지 않습니다. C#은 `Bpcg.Core.Paths`, 파이썬은 `bpcg_studio.paths`로만 찾습니다. 절대 경로는 팀원 컴퓨터마다 다르고, 이 저장소는 맥·윈도우·리눅스에서 돕니다(11절).
 - **다른 디스크에 둘 때.** 큰 자료는 `BPCG_DATA=/다른/디스크/data`로 옮겨 쓸 수 있습니다.
-- **결과 파일.** 콘솔·스튜디오의 생성 결과는 `out/`에, `--engine`으로 엔진에 넘기는 결과는 `engine/baked/`에, 엔진 처음 화면의 결과는 Godot `user://runs/`에 씁니다. 모두 git에서 빠집니다. 같은 설정으로 다시 만들 수 있고 크기 때문입니다. 예를 들어 C# laptop 실행(시드 0)의 동굴 메시 `caves.glb`는 309 MB였습니다([brief.md](brief.md) 9절).
+- **결과 파일.** 콘솔·스튜디오의 생성 결과는 `out/`에, `--engine`으로 엔진에 넘기는 결과는 `engine/baked/`에, 엔진 처음 화면의 결과는 Godot `user://runs/`에 씁니다. 모두 git에서 빠집니다. 같은 설정으로 다시 만들 수 있고 크기 때문입니다. 예를 들어 laptop 실행의 동굴 메시 `caves.glb` 하나가 시드 0·3·15에서 3.2~5.4 MB로, 커밋할 수 있는 바이너리 크기(1 MB)를 넘습니다([brief.md](brief.md) 9절).
 
 ## 9. 라이선스
 
 - **코드 라이선스.** 아직 정하지 않았습니다(개발 단계 0단계의 남은 일). 정하면 `LICENSE`에 적고, 데이터 라이선스와 분리합니다. 자료에서 나온 결과에는 자료의 라이선스 조건이 따라붙기 때문입니다(아래 '데이터').
 - **GPL 도구.** `analysis/`에서만 씁니다. GPL은 그 코드를 가져다 쓴 프로그램에도 GPL 조건을 따르게 하는 라이선스입니다. `analysis/` 밖에서 import하면 ruff가 막습니다(`TID251`).
-- **핵심 코드.** `src/Bpcg`는 직접 짠 C# 코드로 만들고, NuGet 패키지는 MIT·BSD·Apache-2.0만 씁니다. `src/Bpcg`는 하나도 쓰지 않고, 결과 그림 `src/Bpcg.Figures`만 ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF(모두 MIT)를 씁니다.
+- **핵심 코드.** `src/Bpcg`는 직접 짠 C# 코드로 만들고, NuGet 패키지를 하나도 쓰지 않습니다. 다른 프로젝트가 쓰는 NuGet 패키지도 MIT·BSD·Apache-2.0 라이선스만 허용합니다. 프로젝트마다 쓰는 패키지는 그 폴더의 `packages.lock.json`에 있고, 라이선스(패키지 설명 파일 `.nuspec`에 적힌 값)는 이렇습니다.
+    - 결과 그림 `src/Bpcg.Figures`: ScottPlot·SkiaSharp·HarfBuzzSharp·PureHDF, 모두 MIT. 명령줄 `src/Bpcg.Cli`와 C# 시험도 이 프로젝트를 거쳐 같은 패키지를 씁니다.
+    - 엔진 `engine/`: GodotSharp·GodotSharpEditor·Godot.SourceGenerators(Godot을 C#에서 부르는 패키지), 모두 MIT.
+    - C# 시험 `tests/Bpcg.Tests`: xunit.v3과 그 하위 패키지는 Apache-2.0, 함께 딸려 오는 Microsoft.Testing.Platform 등은 MIT.
+    - 계산 속도 비교 도구 `tools/ComputeBench`(`Bpcg.slnx` 밖): ILGPU(C# 코드를 GPU에서 돌리는 라이브러리) 1.5.3 [확인 필요: ILGPU의 라이선스].
 - **연구 코드.** Tzathas 2024 코드는 Inria 연구·평가 전용(비상업) 라이선스라 가져다 쓰지 않습니다. 논문을 보고 다시 구현하고, 그 코드는 결과 비교용으로만 돌립니다(설계도 6장).
 - **데이터.** 출처와 의무 문구는 `data/README.md`와 `docs/licenses/`에 있습니다. OCTOPUS로 맞춘 표에는 `CC BY-NC-SA, OCTOPUS 유래`를 적습니다. CC BY-NC-SA는 출처를 밝히고(BY), 상업적으로 쓰지 않고(NC), 다시 배포할 때 같은 조건을 붙이라는(SA) 라이선스입니다.
 
@@ -237,7 +244,8 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 `main`에 바로 올리면 남의 작업을 덮어쓰거나 깨진 코드가 들어가기 쉽습니다. 그래서 일은 자기 브랜치에서 하고, 검사와 리뷰를 거친 코드만 `main`에 합칩니다. 하루 순서는 [CONTRIBUTING.md](../CONTRIBUTING.md)에 있습니다.
 
 - **브랜치.**
-    - `main`은 보호합니다. 직접 커밋하지 않고, PR + 리뷰 1명 승인 + CI 통과 후 squash로 합칩니다. 꼭 통과해야 하는 CI 검사는 `lint`, `test`, `csharp`입니다.
+    - `main`은 보호합니다. 직접 커밋하지 않고, PR + 리뷰 1명 승인 + CI 통과 후 squash로 합칩니다. 꼭 통과해야 하는 CI 검사는 `.github/workflows/ci.yml`의 작업 `lint`, `test`, `csharp`입니다.
+    - GitHub 화면과 보호 규칙 설정에는 이 작업 id 대신, 작업마다 붙인 이름(`name`)이 검사 이름으로 나옵니다: `lint`는 `린트 (ruff)`, `csharp`는 `C# 빌드·대조 시험`, `test`는 운영체제마다 하나씩 `테스트 (ubuntu-latest)`·`테스트 (windows-latest)`·`테스트 (macos-15)`입니다. 작업 `engine`(`엔진 연기 시험 (Godot 4.7.2 .NET)`)도 PR마다 돌지만 꼭 통과해야 하는 목록에는 없습니다.
     - squash는 브랜치의 커밋 여러 개를 하나로 묶어 합치는 방식입니다. 그래서 `main`의 기록은 기능 하나에 한 줄입니다.
     - 브랜치 종류는 `feat/`, `fix/`, `docs/`, `test/`, `refactor/`, `perf/`, `chore/`, `data/`, `exp/`입니다.
 - **커밋 메시지.**
@@ -245,7 +253,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 본문에는 왜 바꿨는지를 씁니다. 이슈가 있으면 `#12`처럼 적습니다.
 - **PR 크기와 리뷰.** PR은 작게 유지합니다(바뀐 줄 400줄 안팎). 리뷰는 하루 안에 합니다. PR 양식(`.github/pull_request_template.md`)의 확인 목록을 채웁니다.
 - **금요일 통합일.** 그 주의 PR을 합치고, 데모 빌드가 도는지 확인합니다. 과학 모듈은 데모 빌드에 들어가야 '완료'로 치기 때문입니다(7절).
-- **태그.** 큰 날짜의 코드에 이름표(태그)를 붙여, 나중에 그때의 코드를 그대로 꺼내 볼 수 있게 합니다.
+- **태그.** 큰 날짜의 코드에 이름표(태그)를 붙여, 나중에 그때의 코드를 그대로 꺼내 볼 수 있게 합니다. 아래 네 태그는 계획입니다. 2026-11-26 기준으로 저장소에 붙은 태그는 하나도 없습니다(`git tag -l`의 결과가 비어 있음).
 
     | 태그 | 날짜 | 시점 |
     |---|---|---|
