@@ -145,6 +145,7 @@ UNIT_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("_fraction", "비율 0~1"),
     ("_iterations", "회"),
     ("_m3", "m³"),
+    ("_m2", "m²"),
     ("_km", "km"),
     ("_myr", "Myr"),
     ("_deg", "°"),
@@ -171,10 +172,8 @@ UNIT_OVERRIDES: dict[str, str] = {
     "dams.blocking_fraction": "비율 0~1",
     "dams.persistence_yr": "년",
     "dams.fill_slope_ratio": "배",
-    "dams.min_drainage_area_m2": "m²",
     "lakes.hollow_fraction": "비율 0~1",
     "lakes.hollow_age_yr": "년",
-    "lakes.min_area_m2": "m²",
     "soil.bare_slope_ratio": "배",
     "detail.slope_ref": "m/m",
     "detail.hillslope_smooth_passes": "번",
@@ -188,6 +187,9 @@ UNIT_OVERRIDES: dict[str, str] = {
     "lakes.rift_segment_m": "m",
     "lakes.summer_amplitude_c": "°C",
     "profile.compute.numba_threads": "개 (0 = 모두)",
+    # 투수율 k(m²)의 log10 값이라 이름 끝 _m2 의 m² 가 아닙니다.
+    "groundwater.surface_log10_perm_m2": "log10 k (k: m²)",
+    "groundwater.aquitard_log10_perm_m2": "log10 k (k: m²)",
 }
 
 # 주석이 없는 행성 키의 설명
@@ -312,10 +314,12 @@ PROFILE_HELP: dict[str, str] = {
     "그런 자리가 없으면 전체 실행(all)에서는 평면 히어로로 바뀝니다",
     "profile.corridor.voxel_m": "회랑(L3) 높이맵과 동굴 메시의 간격입니다. 작을수록 자세하지만 "
     "굽기가 오래 걸립니다",
-    "profile.corridor.width_m": "걷는 회랑의 폭입니다. 히어로 한 변보다 크면 히어로에 맞춰 "
-    "줄어듭니다",
-    "profile.corridor.length_m": "걷는 회랑의 길이(강을 따라)입니다. 히어로 한 변보다 크면 "
-    "줄어듭니다",
+    "profile.corridor.width_m": "걷는 회랑의 폭(m)입니다. 히어로 한 변보다 크면 히어로에 맞춰 "
+    "줄어들고, voxel_m 의 정수배가 아니면 그 아래 정수배로 줄어듭니다(간격 2 m 에서 1,001 m → "
+    "1,000 m). voxel_m 이상이어야 합니다",
+    "profile.corridor.length_m": "걷는 회랑의 길이(강을 따라, m)입니다. 히어로 한 변보다 크면 "
+    "줄어들고, voxel_m 의 정수배가 아니면 그 아래 정수배로 줄어듭니다(간격 2 m 에서 6,001 m → "
+    "6,000 m). voxel_m 이상이어야 합니다",
     "profile.compute.numba_threads": "계산에 쓸 CPU 스레드 수입니다. 0 이면 모든 코어를 씁니다",
 }
 

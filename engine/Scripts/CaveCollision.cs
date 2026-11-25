@@ -28,15 +28,39 @@ public static class CaveCollision
     public const string BodyName = "Body";
 
     /// <summary>
-    /// root 아래 모든 MeshInstance3D 의 삼각형으로 root 의 자식 StaticBody3D (<see cref="BodyName"/>) 를 만듭니다.
-    /// root 가 트리 밖이어도 됩니다 (꼭짓점은 부모를 따라 root 기준 좌표로 옮김).
-    /// 반환: (충돌체, 조각 수, 삼각형 수, 가장 낮은 꼭짓점의 높이 (root 기준 Y)). 삼각형이 없으면 (null, 0, 0, +∞).
+    /// 삼각형을 조각별로 모을 때 MoveNext 한 번에 다루는 삼각형 수. 한 번에 모두 모으면 laptop 회랑(삼각형 약 20만 개)에서
+    /// 그 프레임이 약 0.1 s 멈췄습니다 (맥북 에어 M3). 2만 개씩이면 열한 번에 나뉩니다.
     /// </summary>
-    public static (StaticBody3D? Body, int Tiles, int Faces, float MinY) Build(Node3D root)
+    public const int FacesPerStep = 20000;
+
+    /// <summary><see cref="BuildSteps"/> 의 결과: 충돌체, 조각 수, 삼각형 수, 가장 낮은 꼭짓점의 높이 (root 기준 Y).</summary>
+    public sealed class Result
+    {
+        public StaticBody3D? Body { get; set; }
+
+        public int Tiles { get; set; }
+
+        public int Faces { get; set; }
+
+        public float MinY { get; set; } = float.PositiveInfinity;
+
+        /// <summary>삼각형마다 세 꼭짓점의 가운데 (root 기준 좌표). 주변 지형 충돌면이 동굴 자리를 비울 때 씁니다.</summary>
+        public List<Vector3> Centers { get; } = [];
+    }
+
+    /// <summary>
+    /// root 아래 모든 MeshInstance3D 의 삼각형으로 root 의 자식 StaticBody3D (<see cref="BodyName"/>) 를 만듭니다.
+    /// root 가 트리 밖이어도 됩니다 (꼭짓점은 부모를 따라 root 기준 좌표로 옮김). 삼각형이 없으면 충돌체를 만들지 않습니다.
+    /// </summary>
+    /// <remarks>
+    /// MoveNext 한 번에 일 한 조각을 합니다: 처음에 삼각형을 <see cref="FacesPerStep"/> 개씩 조각별로 모으고,
+    /// 그다음 충돌 조각 하나씩 붙입니다.
+    /// 회랑을 불러오는 동안 조각 사이에 화면을 그릴 수 있습니다 (<see cref="BakedLayers.Build"/>).
+    /// </remarks>
+    public static IEnumerable<int> BuildSteps(Node3D root, Result result)
     {
         var tiles = new Dictionary<(int X, int Z), List<Vector3>>();
-        int faces = 0;
-        float minY = float.PositiveInfinity;
+        int step = 0;
         foreach (Node node in root.FindChildren("*", "MeshInstance3D", true, false))
         {
             var mi = (MeshInstance3D)node;
@@ -61,23 +85,41 @@ public static class CaveCollision
                 list.Add(a);
                 list.Add(b);
                 list.Add(c);
-                faces++;
-                minY = Math.Min(minY, Math.Min(a.Y, Math.Min(b.Y, c.Y)));
+                result.Centers.Add(mid);
+                result.Faces++;
+                result.MinY = Math.Min(result.MinY, Math.Min(a.Y, Math.Min(b.Y, c.Y)));
+                if (result.Faces % FacesPerStep == 0)
+                {
+                    yield return ++step;
+                }
             }
         }
-        if (faces == 0)
+        if (result.Faces == 0)
         {
-            return (null, 0, 0, float.PositiveInfinity);
+            yield break;
         }
+        yield return ++step;
         var body = new StaticBody3D { Name = BodyName, CollisionLayer = 1u | LayerBit };
+        root.AddChild(body);
+        result.Body = body;
         foreach ((int x, int z) in tiles.Keys.OrderBy(k => k.Z).ThenBy(k => k.X))
         {
             var shape = new ConcavePolygonShape3D();
             shape.SetFaces([.. tiles[(x, z)]]);
             body.AddChild(new CollisionShape3D { Name = $"Tile_{x}_{z}", Shape = shape });
+            result.Tiles++;
+            yield return ++step;
         }
-        root.AddChild(body);
-        return (body, tiles.Count, faces, minY);
+    }
+
+    /// <summary><see cref="BuildSteps"/> 를 한 번에 끝까지 돌립니다. 반환: (충돌체, 조각 수, 삼각형 수, 가장 낮은 꼭짓점 높이).</summary>
+    public static (StaticBody3D? Body, int Tiles, int Faces, float MinY) Build(Node3D root)
+    {
+        var result = new Result();
+        foreach (int _ in BuildSteps(root, result))
+        {
+        }
+        return (result.Body, result.Tiles, result.Faces, result.MinY);
     }
 
     /// <summary>node 의 좌표를 root 기준으로 옮기는 변환 (트리 밖에서도 부모를 따라 곱함).</summary>

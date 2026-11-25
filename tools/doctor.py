@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import importlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 import platform
@@ -32,36 +33,43 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("BPCG_DATA") or ROOT / "data")
 GODOT_VERSION = "4.7.2"
 MIN_UV = (0, 12, 17)
-MIN_MACOS_MAJOR = 15  # 잠근 rasterio 1.5.2 의 Apple Silicon wheel 이 macosx_15_0 용
-MIN_GLIBC = (2, 28)  # numba, rasterio 등의 Linux wheel 이 manylinux_2_28 용
+# 기본 묶음(dev)을 설치할 수 있는 가장 낮은 macOS: 잠근 scipy 1.18.1 의 wheel 이 Apple Silicon 은
+# macosx_12_0, Intel 은 macosx_10_15 용입니다. 선택 묶음은 더 높을 수 있습니다(MACOS_OPTIONAL_NOTE).
+MIN_MACOS = {"arm64": (12, 0), "x86_64": (10, 15)}
+MACOS_OPTIONAL_NOTE = {
+    "arm64": "선택 묶음은 analysis 가 macOS 14, gpl·data 가 macOS 15 이상이 필요합니다",
+    "x86_64": "선택 묶음 analysis·notebook 은 설치할 수 없고(numba, argon2-cffi-bindings 의 x86_64 "
+    "wheel 이 없음), gpl·data 는 macOS 15 이상이 필요합니다",
+}
+MIN_GLIBC = (2, 28)  # numpy, scipy, pillow 와 선택 묶음의 Linux wheel 이 manylinux_2_27~2_28 용
 MIN_FREE_GB = 20
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 IS_LINUX = sys.platform.startswith("linux")
 
-# (가져올 모듈 이름, 배포 이름, 묶음)
+# (가져올 모듈 이름, 배포 이름, 묶음). 기본 묶음(uv sync)이 설치하는 패키지입니다.
 REQUIRED_MODULES = [
     ("numpy", "numpy", "기본"),
     ("scipy", "scipy", "기본"),
-    ("numba", "numba", "기본"),
     ("pytest", "pytest", "dev"),
     ("ruff", "ruff", "dev"),
     ("hypothesis", "hypothesis", "dev"),
     ("matplotlib", "matplotlib", "dev"),
-    ("h5py", "h5py", "data"),
+    ("PIL", "pillow", "dev"),
+]
+# 선택 묶음. 없으면 '정보'로 알리기만 합니다. h5py 는 analysis 와 data 묶음에 함께 들어 있습니다.
+OPTIONAL_MODULES = [
+    ("pyflwdir", "pyflwdir", "analysis"),
+    ("landlab", "landlab", "analysis"),
+    ("numba", "numba", "analysis"),
+    ("h5py", "h5py", "analysis"),
     ("h5netcdf", "h5netcdf", "data"),
     ("xarray", "xarray", "data"),
     ("rasterio", "rasterio", "data"),
     ("pyogrio", "pyogrio", "data"),
     ("geopandas", "geopandas", "data"),
     ("pyarrow", "pyarrow", "data"),
-    ("skimage", "scikit-image", "mesh"),
-    ("trimesh", "trimesh", "mesh"),
-]
-OPTIONAL_MODULES = [
-    ("pyflwdir", "pyflwdir", "analysis"),
-    ("landlab", "landlab", "analysis"),
     ("fastscapelib", "fastscapelib", "gpl"),
     ("topotoolbox", "topotoolbox", "gpl"),
     ("jupyterlab", "jupyterlab", "notebook"),
@@ -126,7 +134,7 @@ def check_os():
         if not ver or ver.startswith("10.16"):
             r = subprocess.run(["sw_vers", "-productVersion"], capture_output=True, text=True)
             ver = r.stdout.strip() or ver
-        major = version_tuple(ver or "0")[0]
+        have = (version_tuple(ver or "0") + (0, 0))[:2]
         name = f"macOS {ver} ({machine})"
         if arch == "ARM64" and machine == "x86_64":
             return report(
@@ -135,19 +143,18 @@ def check_os():
                 f"{name}: Rosetta 로 x86_64 파이썬이 돌고 있습니다. "
                 ".venv 를 지우고 arm64 터미널에서 ./scripts/setup.sh 를 다시 실행하세요.",
             )
-        if machine == "x86_64":
+        kind = "x86_64" if machine == "x86_64" else "arm64"
+        need = MIN_MACOS[kind]
+        if have < need:
             return report(
                 FAIL,
                 "운영체제",
-                f"{name}: Intel Mac 은 지원하지 않습니다 "
-                "(numba 0.68 / llvmlite 0.50 의 macOS x86_64 wheel 이 없음).",
+                f"{name}: macOS {need[0]}.{need[1]} 이상이 필요합니다 (scipy 1.18.1 의 "
+                f"wheel 이 macosx_{need[0]}_{need[1]} 용).",
             )
-        if major < MIN_MACOS_MAJOR:
+        if kind == "x86_64" or have < (15, 0):
             return report(
-                FAIL,
-                "운영체제",
-                f"{name}: macOS {MIN_MACOS_MAJOR} 이상이 필요합니다 "
-                "(rasterio 1.5.2 의 Apple Silicon wheel 이 macosx_15_0 용).",
+                INFO, "운영체제", f"{name}: 기본 묶음은 됩니다. {MACOS_OPTIONAL_NOTE[kind]}."
             )
         return report(OK, "운영체제", name)
 
@@ -191,8 +198,8 @@ def check_os():
             return report(
                 WARN,
                 "운영체제",
-                f"{name}: ARM64 용 pyogrio, shapely, pyarrow wheel 이 없습니다. "
-                "설치 스크립트는 x64 파이썬(에뮬레이션)을 씁니다. "
+                f"{name}: 선택 묶음의 landlab, pyarrow, fastscapelib 등은 ARM64 용 wheel 이 "
+                "없어, 설치 스크립트는 x64 파이썬(에뮬레이션)을 씁니다. "
                 ".venv 를 지우고 설치 스크립트를 다시 실행하세요.",
             )
         if arch == "ARM64":
@@ -350,17 +357,23 @@ def check_modules():
         except Exception as e:
             if group == "gpl" and is_arm_linux:
                 hint = "Linux ARM64 용 wheel 이 없어 설치할 수 없습니다"
+            elif group == "data":
+                # 설치 스크립트의 --data 는 파일럿 자료 받기라, data 묶음은 uv 로 바로 설치합니다.
+                hint = "필요하면 uv sync --inexact --group data"
             else:
                 hint = f"필요하면 {setup_cmd(group)}"
             report(INFO, f"패키지 {mod}", f"없음 [{group}, 선택] ({type(e).__name__}) — {hint}")
 
 
 def check_numba_jit():
+    """analysis 묶음의 numba 가 있을 때만, 병렬 컴파일이 되는지 봅니다 (analysis/ 스크립트가 씀)."""
+    if importlib.util.find_spec("numba") is None:
+        return report(INFO, "numba JIT", "numba 가 없어 건너뜁니다 [analysis, 선택].")
     try:
         import numba
         import numpy as np
-    except Exception:
-        return report(FAIL, "numba JIT", "numba 나 numpy 를 가져오지 못해 건너뜁니다.")
+    except Exception as e:
+        return report(WARN, "numba JIT", f"numba 를 가져오지 못했습니다: {type(e).__name__}: {e}")
     try:
 
         @numba.njit(parallel=True)
@@ -380,9 +393,9 @@ def check_numba_jit():
             f"병렬 컴파일+실행 {dt:.1f}초, 스레드 {numba.get_num_threads()}개, "
             f"스레딩 계층 {numba.threading_layer()}"
         )
-        return check("numba JIT", ok, detail)
+        return check("numba JIT", ok, detail, required=False)
     except Exception as e:
-        return report(FAIL, "numba JIT", f"{type(e).__name__}: {e}")
+        return report(WARN, "numba JIT", f"{type(e).__name__}: {e}")
 
 
 # ---------------------------------------------------------------- 도구

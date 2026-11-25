@@ -18,26 +18,32 @@ public static class Refine
     public const int InflowPortCells = 3;
 
     public static readonly string[] LinearFields =
-        ["uplift_m_per_yr", "runoff_m_per_yr", "runoff_eff_m_per_yr", "precip_m_per_yr", "pet_m_per_yr", "exhumation_m", "fold_phase"];
+        ["uplift_m_per_yr", "uplift_tectonic_m_per_yr", "runoff_m_per_yr", "runoff_eff_m_per_yr", "precip_m_per_yr", "pet_m_per_yr",
+            "exhumation_m", "fold_phase"];
 
     public static readonly string[] NearestFields = ["template_id"];
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
 
-    /// <summary>L0 필드를 구면 점 unit (M, 3) 에서 읽습니다 (sample_l0_fields).</summary>
+    /// <summary>
+    /// L0 필드를 구면 점 unit (M, 3) 에서 읽습니다 (sample_l0_fields). L0 값은 노드 흔들기로 옮긴 대표점의 값이므로,
+    /// 연속 값(LinearFields)은 대표점을 꼭짓점으로 하는 삼각형 안에서 섞고, 템플릿(NearestFields)은 가장 가까운 대표점의 값을
+    /// 씁니다(<see cref="NodeStencil"/>). 대표점 위의 점은 그 대표점의 값을 그대로 받습니다.
+    /// </summary>
     public static FieldSet SampleL0Fields(PlanetState planet, double[] unit)
     {
-        int nL0 = (int)planet.Graph.Shape[1];
         FieldSet f = planet.Fields;
         var missing = LinearFields.Concat(NearestFields).Where(k => !f.Contains(k)).ToList();
         if (missing.Count > 0)
         {
-            throw new ArgumentException($"planet.fields 에 히어로 표본에 필요한 필드가 없습니다: {Pipeline.PyListRepr(missing)}");
+            throw new ArgumentException($"행성 묶음에 히어로가 읽을 필드가 없습니다: {Pipeline.PyListRepr(missing)}. "
+                + "지금 코드보다 먼저 만든 행성 묶음이면 행성을 다시 만드세요 (bpcg planet 또는 bpcg all)");
         }
+        NodeStencil stencil = NodeStencil.Build(planet.Graph, unit);
         var output = new FieldSet();
         foreach (string name in LinearFields)
         {
-            double[] v = Resample.SampleSphereReal(f[name], nL0, unit);
+            double[] v = stencil.Linear(f[name]);
             if (v.Any(x => !double.IsFinite(x)))
             {
                 throw new ArgumentException($"L0 '{name}' 을 히어로로 보간한 값에 NaN 이나 inf 가 있습니다");
@@ -46,11 +52,15 @@ public static class Refine
         }
         foreach (string name in NearestFields)
         {
-            output[name] = Resample.SampleSphereNearest((byte[])FieldSet.CastTo(f[name], typeof(byte)), nL0, unit);
+            output[name] = stencil.Nearest((byte[])FieldSet.CastTo(f[name], typeof(byte)));
         }
         return output;
     }
 
+    /// <summary>
+    /// 습곡 변위의 기준 최댓값 U_max: 행성 1단계 지질이 쓴 값(diag geology.u_max_m_per_yr)입니다. 진단이 없으면
+    /// 판이 준 융기(uplift_tectonic_m_per_yr, 지각 세기 한계로 줄이기 전)의 최댓값을 구합니다. 1단계도 그 값으로 구했습니다.
+    /// </summary>
     private static double UMax(PlanetState planet)
     {
         if (planet.Diag.TryGetValue("geology", out object? geo) && geo is OrderedDictionary<string, object?> g
@@ -59,7 +69,7 @@ public static class Refine
             return Convert.ToDouble(um, System.Globalization.CultureInfo.InvariantCulture);
         }
         double mx = double.NegativeInfinity;
-        RealView u = planet.Fields.GetReal("uplift_m_per_yr");
+        RealView u = planet.Fields.GetReal("uplift_tectonic_m_per_yr");
         for (int c = 0; c < u.Length; c++)
         {
             double v = u[c];
@@ -69,6 +79,22 @@ public static class Refine
             }
         }
         return mx;
+    }
+
+    /// <summary>
+    /// 히어로 칸의 지질 기둥을 행성 1단계(<see cref="Model.GenerateGeology"/>)와 같은 규칙으로 다시 만듭니다.
+    /// 습곡 변위 Δ = A·(U/U_max)·sin φ 의 U 는 판이 준 융기(uplift_tectonic_m_per_yr)이고, U_max 는 행성 진단의 값입니다.
+    /// 둘 다 지각 세기 한계로 줄이기 전 값이라, 행성 칸 자리에서는 행성 자신의 기둥과 같은 기둥이 나옵니다.
+    /// 지각 세기 한계로 줄인 uplift_m_per_yr 는 솔버만 씁니다.
+    /// sampled 에는 template_id, fold_phase, uplift_tectonic_m_per_yr, exhumation_m 이 칸마다 있어야 합니다.
+    /// </summary>
+    public static LayerColumns HeroColumns(PlanetState planet, FieldSet sampled, Config cfg)
+    {
+        byte[] tid = sampled.Get<byte>("template_id");
+        double[] disp = Model.FoldDisplacementFromPhase(
+            sampled.GetFloat64("fold_phase"), sampled.GetFloat64("uplift_tectonic_m_per_yr"), tid, cfg, UMax(planet));
+        (double[] sb, byte[] sr) = Model.BuildColumns(tid, sampled.GetFloat64("exhumation_m"), disp, cfg);
+        return LayerColumns.FromColumns(sb, sr, Model.NLayers);
     }
 
     /// <summary>히어로 경계조건 (hero_boundary).</summary>
@@ -97,7 +123,8 @@ public static class Refine
             isOutlet[c] = true;
         }
         double[] pOut = Domain.LocalToUnit(site, [hit.X], [hit.Y], r);
-        double zOut = Resample.SampleSphereReal(f0["z_m"], (int)g0.Shape[1], pOut)[0];
+        // L0 높이도 대표점의 값이라 SampleL0Fields 와 같은 방법으로 읽습니다.
+        double zOut = NodeStencil.Build(g0, pOut).Linear(f0["z_m"])[0];
         if (!double.IsFinite(zOut))
         {
             throw new NoHeroSiteException("출구 위치의 L0 고도가 NaN 입니다");
@@ -286,10 +313,7 @@ public static class Refine
 
         t = Stopwatch.GetTimestamp();
         byte[] tid = sampled.Get<byte>("template_id");
-        double[] disp = Model.FoldDisplacementFromPhase(
-            sampled.Get<double>("fold_phase"), sampled.Get<double>("uplift_m_per_yr"), tid, cfg, UMax(planet));
-        (double[] sb, byte[] sr) = Model.BuildColumns(tid, sampled.Get<double>("exhumation_m"), disp, cfg);
-        LayerColumns columns = LayerColumns.FromColumns(sb, sr, Model.NLayers);
+        LayerColumns columns = HeroColumns(planet, sampled, cfg);
         sec["geology"] = Seconds(t);
 
         t = Stopwatch.GetTimestamp();

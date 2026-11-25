@@ -210,19 +210,34 @@ public sealed class HeroVolume
 
     public double[] Alluvium { get; }
 
+    /// <summary>
+    /// 칸 중심의 맨 위 지하수면 (ny·nx) [m]. 히어로 필드 water_table_m(대표점의 값)을 칸 중심으로 옮기고, 물 칸이 아닌 칸은
+    /// 칸 중심 지표 Z 를 넘지 않게 자른 값입니다 (WaterTablesAtCenters).
+    /// </summary>
     public double[] ZGwMap { get; }
 
-    /// <summary>아래 지하수면 지도 (ny·nx). 필드가 없는 옛 묶음은 지하수면과 같습니다.</summary>
+    /// <summary>
+    /// 칸 중심의 아래 지하수면 (ny·nx) [m]. 동굴 안 물 높이입니다. ZGwMap 처럼 옮기고, 맨 위 지하수면을 넘지 않게 자릅니다.
+    /// 필드가 없는 옛 묶음은 맨 위 지하수면과 같습니다.
+    /// </summary>
     public double[] ZGwLowerMap { get; }
 
     public double[] LakeLevel { get; private set; } = [];
 
     public double[] LakeDist { get; private set; } = [];
 
-    /// <summary>동굴 층 높이 (K, ny, nx) 행 우선 (없으면 NaN).</summary>
+    /// <summary>
+    /// 동굴 층 높이 (K, ny, nx) 행 우선 (없으면 NaN). 대표점(흔들어 둔 격자점)에서 정한 값 그대로입니다. 동굴 통로가 칸의
+    /// 대표점 자리를 지나므로 그 자리의 높이가 맞고, 그 자리의 3D 지표(칸 중심 높이를 보간한 값)도 대표점의 지표 높이와 거의
+    /// 같습니다 (산비탈 섞기만큼 다름).
+    /// </summary>
     public double[] CaveLevels { get; }
 
+    /// <summary>층 바닥 (N, L) [m]. 대표점에서 정한 값 그대로입니다. 대표점 자리를 지나는 동굴 통로가 층리면을 찾을 때 씁니다.</summary>
     public double[] StrataBottom { get; }
+
+    /// <summary>층 바닥 (N, L) [m] 을 칸 중심으로 옮긴 값. Columns 가 칸 사이를 보간할 때 씁니다 (StrataAtCenters).</summary>
+    public double[] StrataBottomCenter { get; }
 
     public byte[] StrataRock { get; }
 
@@ -394,24 +409,10 @@ public sealed class HeroVolume
         Z = zCenter;
         Soil = Array.ConvertAll(Img("soil_thickness_m"), NpMath.NanToNum);
         Alluvium = Array.ConvertAll(Img("alluvium_m"), NpMath.NanToNum);
-        double[] zgw = Img("water_table_m");
-        for (int c = 0; c < n; c++)
-        {
-            if (!double.IsFinite(zgw[c]))
-            {
-                zgw[c] = Z[c];
-            }
-        }
-        ZGwMap = zgw;
-        double[] zgwLower = fields.Contains("water_table_lower_m") ? Img("water_table_lower_m") : (double[])zgw.Clone();
-        for (int c = 0; c < n; c++)
-        {
-            if (!double.IsFinite(zgwLower[c]))
-            {
-                zgwLower[c] = zgw[c];
-            }
-        }
-        ZGwLowerMap = zgwLower;
+        // 지하수면도 대표점에서 정한 높이라 지표처럼 칸 중심으로 옮깁니다. 옮기지 않으면 가파른 땅에서 지하수면이 옮긴 지표를
+        // 칸 하나의 높이 차만큼 넘나듭니다 (물이 스며 나오는 칸에서는 대표점의 지표와 같은 높이라, 대표점이 칸 중심보다 비탈
+        // 위쪽에 있으면 칸 중심의 지표보다 높아집니다). 값이 없는 칸은 대표점의 지표 높이로 둡니다.
+        (ZGwMap, ZGwLowerMap) = WaterTablesAtCenters(graph, Img, fields.Contains("water_table_lower_m"), zNode, water, Z);
         double[] level = Img("water_level_m");
         bool[] isLake = ImgB("is_lake");
         bool[] isOcean = fields.Contains("is_ocean") ? ImgB("is_ocean") : new bool[n];
@@ -435,9 +436,117 @@ public sealed class HeroVolume
         NLayers = columns.NLayers;
         StrataBottom = columns.Bottom;
         StrataRock = columns.Rock;
+        StrataBottomCenter = StrataAtCenters(graph, StrataBottom, StrataRock, NLayers);
         _detailSeed = SubSeed(Seed, StreamDetail);
         BuildRivers(heroState.Rivers, fields, Img, ImgB, graph.Pos, cfg);
-        BuildCaveNetwork(fields, graph, cfg);
+        BuildCaveNetwork(fields, graph, columns.Bottom, cfg);
+    }
+
+    /// <summary>
+    /// 지하수면을 칸 중심으로 옮길 때 믿는 가장 가파른 기울기 [m/m] (NodeResample.SurfaceToCellCenters 의 maxSlope).
+    /// 이보다 가파르게 나오는 칸은 지하수면이 계단처럼 끊긴 자리로 보고 대표점의 값을 그대로 씁니다. laptop 시드 0 히어로에서
+    /// 지표 기울기는 칸의 99.9% 가 1.2 이하이고, 지하수면 기울기는 칸의 99% 가 1.34 이하입니다 (2026-11-26).
+    /// </summary>
+    public const double WaterTableMaxSlope = 1.5;
+
+    // 두 기둥의 층 두께가 같다고 보는 차이 [m]. 히어로 묶음은 층 바닥을 float32 로 저장하므로, 다시 읽은 층 바닥은 높이 1만 m
+    // 안팎에서 1 mm 단위로 반올림되어 있습니다. 같은 지질 템플릿의 두께는 그만큼만 다르고, 다른 템플릿은 수백 m 다릅니다.
+    private const double ColumnThicknessTolM = 0.01;
+
+    /// <summary>
+    /// 맨 위와 아래 지하수면 (ny·nx) [m] 을 대표점의 값에서 칸 중심의 값으로 옮깁니다 (NodeResample.SurfaceToCellCenters).
+    /// 물 칸(water)은 수면 그대로 둡니다. 옮긴 뒤 물 칸이 아닌 칸의 맨 위 지하수면은 칸 중심 지표 zCenter 를 넘지 않게, 아래
+    /// 지하수면은 맨 위 지하수면을 넘지 않게 자릅니다. 대표점에서 지키던 규칙(지하수면 ≤ 지표, 아래 ≤ 맨 위, 8.3)을 칸 중심에서도
+    /// 지키기 위해서입니다. 값이 없는 칸(NaN)은 대표점의 지표 높이 zNode 로 둡니다.
+    /// </summary>
+    private static (double[] Upper, double[] Lower) WaterTablesAtCenters(
+        CellGraph graph, Func<string, double[]> img, bool hasLower, double[] zNode, bool[] water, double[] zCenter)
+    {
+        int n = zNode.Length;
+        double[] upperNode = img("water_table_m");
+        for (int c = 0; c < n; c++)
+        {
+            if (!double.IsFinite(upperNode[c]))
+            {
+                upperNode[c] = zNode[c];
+            }
+        }
+        double[] lowerNode = hasLower ? img("water_table_lower_m") : (double[])upperNode.Clone();
+        for (int c = 0; c < n; c++)
+        {
+            if (!double.IsFinite(lowerNode[c]))
+            {
+                lowerNode[c] = upperNode[c];
+            }
+        }
+        double[] upper = NodeResample.SurfaceToCellCenters(graph, upperNode, water, maxSlope: WaterTableMaxSlope);
+        double[] lower = NodeResample.SurfaceToCellCenters(graph, lowerNode, water, maxSlope: WaterTableMaxSlope);
+        for (int c = 0; c < n; c++)
+        {
+            if (!water[c])
+            {
+                upper[c] = Math.Min(upper[c], zCenter[c]);
+            }
+            lower[c] = Math.Min(lower[c], upper[c]);
+        }
+        return (upper, lower);
+    }
+
+    /// <summary>
+    /// 층 바닥 (N, L) [m] 을 대표점의 값에서 칸 중심의 값으로 옮깁니다. 옮기지 않고 Columns 가 칸 정중앙의 값처럼 보간하면,
+    /// 기운 지층의 경계가 칸 크기만큼 톱니처럼 꺾입니다. 한 기둥의 층들은 같은 두께로 겹쳐 있어(층 바닥 = 맨 위 높이 − 템플릿이
+    /// 정한 깊이) 모든 층 바닥이 같은 기울기로 기웁니다. 그래서 옮길 양을 맨 위 층 바닥으로 한 번 구해 모든 층에 똑같이 더하고,
+    /// 층 두께는 그대로 둡니다. 지층 순서나 층 두께가 다른 이웃(다른 지질 템플릿)의 층 바닥은 다른 면이라 기울기 계산에 쓰지 않습니다.
+    /// 예: 동쪽으로 0.5 기운 지층에서 대표점이 칸 중심보다 동쪽으로 10 m 가 있으면, 칸 중심의 모든 층 바닥은 5 m 낮습니다.
+    /// </summary>
+    internal static double[] StrataAtCenters(CellGraph graph, double[] bottom, byte[] rock, int nL)
+    {
+        if (nL == 0)
+        {
+            return bottom;
+        }
+        int n = bottom.Length / nL;
+        double[] top = new double[n];
+        for (int c = 0; c < n; c++)
+        {
+            top[c] = bottom[c * nL];
+        }
+        double[] moved = NodeResample.SurfaceToCellCenters(graph, top, sameSurface: SameColumn);
+        double[] output = (double[])bottom.Clone();
+        for (int c = 0; c < n; c++)
+        {
+            double shift = moved[c] - top[c];
+            if (shift != 0.0)
+            {
+                for (int i = 0; i < nL; i++)
+                {
+                    output[(c * nL) + i] += shift;
+                }
+            }
+        }
+        return output;
+
+        // 두 기둥이 같은 지층 순서(층마다 같은 암석)이고 층 두께도 같은지.
+        bool SameColumn(int a, int b)
+        {
+            for (int i = 0; i <= nL; i++)
+            {
+                if (rock[(a * (nL + 1)) + i] != rock[(b * (nL + 1)) + i])
+                {
+                    return false;
+                }
+            }
+            for (int i = 1; i < nL; i++)
+            {
+                double ta = bottom[(a * nL) + i] - bottom[a * nL];
+                double tb = bottom[(b * nL) + i] - bottom[b * nL];
+                if (!(Math.Abs(ta - tb) <= ColumnThicknessTolM))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     /// <summary>꺼진 땅의 반지름 아래 한계 [m]. 2 m 지표에서 그릇 모양이 보이려면 지름이 칸 여러 개여야 합니다.</summary>
@@ -558,65 +667,6 @@ public sealed class HeroVolume
             }
         }
         return count > 0 ? sum / count : slope[(cj * Nx) + ci];
-    }
-
-    /// <summary>
-    /// 동굴 층 k 가 놓인 지층의 층리면(지층이 쌓인 면) 높이 [m] 와 그 면이 기운 각의 sin. 층리면은 그 층 높이가 든 지층의
-    /// 바닥면으로 봅니다 (맨 아래 기반암 안이면 기반암의 윗면). 기울기는 양옆 칸과의 높이 차로 잽니다. 동굴 층이 없는 칸은 NaN, 0.
-    /// </summary>
-    private (double[] BedZ, double[] DipSin) BeddingAtLevel(int k)
-    {
-        int n = Ny * Nx;
-        int nL = NLayers;
-        double[] bed = new double[n];
-        double[] dip = new double[n];
-        Array.Fill(bed, NpMath.NaN);
-        if (nL == 0)
-        {
-            return (bed, dip);
-        }
-        Parallelism.For(0, n, c =>
-        {
-            double lv = CaveLevels[(k * n) + c];
-            if (!double.IsFinite(lv))
-            {
-                return;
-            }
-            int li = nL - 1;
-            for (int i = 0; i < nL; i++)
-            {
-                if (StrataBottom[(c * nL) + i] < lv)
-                {
-                    li = i;
-                    break;
-                }
-            }
-            double b = StrataBottom[(c * nL) + li];
-            if (!double.IsFinite(b))
-            {
-                return;
-            }
-            bed[c] = b;
-            int jj = c / Nx;
-            int ii = c % Nx;
-            int iw = Math.Max(ii - 1, 0);
-            int ie = Math.Min(ii + 1, Nx - 1);
-            int js = Math.Min(jj + 1, Ny - 1);
-            int jn = Math.Max(jj - 1, 0);
-            double bw = StrataBottom[(((jj * Nx) + iw) * nL) + li];
-            double be = StrataBottom[(((jj * Nx) + ie) * nL) + li];
-            double bs = StrataBottom[(((js * Nx) + ii) * nL) + li];
-            double bn = StrataBottom[(((jn * Nx) + ii) * nL) + li];
-            if (!(double.IsFinite(bw) && double.IsFinite(be) && double.IsFinite(bs) && double.IsFinite(bn)) || ie == iw || js == jn)
-            {
-                return;
-            }
-            double gx = (be - bw) / ((ie - iw) * Dx);
-            double gy = (bn - bs) / ((js - jn) * Dx);
-            double g2 = (gx * gx) + (gy * gy);
-            dip[c] = Math.Sqrt(g2 / (1.0 + g2));
-        });
-        return (bed, dip);
     }
 
     /// <summary>
@@ -995,6 +1045,68 @@ public sealed class HeroVolume
         _riverReach = hwMax + NpMath.PyMax(NpMath.PyMax(ConformCells * Dx, 2.0 * WaterCalmM), RiverSmoothKM) + 1.0;
     }
 
+    /// <summary>
+    /// 점 (x, y) 에서 가장 가까운 강 선(강바닥을 판 선) 위의 점과 그 거리 [m]. reachM 안에 강 선이 없으면 (NaN, NaN, +∞).
+    /// 강 선은 1 m 간격 점을 이은 꺾은선이라, 가장 가까운 점의 앞뒤 토막까지 봅니다 (RiverQuery 와 같은 방식).
+    /// </summary>
+    private (double X, double Y, double Dist) NearestOnRiverLine(double x, double y, double reachM)
+    {
+        if (_tree is null)
+        {
+            return (NpMath.NaN, NpMath.NaN, double.PositiveInfinity);
+        }
+        int nPts = RiverPts.Length / 2;
+        (_, int[] idxArr) = _tree.Query([x, y], 1, reachM);
+        int i = idxArr[0];
+        if (i >= nPts)
+        {
+            return (NpMath.NaN, NpMath.NaN, double.PositiveInfinity);
+        }
+        double[] pts = RiverPts;
+        double bx = pts[i * 2];
+        double by = pts[(i * 2) + 1];
+        double best = double.Hypot(x - bx, y - by);
+        for (int s = 0; s < 2; s++)
+        {
+            int j = s == 0 ? i - 1 : i;
+            if (j < 0 || j + 1 >= nPts || !RiverConn[j])
+            {
+                continue;
+            }
+            double ax = pts[j * 2];
+            double ay = pts[(j * 2) + 1];
+            double ex = pts[(j + 1) * 2] - ax;
+            double ey = pts[((j + 1) * 2) + 1] - ay;
+            double l2 = (ex * ex) + (ey * ey);
+            double t = l2 <= 0.0 ? 0.0 : NpMath.PyMin(NpMath.PyMax((((x - ax) * ex) + ((y - ay) * ey)) / l2, 0.0), 1.0);
+            double d = double.Hypot(x - ax - (t * ex), y - ay - (t * ey));
+            if (d < best)
+            {
+                best = d;
+                bx = ax + (t * ex);
+                by = ay + (t * ey);
+            }
+        }
+        return (bx, by, best);
+    }
+
+    /// <summary>
+    /// 강가 샘 구멍의 바깥 끝 (x, y) [m]. 굴은 샘 칸 가운데에서 이 점까지 같은 높이로 이어집니다.
+    /// 물 칸이 강 칸이면, 그 칸의 대표점에서 가장 가까운 강 선 위의 점입니다. 강바닥은 대표점을 잇는 선을 따라 파므로, 강 칸의
+    /// 정중앙은 강바닥 밖의 마른 땅일 수 있기 때문입니다 (대표점은 칸 중심에서 반 칸까지 떨어지고, 작은 개울의 폭은 몇 m).
+    /// 대표점에서 칸 한 변(Dx) 안에 강 선이 없거나 호수·바다 칸이면 칸 정중앙입니다. 호수 수면은 칸 중심 사이를 보간하므로
+    /// 호수 칸의 정중앙은 늘 물 안입니다.
+    /// </summary>
+    private (double X, double Y) BankSpringEnd(int waterCell, bool riverCell, double[] nodePos, double centerX, double centerY)
+    {
+        if (!riverCell)
+        {
+            return (centerX, centerY);
+        }
+        (double x, double y, double dist) = NearestOnRiverLine(nodePos[waterCell * 3], nodePos[(waterCell * 3) + 1], Dx);
+        return dist <= Dx ? (x, y) : (centerX, centerY);
+    }
+
     /// <summary>(ny, nx) 지도를 국소 (x, y) [m] 에서 쌍선형 보간 (밖은 가장자리 값) (_bilinear).</summary>
     public double[] Bilinear(double[] image, double[] x, double[] y)
     {
@@ -1032,7 +1144,7 @@ public sealed class HeroVolume
     /// 동굴 조각을 만듭니다. 입구 칸마다 산 밖으로 열리는지 확인해 샘으로 삼고, 싱크홀에서 샘까지의 통로 그물
     /// (<see cref="CaveNetwork"/>)을 만든 뒤, 층 통로·수직굴·입구 굴을 캡슐(양 끝과 반지름) 목록으로 모읍니다.
     /// </summary>
-    private void BuildCaveNetwork(FieldSet fields, CellGraph graph, Config cfg)
+    private void BuildCaveNetwork(FieldSet fields, CellGraph graph, double[] nodeStrataBottom, Config cfg)
     {
         long[] ent = (long[])FieldSet.CastTo(fields["cave_entrance"], typeof(long));
         (double[] xc, double[] yc) = CellCenters();
@@ -1217,7 +1329,8 @@ public sealed class HeroVolume
         }
 
         // 아래층이 놓인 지층의 층리면 높이와 기운 정도. 통로가 층리면을 따라 물 높이 아래로 오르내리는 폭을 정합니다.
-        (double[] bedZ, double[] dipSin) = BeddingAtLevel(0);
+        // 통로 그물은 칸의 대표점 위에 놓이므로, 대표점에서 정한 지층 기둥(히어로 묶음의 값 그대로)과 대표점 위치로 잽니다.
+        (double[] bedZ, double[] dipSin) = Bedding.AtLevel(graph, nodeStrataBottom, NLayers, CaveLevels[..n]);
 
         // 지표의 개울이 땅속으로 사라지는 칸 (히어로 단계가 적은 값, 음수가 사라지는 물). 없는 묶음은 그런 칸이 없습니다.
         double[]? streamLoss = null;
@@ -1292,7 +1405,8 @@ public sealed class HeroVolume
                 EntranceOpen[c] = true;
             }
         }
-        // 강가 샘: 통로가 닿은 샘 칸에서 물가의 물 칸 가운데까지 같은 높이로 잇습니다. 강둑에 샘 구멍이 열립니다.
+        // 강가 샘: 통로가 닿은 샘 칸에서 물가의 물 칸까지 같은 높이로 잇습니다. 강둑에 샘 구멍이 열립니다.
+        // 강 칸이면 굴 끝을 그 칸의 정중앙이 아니라 강바닥을 판 선 위에 둡니다 (BankSpringEnd).
         NBankSprings = 0;
         for (int c = 0; c < n; c++)
         {
@@ -1305,8 +1419,9 @@ public sealed class HeroVolume
             double zk = Network.AxisZ[c];
             entranceIdx.Add(rL.Count);
             EntranceOpen[c] = true;
+            (double endX, double endY) = BankSpringEnd(nb, isRiver[nb], graph.Pos, xc[nb], yc[nb]);
             aL.AddRange([xc[c], yc[c], zk]);
-            bL.AddRange([xc[nb], yc[nb], zk]);
+            bL.AddRange([endX, endY, zk]);
             rL.Add(Network.CellRadius[c]);
             openL.Add(true);
         }
@@ -1513,12 +1628,15 @@ public sealed class HeroVolume
                     }
                 }
             }
+            // 층 바닥은 칸 중심으로 옮긴 값(StrataBottomCenter)을 보간합니다. 대표점의 값을 칸 정중앙의 값처럼 보간하면 기운
+            // 지층의 경계가 칸 크기만큼 톱니처럼 꺾입니다.
+            double[] bottom = StrataBottomCenter;
             if (same)
             {
                 for (int li = 0; li < lN; li++)
                 {
-                    sb[(c * lN) + li] = (w00 * StrataBottom[(c00 * lN) + li]) + (w10 * StrataBottom[(c10 * lN) + li])
-                        + (w01 * StrataBottom[(c01 * lN) + li]) + (w11 * StrataBottom[(c11 * lN) + li]);
+                    sb[(c * lN) + li] = (w00 * bottom[(c00 * lN) + li]) + (w10 * bottom[(c10 * lN) + li])
+                        + (w01 * bottom[(c01 * lN) + li]) + (w11 * bottom[(c11 * lN) + li]);
                 }
                 Array.Copy(StrataRock, c00 * (lN + 1), sr, c * (lN + 1), lN + 1);
             }
@@ -1527,7 +1645,7 @@ public sealed class HeroVolume
                 int jn = j0 + (ty >= 0.5 ? 1 : 0);
                 int iN = i0 + (tx >= 0.5 ? 1 : 0);
                 int cn = (jn * nx) + iN;
-                Array.Copy(StrataBottom, cn * lN, sb, c * lN, lN);
+                Array.Copy(bottom, cn * lN, sb, c * lN, lN);
                 Array.Copy(StrataRock, cn * (lN + 1), sr, c * (lN + 1), lN + 1);
             }
         });

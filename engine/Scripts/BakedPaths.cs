@@ -7,8 +7,10 @@ namespace Bpcg.Engine;
 /// 구운 파일 폴더(회랑 폴더)를 정합니다.
 /// </summary>
 /// <remarks>
-/// 순서는 명령줄 끝의 <c>-- --baked-dir=&lt;폴더&gt;</c>(검사·직접 실행) → 이번 실행에서 생성 화면이 고른 폴더
-/// (<see cref="RuntimeDir"/>, 장면을 바꿔도 남음) → <c>res://baked</c> 입니다. 절대 경로도 됩니다.
+/// 순서는 이번 실행에서 처음 화면이 고른 폴더(<see cref="RuntimeDir"/>, 장면을 바꿔도 남음) → 명령줄 끝의
+/// <c>-- --baked-dir=&lt;폴더&gt;</c>(검사·직접 실행) → <c>res://baked</c> 입니다. 절대 경로도 됩니다.
+/// 처음 화면의 선택이 명령줄보다 앞섭니다. --baked-dir 로 띄운 뒤 N 으로 처음 화면에 가서 다른 실행을 고르거나 새로 만들면
+/// 그 실행이 열려야 하기 때문입니다.
 /// 지구본은 <c>&lt;폴더&gt;/globe</c>, 없으면 실행 폴더의 <c>&lt;폴더&gt;/../globe</c> 에서 찾습니다(<see cref="GlobeData.DefaultDir"/>).
 /// </remarks>
 public static class BakedPaths
@@ -35,13 +37,13 @@ public static class BakedPaths
     /// <summary>구운 파일 폴더 (끝에 / 없음).</summary>
     public static string Dir()
     {
-        if (CommandLineDir() is string cmd)
-        {
-            return cmd;
-        }
         if (!string.IsNullOrEmpty(RuntimeDir))
         {
             return RuntimeDir.TrimEnd('/');
+        }
+        if (CommandLineDir() is string cmd)
+        {
+            return cmd;
         }
         return DefaultDir;
     }

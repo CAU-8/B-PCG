@@ -16,7 +16,9 @@ namespace Bpcg.Engine.Tests;
 /// Godot 는 스크립트 오류가 있어도 종료 코드 0 으로 끝나므로, 성공하면 'BPCG_SMOKE_OK' 를 찍고 Quit(0),
 /// 실패하면 'BPCG_SMOKE_FAIL: &lt;이유&gt;' 를 찍고 Quit(1) 합니다. 구운 묶음이 있으면 레이어 불러오기와
 /// 보이기·숨기기, 단면, 프랙탈 디테일, 동굴 걷기(충돌면, 입구 구멍, 걸어 들어가기)도 검사합니다. 낙하 한계는 늘 검사합니다.
-/// --expect-baked 를 주면 묶음이 없을 때 실패합니다.
+/// --expect-baked 를 주면 묶음이 없거나 불러오기 문제가 있을 때 실패합니다.
+/// --expect-problems=&lt;글&gt;|&lt;글&gt; 을 주면 화면의 '불러오기 문제' 상자에 그 글들이 다 있는지만 보고 끝냅니다
+/// (일부러 망가뜨린 묶음용).
 /// </remarks>
 public partial class SmokeTest : Node
 {
@@ -45,6 +47,11 @@ public partial class SmokeTest : Node
     };
 
     public const string ExpectBakedArg = "--expect-baked";
+    public const string ExpectProblemsPrefix = "--expect-problems=";
+
+    /// <summary>솔기 걷기 검사: 이만큼 물리 프레임 동안 앞으로 걷고, 이 경사(m/m)보다 완만한 곳을 고릅니다.</summary>
+    public const int WalkFrames = 90;
+    public const float GentleSlope = 0.3f;
 
     /// <summary>노클립 검사: 이만큼 물리 프레임 동안 키를 누릅니다.</summary>
     public const int FlyFrames = 30;
@@ -120,17 +127,36 @@ public partial class SmokeTest : Node
         {
             return;
         }
-        Main? main = InstantiateMain();
-        if (main is null)
+        Main? main = await InstantiateMain();
+        if (main is null || !CheckProblems(main))
         {
             return;
         }
-        if (!await CheckPhysics(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main) || !CheckLayers(main)
-            || !await CheckCaves(main) || !await CheckFallLimit(main) || !CheckUiScale(main))
+        if (ExpectedProblems().Length > 0)
+        {
+            Pass();
+            return;
+        }
+        if (!await CheckPhysics(main) || !await CheckSeamWalk(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main)
+            || !CheckLayers(main) || !await CheckCaves(main) || !await CheckFallLimit(main) || !CheckUiScale(main)
+            || !await CheckStartReturn())
         {
             return;
         }
         Pass();
+    }
+
+    /// <summary>--expect-problems= 로 받은 글 조각 ('|' 로 나눔). 없으면 빈 배열.</summary>
+    private static string[] ExpectedProblems()
+    {
+        foreach (string arg in OS.GetCmdlineUserArgs())
+        {
+            if (arg.StartsWith(ExpectProblemsPrefix, StringComparison.Ordinal))
+            {
+                return arg[ExpectProblemsPrefix.Length..].Split('|', StringSplitOptions.RemoveEmptyEntries);
+            }
+        }
+        return [];
     }
 
     private SignalAwaiter ProcessFrame() => ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -225,6 +251,17 @@ public partial class SmokeTest : Node
             return Fail("삼각형 감김 방향이 반대입니다 (앞면이 아래를 봄)");
         }
 
+        // 메시 덩어리: 작은 덩어리로 나눠도 삼각형마다 꼭짓점 위치·법선·UV 가 한 메시로 만들 때와 같아야 합니다
+        // (회랑 지형은 덩어리 하나씩 여러 프레임에 나눠 만듭니다).
+        MeshArrays whole = hm.BuildMeshArrays(10.0f);
+        List<MeshArrays> chunks = hm.BuildMeshChunks(10.0f, 2000);
+        var fromChunks = chunks.SelectMany(c => c.Indices.Select(i => (c.Vertices[i], c.Normals[i], c.Uvs[i]))).ToList();
+        var fromWhole = whole.Indices.Select(i => (whole.Vertices[i], whole.Normals[i], whole.Uvs[i])).ToList();
+        if (chunks.Count < 3 || !fromChunks.SequenceEqual(fromWhole))
+        {
+            return Fail($"메시 덩어리 {chunks.Count}개의 삼각형이 한 메시와 다릅니다 (삼각형 꼭짓점 {fromChunks.Count} / {fromWhole.Count})");
+        }
+
         HeightMapShape3D shape = hm.BuildShape();
         if (shape.MapWidth != w || shape.MapDepth != h || shape.MapData.Length != w * h)
         {
@@ -244,19 +281,49 @@ public partial class SmokeTest : Node
         {
             return Fail($"HeightAt 이 표본 값과 다릅니다: {hm.HeightAt(probe)}, 기대 {expected}");
         }
-        GD.Print($"높이맵: {w} x {h}, 간격 {hm.SpacingM:F1} m, 높이 {lo:F2} ~ {hi:F2} m");
+        GD.Print($"높이맵: {w} x {h}, 간격 {hm.SpacingM:F1} m, 높이 {lo:F2} ~ {hi:F2} m, 메시 덩어리 {chunks.Count}개가 한 메시와 같음");
         return true;
     }
 
-    /// <summary>회랑 장면을 만들어 트리에 붙이고 구성이 맞는지 봅니다. 실패하면 null.</summary>
-    private Main? InstantiateMain()
+    /// <summary>
+    /// 회랑 장면을 만들어 트리에 붙이고, 다 불러올 때까지 기다린 뒤 구성이 맞는지 봅니다. 실패하면 null.
+    /// 붙인 바로 뒤에는 진행 막대가 떠 있고 플레이어가 멈춰 있어야 합니다 (불러오기가 다른 스레드와 여러 프레임에 나뉨).
+    /// 다 불러오면 회랑 지형 메시는 한 번만 만들었어야 합니다 (프랙탈 디테일이 있으면 디테일 지형만).
+    /// </summary>
+    private async Task<Main?> InstantiateMain()
     {
         if (GD.Load(MainScene) is not PackedScene packed || packed.Instantiate() is not Main main)
         {
             Fail($"회랑 장면을 만들지 못했습니다: {MainScene}");
             return null;
         }
+        ulong addStart = Time.GetTicksMsec();
         GetTree().Root.AddChild(main);
+        ulong addMs = Time.GetTicksMsec() - addStart;
+        if (main.IsLoaded || !main.Hud.Loading.IsLoadingVisible || main.Player.ProcessMode != ProcessModeEnum.Disabled)
+        {
+            Fail("회랑 장면을 붙인 바로 뒤인데 진행 막대가 없거나, 이미 다 불러왔거나, 플레이어가 움직입니다 "
+                + $"(불러옴 {main.IsLoaded}, 진행 막대 {main.Hud.Loading.IsLoadingVisible}, 플레이어 {main.Player.ProcessMode})");
+            return null;
+        }
+        string firstStage = main.Hud.Loading.StageText;
+        int frames = 0;
+        while (!main.IsLoaded)
+        {
+            await ProcessFrame();
+            frames++;
+            if (_done)
+            {
+                return null;
+            }
+        }
+        if (main.Hud.Loading.IsLoadingVisible || main.Player.ProcessMode == ProcessModeEnum.Disabled)
+        {
+            Fail("다 불러왔는데 진행 막대가 떠 있거나 플레이어가 멈춰 있습니다");
+            return null;
+        }
+        GD.Print($"불러오기: {main.LoadSeconds * 1000.0:F0} ms, 장면 붙이기 {addMs} ms, 가장 긴 프레임 {main.LongestLoadFrameMs:F0} ms, "
+            + $"프레임 {frames}개, 첫 진행 글 '{firstStage}'");
 
         HeightmapTerrain? terrain = main.GetNodeOrNull<HeightmapTerrain>("Terrain");
         if (terrain?.Heightmap is null || !terrain.Heightmap.IsValid())
@@ -264,14 +331,18 @@ public partial class SmokeTest : Node
             Fail("Terrain 노드가 없거나 높이맵을 읽지 못했습니다");
             return null;
         }
+        if (terrain.BuildCount != 1)
+        {
+            Fail($"회랑에 들어가며 지형 메시와 충돌면을 {terrain.BuildCount}번 만들었습니다 (1번이어야 함, 지형 {terrain.UsedStem})");
+            return null;
+        }
         if (terrain.GetNodeOrNull("Mesh") is not MeshInstance3D)
         {
             Fail("Terrain 아래 Mesh 가 없습니다");
             return null;
         }
-        if (terrain.GetNodeOrNull("Body/Shape") is not CollisionShape3D collision || collision.Shape is not HeightMapShape3D)
+        if (!CheckCollisionTiles(terrain))
         {
-            Fail("Terrain 아래 Body/Shape (HeightMapShape3D) 가 없습니다");
             return null;
         }
         if (terrain.Material is not ShaderMaterial material || material.Shader?.ResourcePath != CrossSectionShader)
@@ -319,8 +390,76 @@ public partial class SmokeTest : Node
             Fail("손전등 (Player/Head/Camera/Lamp) 이 없습니다");
             return null;
         }
-        GD.Print($"회랑 장면: 지형 {terrain.UsedStem}");
+        GD.Print($"회랑 장면: 지형 {terrain.UsedStem}, 지형 메시 {terrain.BuildCount}번 만듦");
         return main;
+    }
+
+    /// <summary>
+    /// 충돌면: Terrain/Body 아래 조각이 모두 정사각 HeightMapShape3D 여야 합니다. 가로·세로가 다르면 Jolt 가 삼각형 메시로
+    /// 바꿔 laptop 회랑에서 몇 초씩 멈춥니다. 조각 수와 크기가 <see cref="HeightmapLoader.TileStarts"/> 와 같은지도 봅니다.
+    /// </summary>
+    private bool CheckCollisionTiles(HeightmapTerrain terrain)
+    {
+        HeightmapLoader hm = terrain.Heightmap!;
+        if (terrain.GetNodeOrNull("Body") is not StaticBody3D body)
+        {
+            return Fail("Terrain 아래 Body (StaticBody3D) 가 없습니다");
+        }
+        // 동굴 입구 구멍의 덧판(HolePatch)과 마개(HolePlug)는 조각이 아니라서 빼고 셉니다.
+        List<CollisionShape3D> shapes = body.GetChildren().OfType<CollisionShape3D>()
+            .Where(c => c.Name.ToString().StartsWith("Shape", StringComparison.Ordinal)).ToList();
+        int size = hm.ShapeTileSize();
+        int expected = HeightmapLoader.TileStarts(hm.Width, size).Count * HeightmapLoader.TileStarts(hm.Height, size).Count;
+        if (shapes.Count != expected)
+        {
+            return Fail($"충돌 조각이 {shapes.Count}개입니다 (기대 {expected}개, 높이맵 {hm.Width} × {hm.Height})");
+        }
+        foreach (CollisionShape3D c in shapes)
+        {
+            if (c.Shape is not HeightMapShape3D h || h.MapWidth != size || h.MapDepth != size)
+            {
+                return Fail($"충돌 조각 {c.Name} 이 {size} × {size} 정사각 HeightMapShape3D 가 아닙니다");
+            }
+        }
+        GD.Print($"충돌 조각: {shapes.Count}개 ({size} × {size} 표본, 높이맵 {hm.Width} × {hm.Height})");
+        return true;
+    }
+
+    /// <summary>
+    /// 불러오기 문제: 화면의 문제 상자가 <see cref="BakedLayers.Problems"/> 를 모두 보여 주는지, --expect-problems 로 받은
+    /// 글이 다 있는지 봅니다. --expect-baked 인데 문제가 있으면 실패입니다.
+    /// </summary>
+    private bool CheckProblems(Main main)
+    {
+        List<string> problems = main.Baked.Problems;
+        LoadScreen screen = main.Hud.Loading;
+        if ((problems.Count > 0) != screen.IsProblemsVisible)
+        {
+            return Fail($"불러오기 문제 {problems.Count}개인데 문제 상자 보임 = {screen.IsProblemsVisible}");
+        }
+        foreach (string p in problems)
+        {
+            if (!screen.ProblemsText.Contains(p, StringComparison.Ordinal))
+            {
+                return Fail($"불러오기 문제가 화면 상자에 없습니다: {p}");
+            }
+        }
+        if (problems.Count > 0)
+        {
+            GD.Print("불러오기 문제 화면: " + screen.ProblemsText.Replace("\n", " | ", StringComparison.Ordinal));
+        }
+        foreach (string want in ExpectedProblems())
+        {
+            if (!screen.ProblemsText.Contains(want, StringComparison.Ordinal))
+            {
+                return Fail($"불러오기 문제 상자에 '{want}' 가 없습니다: {screen.ProblemsText}");
+            }
+        }
+        if (ExpectedProblems().Length == 0 && OS.GetCmdlineUserArgs().Contains(ExpectBakedArg) && problems.Count > 0)
+        {
+            return Fail("구운 묶음을 문제없이 불러와야 하는데 불러오기 문제가 있습니다: " + string.Join(" / ", problems));
+        }
+        return true;
     }
 
     private Godot.Collections.Array<Rid> RayExclude(Main main)
@@ -358,7 +497,13 @@ public partial class SmokeTest : Node
         int lastRow = hm.Height - 1;
         int lastCol = hm.Width - 1;
         var extent = new Vector3(lastCol * hm.SpacingM, 0.0f, lastRow * hm.SpacingM);
-        Vector2I[] samples = [new(0, 0), new(lastRow / 3, lastCol / 4), new(lastRow / 2, lastCol / 2), new(lastRow, lastCol)];
+        var samples = new List<Vector2I> { new(0, 0), new(lastRow / 3, lastCol / 4), new(lastRow / 2, lastCol / 2), new(lastRow, lastCol) };
+        // 충돌 조각의 솔기(이웃 조각과 같이 쓰는 열)와 그 양옆 표본도 쏩니다.
+        int size = hm.ShapeTileSize();
+        foreach (int col0 in HeightmapLoader.TileStarts(hm.Width, size).Skip(1))
+        {
+            samples.AddRange([new(lastRow / 3, col0 - 1), new(lastRow / 3, col0), new(lastRow / 3, col0 + 1)]);
+        }
         foreach (Vector2I rc in samples)
         {
             Vector3 local = hm.Origin + new Vector3(rc.Y * hm.SpacingM, 0.0f, rc.X * hm.SpacingM);
@@ -400,7 +545,85 @@ public partial class SmokeTest : Node
         {
             return Fail($"플레이어 발 높이 {player.GlobalPosition.Y} 가 지면 {ground} 와 다릅니다");
         }
-        GD.Print($"물리: 광선 오차 최대 {worst:F4} m, 플레이어 착지 {frames} 프레임");
+        GD.Print($"물리: 광선 {samples.Count}곳 오차 최대 {worst:F4} m, 플레이어 착지 {frames} 프레임");
+        return true;
+    }
+
+    /// <summary>
+    /// 충돌 조각의 솔기 넘어 걷기: 솔기 둘레가 완만한 행을 골라, 솔기 3 m 서쪽에서 동쪽으로 걸어 솔기를 넘는지 봅니다.
+    /// 조각 경계에서 걸려 멈추거나 튀어 오르면 실패입니다. 조각이 하나뿐이거나 완만한 행이 없으면 건너뜁니다.
+    /// </summary>
+    private async Task<bool> CheckSeamWalk(Main main)
+    {
+        HeightmapTerrain terrain = main.Terrain;
+        Player player = main.Player;
+        HeightmapLoader hm = terrain.Heightmap!;
+        List<int> starts = HeightmapLoader.TileStarts(hm.Width, hm.ShapeTileSize());
+        if (starts.Count < 2)
+        {
+            GD.Print("솔기 걷기: 충돌 조각이 하나라 건너뜀");
+            return true;
+        }
+        int seam = starts[1];
+        int reach = Math.Max(1, Mathf.CeilToInt(4.0f / hm.SpacingM));
+        int row = -1;
+        for (int r = hm.Height / 4; r < hm.Height * 3 / 4 && row < 0; r++)
+        {
+            bool gentle = true;
+            for (int c = seam - reach; c < seam + reach && gentle; c++)
+            {
+                float dx = Math.Abs(hm.Heights[(r * hm.Width) + c + 1] - hm.Heights[(r * hm.Width) + c]) / hm.SpacingM;
+                float dz = Math.Abs(hm.Heights[((r + 1) * hm.Width) + c] - hm.Heights[(r * hm.Width) + c]) / hm.SpacingM;
+                gentle = dx < GentleSlope && dz < GentleSlope;
+            }
+            row = gentle ? r : -1;
+        }
+        if (row < 0)
+        {
+            GD.Print($"솔기 걷기: 솔기 둘레에 경사 {GentleSlope} 보다 완만한 행이 없어 건너뜀");
+            return true;
+        }
+        Vector3 seamLocal = hm.Origin + new Vector3(seam * hm.SpacingM, 0.0f, row * hm.SpacingM);
+        Vector3 startLocal = seamLocal - new Vector3(3.0f, 0.0f, 0.0f);
+        player.SetNoclip(false);
+        player.GlobalPosition = terrain.ToGlobal(new Vector3(startLocal.X, terrain.HeightAt(startLocal) + 0.5f, startLocal.Z));
+        Vector3 rot = player.Rotation;
+        rot.Y = -Mathf.Pi * 0.5f;
+        player.Rotation = rot;
+        // IsOnFloor 는 다음 MoveAndSlide 에서야 바뀌므로, 옮긴 뒤 한 프레임은 기다리고 셉니다.
+        await PhysicsFrame();
+        for (int i = 0; i < MaxLandingFrames && !player.IsOnFloor(); i++)
+        {
+            await PhysicsFrame();
+        }
+        if (!player.IsOnFloor())
+        {
+            player.SetNoclip(true);
+            return Fail($"솔기 걷기: 솔기 서쪽 3 m 에서 {MaxLandingFrames} 물리 프레임 안에 땅에 닿지 않았습니다");
+        }
+        float x0 = player.GlobalPosition.X;
+        Input.ActionPress("move_forward");
+        float worstRise = 0.0f;
+        for (int i = 0; i < WalkFrames; i++)
+        {
+            await PhysicsFrame();
+            float ground = main.GroundY(player.GlobalPosition);
+            worstRise = Math.Max(worstRise, player.GlobalPosition.Y - ground);
+        }
+        Input.ActionRelease("move_forward");
+        float moved = player.GlobalPosition.X - x0;
+        float expected = player.WalkSpeedMS * WalkFrames / Godot.Engine.PhysicsTicksPerSecond;
+        Vector3 end = terrain.ToLocal(player.GlobalPosition);
+        player.SetNoclip(true);
+        if (end.X <= seamLocal.X || moved < 0.7f * expected)
+        {
+            return Fail($"솔기 걷기: 동쪽으로 {moved:F2} m 걸었습니다 (기대 {expected:F2} m, 솔기 x = {seamLocal.X:F1}, 끝 x = {end.X:F1})");
+        }
+        if (worstRise > 0.5f)
+        {
+            return Fail($"솔기 걷기: 걷는 동안 땅에서 {worstRise:F2} m 떴습니다 (조각 경계에 걸려 튀었을 수 있음)");
+        }
+        GD.Print($"솔기 걷기: 열 {seam} 솔기를 넘어 {moved:F2} m (기대 {expected:F2} m), 땅에서 가장 높이 뜬 높이 {worstRise:F2} m");
         return true;
     }
 
@@ -661,6 +884,7 @@ public partial class SmokeTest : Node
             return Fail("프랙탈 디테일 버튼이 없거나 눌려 있지 않습니다");
         }
         HeightmapLoader detail = terrain.Heightmap!;
+        int builds = terrain.BuildCount;
         HeightmapLoader b = HeightmapLoader.LoadStem(BakedPaths.Dir().PathJoin("heightmap"));
         if (!b.IsValid() || b.Heights.Length != detail.Heights.Length)
         {
@@ -706,6 +930,10 @@ public partial class SmokeTest : Node
         if (terrain.UsedStem != BakedPaths.Dir().PathJoin("heightmap"))
         {
             return Fail($"프랙탈 디테일을 껐는데 지형이 {terrain.UsedStem} 입니다");
+        }
+        if (terrain.BuildCount != builds + 1)
+        {
+            return Fail($"프랙탈 디테일을 처음 껐는데 지형을 {terrain.BuildCount - builds}번 만들었습니다 (기본 지형 1번이어야 함)");
         }
         if (!terrain.IsMeshVisible())
         {
@@ -790,6 +1018,10 @@ public partial class SmokeTest : Node
         {
             return Fail("프랙탈 디테일을 두 번 바꿨는데 켜져 있지 않습니다");
         }
+        if (terrain.BuildCount != builds + 1)
+        {
+            return Fail($"프랙탈 디테일을 네 번 바꾸며 지형을 {terrain.BuildCount - builds}번 만들었습니다 (처음 끌 때 1번만이어야 함)");
+        }
         GD.Print($"프랙탈 디테일: 켜짐 (처음), {OS.GetKeycodeString(key)} 키, 높이 차 최대 {worstM:F2} m, "
             + $"끄기 {offMs} ms, 다시 켜기 {onMs} ms");
         return true;
@@ -856,7 +1088,8 @@ public partial class SmokeTest : Node
             return Fail($"낙하 한계 {player.FallLimitYM:F1} m 가 가장 낮은 동굴 면 {caveMinY:F1} m 보다 높습니다");
         }
 
-        // 지형 충돌면의 입구 구멍: 굽기가 센 입구 표본 수 (cave_mouth 의 n_open, 0번 표본은 비우지 않음) 와 같아야 합니다.
+        // 지형 충돌면의 입구 구멍: 굽기가 센 입구 표본 수 (cave_mouth 의 n_open) 와 같아야 합니다.
+        // 다만 충돌 조각마다 첫 표본(조각의 북서쪽 모서리)은 비우지 않으므로 그 수를 뺍니다.
         string mouthName = terrain.UsedStem.EndsWith(DetailName, StringComparison.Ordinal)
             && HeightmapLoader.Exists(BakedPaths.Dir().PathJoin("cave_mouth_detail")) ? "cave_mouth_detail" : "cave_mouth";
         HeightmapLoader mouth = HeightmapLoader.LoadStem(BakedPaths.Dir().PathJoin(mouthName));
@@ -865,7 +1098,9 @@ public partial class SmokeTest : Node
         {
             return Fail($"동굴 메시가 있는데 입구 높이맵 {mouthName} 을 읽지 못했습니다: {mouth.ErrorMessage}");
         }
-        int expected = Json.I(Json.Get(mouthMeta, "n_open") ?? 0L) - (mouth.Heights[0] < 0.0f ? 1 : 0);
+        HeightmapLoader shapeGrid = terrain.Heightmap!;
+        int corners = shapeGrid.TileOrigins().Count(o => mouth.Heights[(o.Row0 * mouth.Width) + o.Col0] < 0.0f);
+        int expected = Json.I(Json.Get(mouthMeta, "n_open") ?? 0L) - corners;
         int nOpen = terrain.Holes?.Open.Length ?? 0;
         if (nOpen != expected)
         {
@@ -1009,7 +1244,7 @@ public partial class SmokeTest : Node
     {
         HeightmapTerrain terrain = main.Terrain;
         BakedLayers baked = main.Baked;
-        HeightmapLoader.HoleShapes holes = terrain.Holes!;
+        HeightmapLoader.HoleSet holes = terrain.Holes!;
         int deepest = holes.Open.MinBy(i => holes.Mouth[i]);
         Vector3 local = terrain.Heightmap!.SamplePosition(deepest);
         float expected = terrain.ToGlobal(local).Y;
@@ -1167,7 +1402,7 @@ public partial class SmokeTest : Node
     }
 
     /// <summary>비운 표본을 여덟 이웃으로 이은 덩어리마다 mouth 가 가장 작은 (가장 깊이 동굴 안인) 표본. 덩어리 첫 표본 순서.</summary>
-    private static List<int> DeepestPerHole(HeightmapLoader.HoleShapes holes, int width)
+    private static List<int> DeepestPerHole(HeightmapLoader.HoleSet holes, int width)
     {
         var seen = new HashSet<int>();
         var result = new List<int>();
@@ -1248,6 +1483,46 @@ public partial class SmokeTest : Node
             return Fail($"[-] 뒤 배율이 처음 {before:F2} 로 돌아오지 않았습니다: {UiScale.UserFactor():F2}");
         }
         GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인");
+        return true;
+    }
+
+    /// <summary>
+    /// 처음 화면으로 돌아가기: --baked-dir 로 띄우면 처음 화면은 처음 한 번만 회랑으로 건너뛰고, 그다음부터는 화면을
+    /// 그대로 띄워야 합니다 (회랑에서 N). 처음 화면이 고른 폴더(RuntimeDir)는 명령줄 폴더보다 앞서야 합니다.
+    /// 이 검사 장면은 처음 화면을 거치지 않았으므로, 처음 화면이 처음 열릴 때 쓰는 명령줄 차례를 여기서 씁니다.
+    /// </summary>
+    private async Task<bool> CheckStartReturn()
+    {
+        string? cmd = BakedPaths.CommandLineDir();
+        if (cmd is null)
+        {
+            GD.Print("처음 화면: --baked-dir 없이 돌아 건너뜀");
+            return true;
+        }
+        if (StartMenu.CommandLineUsed || !StartMenu.TakeCommandLine() || StartMenu.TakeCommandLine())
+        {
+            return Fail("처음 화면이 명령줄 옵션을 처음 한 번만 따르지 않습니다 (StartMenu.TakeCommandLine)");
+        }
+        Node scene = GetTree().CurrentScene;
+        var start = GD.Load<PackedScene>(Main.StartScene).Instantiate<StartMenu>();
+        GetTree().Root.AddChild(start);
+        await ProcessFrame();
+        await ProcessFrame();
+        if (GetTree().CurrentScene != scene || !start.IsInsideTree() || start.GetChildCount() == 0)
+        {
+            return Fail("--baked-dir 로 띄운 뒤 다시 연 처음 화면이 화면을 만들지 않았거나 회랑으로 건너뛰었습니다");
+        }
+        start.QueueFree();
+        string chosen = cmd + "_chosen_in_start_menu";
+        BakedPaths.RuntimeDir = chosen;
+        bool startWins = BakedPaths.Dir() == chosen;
+        BakedPaths.RuntimeDir = null;
+        if (!startWins || BakedPaths.Dir() != cmd)
+        {
+            return Fail($"처음 화면에서 고른 폴더가 명령줄 --baked-dir 보다 앞서지 않습니다 (Dir() = {BakedPaths.Dir()})");
+        }
+        await ProcessFrame();
+        GD.Print("처음 화면: --baked-dir 건너뛰기는 처음 한 번만, 다시 열면 화면이 뜨고 고른 폴더가 앞섬");
         return true;
     }
 

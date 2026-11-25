@@ -246,5 +246,6 @@ public partial class Player : CharacterBody3D
         Velocity = Vector3.Zero;
     }
 
-    private void RememberSpawn() => _spawnPosition = GlobalPosition;
+    /// <summary>지금 자리를 처음 자리로 기억합니다 (걷다가 떨어지면 돌아올 곳). 회랑을 다 불러온 뒤 Main 이 다시 부릅니다.</summary>
+    public void RememberSpawn() => _spawnPosition = GlobalPosition;
 }

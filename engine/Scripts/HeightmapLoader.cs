@@ -20,6 +20,15 @@ public sealed class HeightmapLoader
 {
     public const string Format = "float32_le";
 
+    /// <summary>메시 덩어리 하나에 담는 꼭짓점 수의 목표 (<see cref="BuildMeshChunks"/>).</summary>
+    public const int MeshChunkVertices = 100_000;
+
+    /// <summary>
+    /// 충돌 조각 한 변의 표본 수 상한 (256 칸). 조각이 작을수록 한 조각을 만드는 동안 화면이 덜 멈춥니다.
+    /// 큰 정사각 지형도 여러 조각으로 나눠 프레임마다 조금씩 만듭니다.
+    /// </summary>
+    public const int MaxShapeTile = 257;
+
     /// <summary>열 수 (X 방향 표본 수).</summary>
     public int Width { get; set; }
 
@@ -63,12 +72,22 @@ public sealed class HeightmapLoader
 
     public bool IsValid() => ErrorMessage.Length == 0;
 
+    /// <summary>읽지 못한 높이맵 (까닭 message). 다른 스레드의 계산이 예외로 끝났을 때 씁니다.</summary>
+    public static HeightmapLoader Failed(string pathStem, string message) =>
+        new() { Stem = pathStem, ErrorMessage = message };
+
     /// <summary>
     /// 그리기용 메시를 만듭니다. 꼭짓점은 origin 을 뺀 타일 국소 좌표이므로 MeshInstance3D 를 origin 에 놓아야 합니다.
     /// 법선은 중심 차분으로 직접 계산합니다. skirtM &gt; 0 이면 가장자리를 따라 그만큼 아래로 내려가는 벽(양면)을
     /// 덧붙여 옆 타일과의 틈을 가립니다. 치마 꼭짓점은 width · height 개 뒤에 붙습니다.
     /// </summary>
-    public ArrayMesh BuildMesh(float skirtM = 0.0f)
+    public ArrayMesh BuildMesh(float skirtM = 0.0f) => BuildMeshArrays(skirtM).ToArrayMesh();
+
+    /// <summary>
+    /// <see cref="BuildMesh"/> 의 배열만 계산합니다. Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 됩니다
+    /// (회랑 장면은 불러오는 동안 화면이 멈추지 않게 다른 스레드에서 계산합니다).
+    /// </summary>
+    public MeshArrays BuildMeshArrays(float skirtM = 0.0f)
     {
         int count = Width * Height;
         int[] ring = skirtM > 0.0f ? Perimeter() : [];
@@ -143,33 +162,174 @@ public sealed class HeightmapLoader
             }
         }
 
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-        arrays[(int)Mesh.ArrayType.Normal] = normals;
-        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
-        arrays[(int)Mesh.ArrayType.Index] = indices;
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        return mesh;
+        return new MeshArrays { Vertices = vertices, Normals = normals, Uvs = uvs, Indices = indices };
     }
 
     /// <summary>
-    /// 충돌 모양을 만듭니다. 놓을 자리는 ShapeTransform() 으로 얻습니다. hole 의 넓이가 0 보다 크면 그 사각형
-    /// (국소 X, Z) 안 표본을 비워 충돌면에 구멍을 냅니다. 그 자리는 더 고운 지형(회랑)이 맡습니다.
+    /// <see cref="BuildMeshArrays"/> 의 메시를 행 묶음 여러 덩어리로 나눕니다 (덩어리마다 꼭짓점 maxVertices 개 안팎).
+    /// 이웃 덩어리와 경계 행을 같이 가지므로 이음매가 없고, 치마는 마지막 덩어리입니다. 주 스레드가 덩어리 하나씩 메시 면
+    /// (surface)으로 올려, 큰 지형도 한 프레임에 몰아 만들지 않습니다. Godot 자원을 만들지 않으므로 주 스레드 밖에서
+    /// 불러도 됩니다.
+    /// </summary>
+    public List<MeshArrays> BuildMeshChunks(float skirtM = 0.0f, int maxVertices = MeshChunkVertices)
+    {
+        MeshArrays full = BuildMeshArrays(skirtM);
+        int rowsPerChunk = Math.Max(2, maxVertices / Width);
+        var chunks = new List<MeshArrays>();
+        for (int row0 = 0; ; row0 += rowsPerChunk - 1)
+        {
+            int row1 = Math.Min(row0 + rowsPerChunk - 1, Height - 1);
+            int first = row0 * Width;
+            int last = ((row1 + 1) * Width) - 1;
+            // 행 우선으로 쌓은 사각형이라, 이 행 묶음의 삼각형 번호는 한 구간에 이어져 있습니다.
+            int[] indices = full.Indices[(row0 * (Width - 1) * 6)..(row1 * (Width - 1) * 6)];
+            for (int i = 0; i < indices.Length; i++)
+            {
+                indices[i] -= first;
+            }
+            chunks.Add(new MeshArrays
+            {
+                Vertices = full.Vertices[first..(last + 1)],
+                Normals = full.Normals[first..(last + 1)],
+                Uvs = full.Uvs[first..(last + 1)],
+                Indices = indices,
+            });
+            if (row1 == Height - 1)
+            {
+                break;
+            }
+        }
+        int skirtStart = (Width - 1) * (Height - 1) * 6;
+        if (full.Indices.Length > skirtStart)
+        {
+            // 치마 삼각형이 쓰는 꼭짓점(둘레 위·아래)만 모아 번호를 새로 매깁니다.
+            var local = new Dictionary<int, int>();
+            var vertices = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            int[] indices = new int[full.Indices.Length - skirtStart];
+            for (int i = 0; i < indices.Length; i++)
+            {
+                int g = full.Indices[skirtStart + i];
+                if (!local.TryGetValue(g, out int l))
+                {
+                    l = vertices.Count;
+                    local[g] = l;
+                    vertices.Add(full.Vertices[g]);
+                    normals.Add(full.Normals[g]);
+                    uvs.Add(full.Uvs[g]);
+                }
+                indices[i] = l;
+            }
+            chunks.Add(new MeshArrays { Vertices = [.. vertices], Normals = [.. normals], Uvs = [.. uvs], Indices = indices });
+        }
+        return chunks;
+    }
+
+    /// <summary>
+    /// 충돌 모양 하나를 만듭니다. 놓을 자리는 ShapeTransform() 으로 얻습니다. hole 의 넓이가 0 보다 크면 그 사각형
+    /// (국소 X, Z) 안 표본을 비워(<see cref="HoleValue"/>) 충돌면에 구멍을 냅니다. 그 자리는 더 고운 지형(회랑)이 맡습니다.
+    /// 가로·세로 표본 수가 다르면 물리 엔진이 느리게 만드므로, 지형에는 <see cref="BuildShapeTiles"/> 를 씁니다.
     /// </summary>
     /// <remarks>
     /// 구멍 자리를 낮은 면으로 내려 두면, 회랑의 동굴로 들어간 플레이어가 그 보이지 않는 면에 설 수 있습니다.
-    /// 그래서 표본을 아래로 내리지 않고 비웁니다(<see cref="HoleValue"/>).
+    /// 그래서 표본을 아래로 내리지 않고 비웁니다.
     /// </remarks>
     public HeightMapShape3D BuildShape(Rect2 hole = default) =>
-        new() { MapWidth = Width, MapDepth = Height, MapData = hole.HasArea() ? RectHoleData(hole, out _) : Heights };
+        new() { MapWidth = Width, MapDepth = Height, MapData = ShapeHeights(hole) };
 
-    /// <summary>높이를 복사해 사각형 hole 안쪽(경계 제외) 표본을 비운 배열. inner: 비운 표본 표시.</summary>
-    private float[] RectHoleData(Rect2 hole, out bool[] inner)
+    /// <summary>HeightMapShape3D 는 가운데가 원점이고 표본 간격이 1 이므로, 수평으로 spacing 배 늘이고 타일 가운데로 옮깁니다.</summary>
+    public Transform3D ShapeTransform() => TileTransform(0, 0, Width, Height);
+
+    /// <summary>충돌 조각 한 변의 표본 수: 가로·세로 가운데 짧은 쪽, 많아야 <see cref="MaxShapeTile"/>.</summary>
+    public int ShapeTileSize() => Math.Min(Math.Min(Width, Height), MaxShapeTile);
+
+    /// <summary>
+    /// 충돌 모양을 정사각 조각 여러 장으로 만듭니다. 조각 한 변의 표본 수는 <see cref="ShapeTileSize"/> 이고, 이웃 조각과
+    /// 가장자리 표본 한 줄을 같이 씁니다. 맨 끝 조각은 높이맵 끝에 맞추므로 앞 조각과 겹칠 수 있습니다.
+    /// Godot 의 Jolt 물리 엔진은 정사각 높이맵만 높이장(height field)으로 만들고, 가로·세로가 다르면 삼각형 메시로
+    /// 바꿉니다. laptop 회랑(3,001 × 501 표본)을 메시로 바꾸는 데 5~8 s 걸렸고, 같은 표본을 501 × 501 조각 6장으로
+    /// 나누면 0.09~0.7 s 걸렸습니다 (맥북 에어 M3, 2026-11-26, 화면 없이, 다른 작업 때문에 부하 평균 30~165).
+    /// hole 은 <see cref="BuildShape"/> 와 같습니다. Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 됩니다.
+    /// </summary>
+    public List<ShapeTile> BuildShapeTiles(Rect2 hole = default)
     {
+        float[] data = ShapeHeights(hole);
+        int size = ShapeTileSize();
+        var tiles = new List<ShapeTile>();
+        foreach ((int row0, int col0) in TileOrigins())
+        {
+            float[] tile = new float[size * size];
+            for (int r = 0; r < size; r++)
+            {
+                Array.Copy(data, ((row0 + r) * Width) + col0, tile, r * size, size);
+            }
+            if (float.IsNaN(tile[0]))
+            {
+                // 조각의 첫 표본은 비울 수 없습니다 (HoleValue). 둘레 표본이 비어 있으면 이 표본에 닿은 삼각형도 빠집니다.
+                tile[0] = Heights[(row0 * Width) + col0];
+            }
+            tiles.Add(new ShapeTile(size, tile, TileTransform(col0, row0, size, size)));
+        }
+        return tiles;
+    }
+
+    /// <summary>충돌 조각마다 첫 표본의 (행, 열). <see cref="BuildShapeTiles"/> 와 같은 순서 (행 묶음 바깥, 열 안쪽).</summary>
+    public List<(int Row0, int Col0)> TileOrigins()
+    {
+        int size = ShapeTileSize();
+        List<int> cols = TileStarts(Width, size);
+        return TileStarts(Height, size).SelectMany(r => cols.Select(c => (r, c))).ToList();
+    }
+
+    /// <summary>
+    /// 길이 n 인 축을 size 표본 조각으로 덮을 때 조각마다 시작 번호. 조각끼리 끝 표본 한 줄을 같이 쓰고, 마지막 조각은
+    /// 끝(n − size)에 맞춥니다. 예: n = 3,001, size = 501 이면 0, 500, …, 2,500 (6장).
+    /// </summary>
+    public static List<int> TileStarts(int n, int size)
+    {
+        var starts = new List<int>();
+        for (int s = 0; ; s += size - 1)
+        {
+            if (s + size >= n)
+            {
+                starts.Add(n - size);
+                return starts;
+            }
+            starts.Add(s);
+        }
+    }
+
+    /// <summary>(col0, row0) 에서 시작하는 cols × rows 표본 조각의 충돌 모양 자리 (HeightMapShape3D 는 가운데가 원점).</summary>
+    private Transform3D TileTransform(int col0, int row0, int cols, int rows)
+    {
+        Vector3 c = Origin + new Vector3((col0 + ((cols - 1) * 0.5f)) * SpacingM, 0.0f, (row0 + ((rows - 1) * 0.5f)) * SpacingM);
+        return new Transform3D(Basis.FromScale(new Vector3(SpacingM, 1.0f, SpacingM)), c);
+    }
+
+    /// <summary>충돌용 높이 (hole 안쪽 표본은 비움, 0번 표본은 빼고). hole 이 없으면 Heights 그대로.</summary>
+    private float[] ShapeHeights(Rect2 hole)
+    {
+        if (!hole.HasArea())
+        {
+            return Heights;
+        }
         float[] data = (float[])Heights.Clone();
-        inner = new bool[data.Length];
+        bool[] inner = RectMask(hole);
+        for (int i = 1; i < data.Length; i++)
+        {
+            if (inner[i])
+            {
+                data[i] = HoleValue;
+            }
+        }
+        return data;
+    }
+
+    /// <summary>사각형 hole (국소 X, Z) 안쪽(경계 제외)에 드는 표본 표시.</summary>
+    private bool[] RectMask(Rect2 hole)
+    {
+        bool[] inner = new bool[Width * Height];
         int colLo = Math.Max(Mathf.FloorToInt((hole.Position.X - Origin.X) / SpacingM) + 1, 0);
         int colHi = Math.Min(Mathf.CeilToInt((hole.End.X - Origin.X) / SpacingM) - 1, Width - 1);
         int rowLo = Math.Max(Mathf.FloorToInt((hole.Position.Y - Origin.Z) / SpacingM) + 1, 0);
@@ -178,33 +338,102 @@ public sealed class HeightmapLoader
         {
             for (int col = colLo; col <= colHi; col++)
             {
-                int i = (row * Width) + col;
-                if (i > 0)
-                {
-                    data[i] = HoleValue;
-                    inner[i] = true;
-                }
+                inner[(row * Width) + col] = true;
             }
         }
-        return data;
+        return inner;
     }
 
     /// <summary>
-    /// 사각형 rect(국소 X, Z) 자리를 비운 충돌 모양과 덧판을 만듭니다. 주변 지형이 더 고운 회랑 지형에 자리를 내줄 때 씁니다.
+    /// 높이맵 충돌에서 표본을 비우는 값. HeightMapShape3D 는 높이가 NaN 인 표본에 닿은 삼각형(표본 하나에 6개)을
+    /// 충돌에서 뺍니다(Godot 물리, Jolt 물리 모두).
     /// </summary>
     /// <remarks>
-    /// rect 안쪽 한 칸 띠는 남겨 두 지형이 겹치게 합니다. 두 지형의 높이는 회랑 가장자리에서 다를 수 있어, 겹침 띠가 없으면
-    /// 회랑 밖으로 걸어 나갈 때 계단에 막힙니다. 예를 들어 tiny 프로필(주변 지형 칸 100 m)로 만든 동굴 시험 회랑에서는
-    /// 가장자리에서 주변 지형이 최대 24.7 m 높습니다.
-    /// 다만 clear 의 점(국소 x, z: 동굴 충돌면과 입구 구멍)이 든 삼각형은 rect 안 부분을 비웁니다. 그 띠의 보이지 않는 면이
-    /// 동굴 통로를 가로막거나 입구 구멍으로 떨어지는 플레이어를 받지 않게 하려는 것입니다. rect 밖 부분은 덧판으로 남깁니다.
+    /// 충돌 모양의 0번 표본(조각의 북서쪽 모서리)은 비우지 않습니다. HeightMapShape3D 는 0번 표본으로 최저·최고 높이를
+    /// 세기 시작하므로, 0번이 NaN 이면 둘 다 NaN 이 되고 구멍도 생기지 않습니다(Godot 4.7.2 + Jolt 에서 확인).
     /// </remarks>
-    public (HeightMapShape3D Shape, ConcavePolygonShape3D? Patch) BuildRectHoleShapes(Rect2 rect, IEnumerable<Vector3> clear)
+    public const float HoleValue = float.NaN;
+
+    /// <summary>
+    /// 충돌면에 구멍을 낸 결과. Godot 자원 없이 배열만 담아 주 스레드 밖에서도 계산할 수 있고, 충돌 모양은
+    /// <see cref="HeightmapTerrain"/> 가 주 스레드에서 만듭니다.
+    /// </summary>
+    /// <param name="TileData">구멍 표본을 비운 충돌 조각 높이 (조각 번호 → 높이, <see cref="BuildShapeTiles"/> 순서). 구멍이 닿지 않은 조각은 없습니다.</param>
+    /// <param name="Patch">비운 표본이 함께 뺀 삼각형 가운데 구멍 밖 부분 (국소 좌표, 꼭짓점 셋씩). 덧판입니다.</param>
+    /// <param name="Plug">같은 삼각형의 구멍 부분 (마개). 구멍을 닫을 때 덧판과 함께 붙이면 원래 지형과 같습니다.</param>
+    /// <param name="Open">비운 표본 번호 (행 우선, 오름차순).</param>
+    /// <param name="Mouth">표본마다 동굴까지의 거리 (m). 주변 지형의 회랑 자리 비우기에서는 빈 배열입니다.</param>
+    public sealed record HoleSet(Dictionary<int, float[]> TileData, Vector3[] Patch, Vector3[] Plug, int[] Open, float[] Mouth)
+    {
+        private readonly HashSet<int> _open = [.. Open];
+
+        /// <summary>표본 i 를 비웠는지.</summary>
+        public bool IsOpen(int i) => _open.Contains(i);
+
+        public int PatchTriangles => Patch.Length / 3;
+
+        public int PlugTriangles => Plug.Length / 3;
+    }
+
+    /// <summary>
+    /// 동굴 입구 자리에 구멍을 뚫은 충돌면을 계산합니다. mouth 는 지표 점에서 동굴까지의 거리(m, 굽기의 cave_mouth)이고,
+    /// 음수면 그 지표 점이 동굴 빈 곳 안입니다. 격자가 다르면 이 높이맵의 표본 자리에서 쌍선형으로 읽습니다.
+    /// tiles 는 이 높이맵의 충돌 조각입니다 (<see cref="BuildShapeTiles"/>).
+    /// </summary>
+    /// <remarks>
+    /// 왜 필요한가: 지형 셰이더는 입구 자리를 그리지 않지만(cross_section.gdshader), 충돌면이 막혀 있으면 걷는 플레이어가
+    /// 보이지 않는 땅에 서서 동굴에 들어가지 못합니다.
+    /// 어떻게: mouth 가 음수인 표본을 비우면 그 표본에 닿은 삼각형 6개가 빠집니다. 빠진 삼각형을 삼각형 안에서 mouth 를
+    /// 선형으로 이어 0 이 되는 선으로 잘라, mouth ≥ 0 인 부분(동굴 밖 땅)은 덧판으로, 나머지(구멍)는 마개로 둡니다.
+    /// 예: 꼭짓점 mouth 가 (−1, 1, 1) 인 삼각형은 첫 꼭짓점에서 두 변의 가운데까지가 마개이고, 나머지 사다리꼴은 덧판입니다.
+    /// 그래서 충돌면의 구멍은 동굴 빈 곳이 지표에 닿은 자리와 같고, 구멍으로 떨어지면 동굴 안에 떨어집니다.
+    /// 구멍을 닫을 때는 마개만 붙이므로, 충돌 조각을 바꿔 끼우지 않고 바로 바뀝니다.
+    /// 어느 조각의 첫 표본(0번)인 표본은 그 조각에서 비울 수 없으므로 구멍으로 치지 않습니다 (그 자리 구멍은 조금 작아짐).
+    /// 계산은 비운 표본에 닿은 삼각형만 돕니다 (laptop 회랑의 입구 표본 118개면 삼각형 700개 남짓).
+    /// Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 됩니다.
+    /// </remarks>
+    public HoleSet BuildHoleSet(HeightmapLoader mouth, IReadOnlyList<ShapeTile> tiles)
+    {
+        float[] m = ValuesOnGrid(mouth);
+        HashSet<int> corners = TileOrigins().Select(o => (o.Row0 * Width) + o.Col0).ToHashSet();
+        var open = new List<int>();
+        for (int i = 0; i < m.Length; i++)
+        {
+            if (m[i] < 0.0f && !corners.Contains(i))
+            {
+                open.Add(i);
+            }
+        }
+        var patch = new List<Vector3>();
+        var plug = new List<Vector3>();
+        foreach (int tri in new SortedSet<int>(open.SelectMany(FanTriangles)))
+        {
+            (int a, int b, int c) = TriangleIds(tri);
+            List<Vector3> t = [SamplePosition(a), SamplePosition(b), SamplePosition(c)];
+            float[] f = [m[a], m[b], m[c]];
+            AddFan(patch, ClipByValues(t, f, 1.0f));
+            AddFan(plug, ClipByValues(t, f, -1.0f));
+        }
+        return new HoleSet(OpenTiles(open, tiles), [.. patch], [.. plug], [.. open], m);
+    }
+
+    /// <summary>
+    /// 사각형 rect(국소 X, Z) 자리를 비운 충돌 조각(<see cref="BuildShapeTiles"/>, hole = rect 를 한 칸 줄인 것)에서,
+    /// 회랑 지형과 겹쳐 남긴 rect 안쪽 한 칸 띠 가운데 clear 의 점(국소 x, z)이 든 삼각형의 rect 안 부분을 더 비웁니다.
+    /// 주변 지형이 동굴 자리를 비울 때 씁니다. 결과의 Patch 는 함께 빠진 삼각형 가운데 남길 부분입니다.
+    /// </summary>
+    /// <remarks>
+    /// 겹침 띠를 남기는 까닭: 두 지형의 높이는 회랑 가장자리에서 다를 수 있어, 띠가 없으면 회랑 밖으로 걸어 나갈 때 계단에
+    /// 막힙니다. 예를 들어 tiny 프로필(주변 지형 칸 100 m)로 만든 동굴 시험 회랑에서는 가장자리에서 주변 지형이 최대 24.7 m
+    /// 높습니다. 다만 동굴이 지나는 자리의 띠는 보이지 않는 면이 동굴 통로를 가로막거나 싱크홀로 떨어지는 플레이어를
+    /// 받으므로 비웁니다. 함께 빠진 삼각형은 clear 삼각형이면 rect 밖 부분만, 아니면 통째로 되붙입니다.
+    /// Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 됩니다.
+    /// </remarks>
+    public HoleSet BuildRectClear(Rect2 rect, IEnumerable<Vector3> clear, IReadOnlyList<ShapeTile> tiles)
     {
         Rect2 innerRect = rect.Grow(-SpacingM);
-        float[] data = RectHoleData(innerRect, out bool[] inner);
-        // clear 점이 든 삼각형 (겹침 띠에 남았던 것만). 겹침 띠보다 한 칸 더 안쪽 점은 이미 빈 삼각형에 드므로 건너뜁니다.
-        // 삼각형 번호 = 칸 번호 · 2 + (0: 북서 반, 1: 남동 반).
+        bool[] inner = RectMask(innerRect);
+        // 겹침 띠보다 한 칸 더 안쪽 점은 이미 빈 삼각형에 드므로 건너뜁니다. 삼각형 번호 = 칸 번호 · 2 + (0: 북서 반, 1: 남동 반).
         Rect2 deep = innerRect.Grow(-SpacingM);
         var cleared = new HashSet<int>();
         foreach (Vector3 p in clear)
@@ -219,22 +448,12 @@ public sealed class HeightmapLoader
                 cleared.Add(tri);
             }
         }
-        var opened = new List<int>();
+        var opened = new SortedSet<int>();
         foreach (int tri in cleared)
         {
             (int a, int b, int c) = TriangleIds(tri);
-            foreach (int v in new[] { a, b, c })
-            {
-                if (v > 0 && !float.IsNaN(data[v]))
-                {
-                    data[v] = HoleValue;
-                    opened.Add(v);
-                }
-            }
+            opened.UnionWith([a, b, c]);
         }
-        var shape = new HeightMapShape3D { MapWidth = Width, MapDepth = Height, MapData = data };
-        // 새로 비운 표본에 닿아 함께 빠진 삼각형을 되붙입니다: clear 삼각형은 rect 밖 부분만, 나머지는 통째로.
-        // 처음부터 비운 표본(inner)에 닿은 삼각형은 원래 빠져 있던 것이라 그대로 둡니다.
         float x0 = rect.Position.X;
         float x1 = rect.End.X;
         float z0 = rect.Position.Y;
@@ -260,7 +479,39 @@ public sealed class HeightmapLoader
             AddFan(faces, Clip(mid, p => z0 - p.Z));
             AddFan(faces, Clip(mid, p => p.Z - z1));
         }
-        return (shape, Trimesh(faces));
+        return new HoleSet(OpenTiles(opened, tiles), [.. faces], [], [.. opened], []);
+    }
+
+    /// <summary>
+    /// 표본들을 비운 충돌 조각 높이 (조각 번호 → tiles 의 높이를 복사해 비운 것). 표본이 닿지 않은 조각은 넣지 않습니다.
+    /// 조각의 첫 표본(0번)은 비우지 않습니다 (<see cref="HoleValue"/>).
+    /// </summary>
+    private Dictionary<int, float[]> OpenTiles(IEnumerable<int> samples, IReadOnlyList<ShapeTile> tiles)
+    {
+        List<(int Row0, int Col0)> origins = TileOrigins();
+        int size = ShapeTileSize();
+        var result = new Dictionary<int, float[]>();
+        foreach (int s in samples)
+        {
+            int r = s / Width;
+            int c = s % Width;
+            for (int t = 0; t < origins.Count && t < tiles.Count; t++)
+            {
+                int lr = r - origins[t].Row0;
+                int lc = c - origins[t].Col0;
+                if (lr < 0 || lc < 0 || lr >= size || lc >= size || (lr == 0 && lc == 0))
+                {
+                    continue;
+                }
+                if (!result.TryGetValue(t, out float[]? data))
+                {
+                    data = (float[])tiles[t].Data.Clone();
+                    result[t] = data;
+                }
+                data[(lr * size) + lc] = HoleValue;
+            }
+        }
+        return result;
     }
 
     /// <summary>국소 (x, z) 가 든 삼각형 번호 (칸 번호 · 2 + 반). 높이맵 밖이면 −1.</summary>
@@ -278,7 +529,7 @@ public sealed class HeightmapLoader
         return (((row * (Width - 1)) + col) * 2) + half;
     }
 
-    /// <summary>삼각형 번호 → 꼭짓점 표본 번호. 0: (북서, 북동, 남서), 1: (북동, 남동, 남서). 그리기 메시와 같은 순서.</summary>
+    /// <summary>삼각형 번호 → 꼭짓점 표본 번호. 0: (북서, 북동, 남서), 1: (북동, 남동, 남서). 그리기 메시·충돌 조각과 같은 순서.</summary>
     private (int A, int B, int C) TriangleIds(int tri)
     {
         int q = tri / 2;
@@ -369,87 +620,8 @@ public sealed class HeightmapLoader
         }
     }
 
-    /// <summary>삼각형 목록 → 앞뒤 양면 충돌 모양 (높이맵 충돌처럼 아래에서도 막음). 비었으면 null.</summary>
-    private static ConcavePolygonShape3D? Trimesh(List<Vector3> faces)
-    {
-        if (faces.Count == 0)
-        {
-            return null;
-        }
-        var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
-        shape.SetFaces([.. faces]);
-        return shape;
-    }
-
-    /// <summary>
-    /// 높이맵 충돌에서 표본을 비우는 값. HeightMapShape3D 는 높이가 NaN 인 표본에 닿은 삼각형(표본 하나에 6개)을
-    /// 충돌에서 뺍니다(Godot 물리, Jolt 물리 모두).
-    /// </summary>
-    /// <remarks>
-    /// 0번 표본(북서쪽 모서리)은 비우지 않습니다. HeightMapShape3D 는 0번 표본으로 최저·최고 높이를 세기 시작하므로,
-    /// 0번이 NaN 이면 둘 다 NaN 이 되고 구멍도 생기지 않습니다(Godot 4.7.2 + Jolt 에서 확인).
-    /// </remarks>
-    public const float HoleValue = float.NaN;
-
-    /// <summary>동굴 입구 구멍을 뚫은 충돌 모양 (<see cref="BuildHoleShapes"/> 의 결과).</summary>
-    /// <param name="Shape">구멍 표본을 비운 높이맵 충돌 모양. 놓을 자리는 ShapeTransform().</param>
-    /// <param name="Patch">비운 표본이 함께 뺀 삼각형 가운데 구멍 밖 부분 (국소 좌표, 앞뒤 양면). 없으면 null.</param>
-    /// <param name="Plug">같은 삼각형의 구멍 부분 (마개). 구멍을 닫을 때 Patch 와 함께 붙이면 원래 지형과 같습니다. 없으면 null.</param>
-    /// <param name="Open">비운 표본 번호 (행 우선, 오름차순).</param>
-    /// <param name="Mouth">표본마다 동굴까지의 거리 (m, 이 높이맵 격자).</param>
-    /// <param name="PatchTriangles">덧판 삼각형 수.</param>
-    /// <param name="PlugTriangles">마개 삼각형 수.</param>
-    public sealed record HoleShapes(
-        HeightMapShape3D Shape, ConcavePolygonShape3D? Patch, ConcavePolygonShape3D? Plug, int[] Open, float[] Mouth,
-        int PatchTriangles, int PlugTriangles)
-    {
-        private readonly HashSet<int> _open = [.. Open];
-
-        /// <summary>표본 i 를 비웠는지.</summary>
-        public bool IsOpen(int i) => _open.Contains(i);
-    }
-
-    /// <summary>
-    /// 동굴 입구 자리에 구멍을 뚫은 충돌 모양을 만듭니다. mouth 는 지표 점에서 동굴까지의 거리(m, 굽기의 cave_mouth)이고,
-    /// 음수면 그 지표 점이 동굴 빈 곳 안입니다. 격자가 다르면 이 높이맵의 표본 자리에서 쌍선형으로 읽습니다.
-    /// </summary>
-    /// <remarks>
-    /// 왜 필요한가: 지형 셰이더는 입구 자리를 그리지 않지만(cross_section.gdshader), 충돌면이 막혀 있으면 걷는 플레이어가
-    /// 보이지 않는 땅에 서서 동굴에 들어가지 못합니다.
-    /// 어떻게: mouth 가 음수인 표본을 비우면 그 표본에 닿은 삼각형 6개가 빠집니다. 빠진 삼각형을 삼각형 안에서 mouth 를
-    /// 선형으로 이어 0 이 되는 선으로 잘라, mouth ≥ 0 인 부분(동굴 밖 땅)은 덧판으로, 나머지(구멍)는 마개로 둡니다.
-    /// 예: 꼭짓점 mouth 가 (−1, 1, 1) 인 삼각형은 첫 꼭짓점에서 두 변의 가운데까지가 마개이고, 나머지 사다리꼴은 덧판입니다.
-    /// 그래서 충돌면의 구멍은 동굴 빈 곳이 지표에 닿은 자리와 같고, 구멍으로 떨어지면 동굴 안에 떨어집니다.
-    /// 구멍을 닫을 때는 마개만 붙입니다. 큰 높이맵 충돌 모양을 바꿔 끼우지 않으므로 켜고 끄기가 바로 됩니다.
-    /// 높이맵 충돌은 아래에서 올라와도 막으므로(Jolt), 덧판과 마개도 양면으로 막습니다.
-    /// 계산은 비운 표본에 닿은 삼각형만 돕니다 (laptop 회랑의 입구 표본 118개면 삼각형 700개 남짓).
-    /// </remarks>
-    public HoleShapes BuildHoleShapes(HeightmapLoader mouth)
-    {
-        float[] m = ValuesOnGrid(mouth);
-        float[] data = (float[])Heights.Clone();
-        var openIds = new List<int>();
-        for (int i = 1; i < data.Length; i++)
-        {
-            if (m[i] < 0.0f)
-            {
-                data[i] = HoleValue;
-                openIds.Add(i);
-            }
-        }
-        var shape = new HeightMapShape3D { MapWidth = Width, MapDepth = Height, MapData = data };
-        var patch = new List<Vector3>();
-        var plug = new List<Vector3>();
-        foreach (int tri in new SortedSet<int>(openIds.SelectMany(FanTriangles)))
-        {
-            (int a, int b, int c) = TriangleIds(tri);
-            List<Vector3> t = [SamplePosition(a), SamplePosition(b), SamplePosition(c)];
-            float[] f = [m[a], m[b], m[c]];
-            AddFan(patch, ClipByValues(t, f, 1.0f));
-            AddFan(plug, ClipByValues(t, f, -1.0f));
-        }
-        return new HoleShapes(shape, Trimesh(patch), Trimesh(plug), [.. openIds], m, patch.Count / 3, plug.Count / 3);
-    }
+    /// <summary>덧판·마개 삼각형으로 남길 가장 작은 넓이의 (2배)² (m⁴). 1 cm² 삼각형의 값.</summary>
+    private const float MinPatchArea2 = 4.0e-8f;
 
     /// <summary>
     /// 다른 높이맵(같은 회랑 좌표)의 값을 이 높이맵의 표본 자리에서 읽습니다 (높이맵 안 값, Origin.Y 를 더하지 않음).
@@ -477,16 +649,6 @@ public sealed class HeightmapLoader
     /// <summary>표본 i 의 국소 좌표 (m).</summary>
     public Vector3 SamplePosition(int i) =>
         Origin + new Vector3((i % Width) * SpacingM, Heights[i], (i / Width) * SpacingM);
-
-    /// <summary>덧판·마개 삼각형으로 남길 가장 작은 넓이의 (2배)² (m⁴). 1 cm² 삼각형의 값.</summary>
-    private const float MinPatchArea2 = 4.0e-8f;
-
-    /// <summary>HeightMapShape3D 는 가운데가 원점이고 표본 간격이 1 이므로, 수평으로 spacing 배 늘이고 타일 가운데로 옮깁니다.</summary>
-    public Transform3D ShapeTransform()
-    {
-        Vector3 c = Origin + new Vector3((Width - 1) * SpacingM * 0.5f, 0.0f, (Height - 1) * SpacingM * 0.5f);
-        return new Transform3D(Basis.FromScale(new Vector3(SpacingM, 1.0f, SpacingM)), c);
-    }
 
     /// <summary>타일 가운데의 국소 좌표 (y 는 그 자리 높이, m).</summary>
     public Vector3 Center()
@@ -599,4 +761,56 @@ public sealed class HeightmapLoader
         }
         Heights = Files.Floats(bytes);
     }
+}
+
+/// <summary>
+/// 그리기용 메시 배열 (꼭짓점, 법선, UV, 삼각형 번호). 주 스레드 밖에서 계산하고, 주 스레드에서
+/// <see cref="ToArrayMesh"/> 로 Godot 메시를 만듭니다.
+/// </summary>
+public sealed class MeshArrays
+{
+    public Vector3[] Vertices { get; init; } = [];
+
+    public Vector3[] Normals { get; init; } = [];
+
+    /// <summary>비어 있으면 UV 없이 만듭니다.</summary>
+    public Vector2[] Uvs { get; init; } = [];
+
+    public int[] Indices { get; init; } = [];
+
+    /// <summary>Godot 메시를 만듭니다 (주 스레드). 꼭짓점이 없으면 면이 없는 빈 메시입니다.</summary>
+    public ArrayMesh ToArrayMesh()
+    {
+        var mesh = new ArrayMesh();
+        AddTo(mesh);
+        return mesh;
+    }
+
+    /// <summary>이 배열을 mesh 의 면(surface) 하나로 더합니다 (주 스레드). 꼭짓점이 없으면 아무것도 하지 않습니다.</summary>
+    public void AddTo(ArrayMesh mesh)
+    {
+        if (Vertices.Length == 0)
+        {
+            return;
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = Vertices;
+        arrays[(int)Mesh.ArrayType.Normal] = Normals;
+        if (Uvs.Length > 0)
+        {
+            arrays[(int)Mesh.ArrayType.TexUV] = Uvs;
+        }
+        arrays[(int)Mesh.ArrayType.Index] = Indices;
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+    }
+}
+
+/// <summary>
+/// 충돌 모양 한 조각: 한 변 Size 표본의 정사각 높이 (행 우선) 와 놓을 자리. 주 스레드 밖에서 계산하고, 주 스레드에서
+/// <see cref="ToShape"/> 로 Godot 충돌 모양을 만듭니다.
+/// </summary>
+public sealed record ShapeTile(int Size, float[] Data, Transform3D Transform)
+{
+    public HeightMapShape3D ToShape() => new() { MapWidth = Size, MapDepth = Size, MapData = Data };
 }

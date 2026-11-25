@@ -212,6 +212,41 @@ public static class Corridor
         return Math.Min(h / Math.Log(ScoreClasses), 1.0);
     }
 
+    /// <summary>회랑 설정 profile.corridor 의 길이 length_m, 폭 width_m, 높이맵 표본 간격 voxel_m [m] 를 읽고 검사합니다.</summary>
+    /// <remarks>
+    /// 길이와 폭은 표본 간격 이상이어야 합니다. 그보다 짧으면 높이맵이 그 방향에 표본 한 줄만 가져 땅 면을 만들 수 없습니다.
+    /// </remarks>
+    internal static (double LengthM, double WidthM, double VoxelM) SizeSettings(Config cfg)
+    {
+        double voxel = cfg.F("profile.corridor.voxel_m");
+        if (!(double.IsFinite(voxel) && voxel > 0))
+        {
+            throw new ArgumentException(
+                $"회랑 높이맵의 표본 간격(profile.corridor.voxel_m {PyFormat.General(voxel)} m)은 0 보다 커야 합니다. "
+                + "laptop 프로필처럼 2 m 를 쓰거나 0 보다 큰 값으로 고치세요");
+        }
+        double length = cfg.F("profile.corridor.length_m");
+        double width = cfg.F("profile.corridor.width_m");
+        if (!(length >= voxel && width >= voxel))
+        {
+            throw new ArgumentException(
+                $"회랑 길이(profile.corridor.length_m {PyFormat.General(length)} m)와 폭(width_m {PyFormat.General(width)} m)은 "
+                + $"높이맵의 표본 간격(voxel_m {PyFormat.General(voxel)} m) 이상이어야 합니다. 그보다 짧으면 높이맵이 그 방향에 "
+                + $"표본 한 줄만 가져 땅 면을 만들 수 없습니다. 두 값을 {PyFormat.General(voxel)} m 이상으로 늘리거나 voxel_m 을 줄이세요");
+        }
+        return (length, width, voxel);
+    }
+
+    /// <summary>
+    /// 길이 size [m] 를 간격 step [m] 의 정수배로 내려 맞춥니다. 예: 6,001 m 를 2 m 간격에 맞추면 6,000 m 입니다.
+    /// 이미 정수배이면(나눈 값의 반올림 오차 1e-9 안) size 를 그대로 돌려주므로, 기본 설정의 회랑은 한 비트도 바뀌지 않습니다.
+    /// </summary>
+    internal static double FloorToMultiple(double size, double step)
+    {
+        double n = Math.Floor((size / step) + 1e-9);
+        return Math.Abs(size - (n * step)) <= 1e-9 * step ? size : n * step;
+    }
+
     /// <summary>
     /// 회랑 직사각형을 고릅니다 (choose_corridor). 본류(유역에서 가장 큰 강 줄기)와 지류 위에 후보 직사각형을 놓고 점수가 가장 높은 후보를 고릅니다.
     /// </summary>
@@ -222,6 +257,8 @@ public static class Corridor
     /// (HeroVolume.PassageM)이고, 주지 않으면 동굴 층이 있는 칸마다 칸 간격만큼의 통로가 있다고 봅니다.
     /// openEntrance (N,) 는 지표에서 동굴로 들어갈 수 있는 칸(입구 굴을 판 칸과 싱크홀 칸)이고,
     /// 주지 않으면 히어로 묶음의 입구 후보 칸(cave_entrance)을 모두 입구로 셉니다.
+    /// 직사각형의 길이와 폭(Choice.LengthM, WidthM)은 설정 length_m, width_m 을 히어로 칸 중심의 범위 안으로 줄이고
+    /// 높이맵 표본 간격 voxel_m 의 정수배로 내려 맞춘 값입니다. 그래서 높이맵의 마지막 표본이 사각형 변 위에 놓입니다.
     /// </remarks>
     public static Choice ChooseCorridor(HeroState heroState, Config cfg, double[]? passageM = null, bool[]? openEntrance = null)
     {
@@ -231,12 +268,7 @@ public static class Corridor
         {
             throw new ArgumentException("회랑은 평면 히어로에서만 고릅니다");
         }
-        double length = cfg.F("profile.corridor.length_m");
-        double width = cfg.F("profile.corridor.width_m");
-        if (!(length > 0 && width > 0))
-        {
-            throw new ArgumentException("profile.corridor 의 length_m, width_m 은 0 보다 커야 합니다");
-        }
+        (double length, double width, double voxel) = SizeSettings(cfg);
         int ny = (int)graph.Shape[0];
         int nx = (int)graph.Shape[1];
         double dx = graph.Spacing;
@@ -453,10 +485,13 @@ public static class Corridor
                 double xb;
                 double ya;
                 double yb;
+                // 길이와 폭은 히어로 칸 중심의 범위 안으로 줄인 뒤, 높이맵 표본 간격 voxel 의 정수배로 내려 맞춥니다.
+                // 정수배가 아니면 높이맵 격자(Grid)의 마지막 표본이 사각형 변에 못 미칩니다. 엔진은 둘레 25 m 지형을 이 사각형만큼
+                // 비우므로, 그 틈에 지형이 없는 띠가 남습니다.
                 if (axis == "east")
                 {
-                    l = NpMath.PyMin(length, hiX - loX);
-                    wd = NpMath.PyMin(width, hiY - loY);
+                    l = FloorToMultiple(NpMath.PyMin(length, hiX - loX), voxel);
+                    wd = FloorToMultiple(NpMath.PyMin(width, hiY - loY), voxel);
                     double e2 = ax + (sign * l);
                     (xa, xb) = ax <= e2 ? (ax, e2) : (e2, ax);
                     ya = ay - (0.5 * wd) + (offset * wd);
@@ -464,8 +499,8 @@ public static class Corridor
                 }
                 else
                 {
-                    l = NpMath.PyMin(length, hiY - loY);
-                    wd = NpMath.PyMin(width, hiX - loX);
+                    l = FloorToMultiple(NpMath.PyMin(length, hiY - loY), voxel);
+                    wd = FloorToMultiple(NpMath.PyMin(width, hiX - loX), voxel);
                     double e2 = ay + (sign * l);
                     (ya, yb) = ay <= e2 ? (ay, e2) : (e2, ay);
                     xa = ax - (0.5 * wd) + (offset * wd);
@@ -552,13 +587,26 @@ public static class Corridor
         return best!;
     }
 
-    private static (double[] Xs, double[] Ys) Grid((double XMin, double XMax, double YMin, double YMax) rect, double step)
+    /// <summary>
+    /// 사각형을 끝까지 덮는 표본 격자. 북서 귀퉁이(XMin, YMax)에서 step 간격으로 동쪽(열)과 남쪽(행)으로 놓고,
+    /// 마지막 열과 행이 동쪽·남쪽 변 위나 그 너머(한 간격 미만)에 오게 합니다.
+    /// </summary>
+    /// <remarks>
+    /// 회랑 사각형은 높이맵 간격(voxel_m)의 정수배라(ChooseCorridor) 높이맵 격자는 변 위에서 끝납니다.
+    /// 재질 부피 격자(StrataDxM 4 m)는 사각형 변이 4 m 의 정수배가 아니면 마지막 열(행)이 변 너머에 놓입니다.
+    /// 예: 변 6,002 m 를 4 m 간격으로 덮으면 1,502열이고, 마지막 열은 6,004 m 에 놓입니다.
+    /// </remarks>
+    internal static (double[] Xs, double[] Ys) Grid((double XMin, double XMax, double YMin, double YMax) rect, double step)
     {
-        int ncol = (int)Math.Floor(((rect.XMax - rect.XMin) / step) + 1e-9) + 1;
-        int nrow = (int)Math.Floor(((rect.YMax - rect.YMin) / step) + 1e-9) + 1;
+        int ncol = CoverCount(rect.XMax - rect.XMin, step);
+        int nrow = CoverCount(rect.YMax - rect.YMin, step);
         return (Enumerable.Range(0, ncol).Select(i => rect.XMin + (i * step)).ToArray(),
             Enumerable.Range(0, nrow).Select(j => rect.YMax - (j * step)).ToArray());
     }
+
+    // 길이 span 을 간격 step 으로 끝까지 덮는 표본 수: ⌈span / step⌉ + 1. 나눈 값의 반올림 오차(1e-9 안)는 정수로 봅니다.
+    // 예: span 6,000 m, step 2 m 이면 3,001개, span 6,001 m 이면 3,002개(마지막 표본 6,002 m).
+    private static int CoverCount(double span, double step) => (int)Math.Ceiling((span / step) - 1e-9) + 1;
 
     private static (double[] Gx, double[] Gy) Mesh2(double[] xs, double[] ys)
     {
@@ -813,17 +861,19 @@ public static class Corridor
 
     private static double Round3(double x) => Math.Round(x * 1000.0, MidpointRounding.ToEven) / 1000.0;
 
-    /// <summary>회랑을 골라 엔진 파일을 굽습니다 (bake_corridor). 반환: manifest.</summary>
-    public static OrderedDictionary<string, object?> BakeCorridor(HeroState heroState, Config cfg, string outDir, string? engineDir = null, Action<string>? log = null)
+    /// <summary>
+    /// 회랑을 골라 엔진 파일을 굽습니다 (bake_corridor). 반환: manifest.
+    /// parent 는 구운 히어로 묶음의 표지(<see cref="RunFolder.BundleId"/>)로, 목차의 parent 에 그대로 적습니다.
+    /// </summary>
+    public static OrderedDictionary<string, object?> BakeCorridor(
+        HeroState heroState, Config cfg, string outDir, string? engineDir = null, Action<string>? log = null,
+        OrderedDictionary<string, object?>? parent = null)
     {
         long tAll = Stopwatch.GetTimestamp();
         Directory.CreateDirectory(outDir);
         var sec = new OrderedDictionary<string, object?>();
-        double voxel = cfg.F("profile.corridor.voxel_m");
-        if (!(double.IsFinite(voxel) && voxel > 0))
-        {
-            throw new ArgumentException($"profile.corridor.voxel_m 은 0 보다 커야 합니다: {voxel}");
-        }
+        // 오래 걸리는 3D 샘플 함수를 만들기 전에 회랑 크기 설정부터 봅니다.
+        (double askedLength, double askedWidth, double voxel) = SizeSettings(cfg);
 
         long t = Stopwatch.GetTimestamp();
         var vol = new HeroVolume(heroState, cfg);
@@ -848,6 +898,12 @@ public static class Corridor
         double lakeHa = cor.NLakeCells * heroState.Graph.Spacing * heroState.Graph.Spacing / 1.0e4;
         log?.Invoke($"[굽기] 회랑: {LogText.Axis(cor.Axis)} 방향으로 긴 {cor.LengthM:F0} × {cor.WidthM:F0} m, 시작 칸 {cor.StartCell} (본류 기준점: {apex}), "
             + $"동굴 입구와 싱크홀 {LogText.N(cor.NEntranceCells)}곳, 지표 암석 {cor.NRocks}종, 호수 {lakeHa:F1} ha, 점수 {cor.Score:F2}");
+        if (cor.LengthM != askedLength || cor.WidthM != askedWidth)
+        {
+            log?.Invoke($"[굽기] 설정한 회랑 크기를 줄였습니다: {LogText.Num(askedLength)} × {LogText.Num(askedWidth)} m → "
+                + $"{LogText.Num(cor.LengthM)} × {LogText.Num(cor.WidthM)} m (회랑은 히어로 유역 안에 들어가야 하고, "
+                + $"높이맵 표본이 회랑 끝까지 닿도록 길이와 폭을 표본 간격 {PyFormat.General(voxel)} m 의 정수배로 내려 맞춥니다)");
+        }
 
         // --- 높이맵 (회랑 지표)
         t = Stopwatch.GetTimestamp();
@@ -1104,13 +1160,14 @@ public static class Corridor
         caves["entrances_file"] = "entrances.json";
         var manifest = new OrderedDictionary<string, object?>
         {
-            ["format"] = "bpcg-corridor",
+            ["format"] = RunFolder.CorridorFormat,
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = Bundle.GitCommit(),
             ["git_dirty"] = Bundle.GitDirty(),
             ["config_digest"] = cfg.Digest(),
             ["seed"] = cfg.I("planet.seed"),
             ["profile"] = cfg.Sec("profile").Get("name"),
+            ["parent"] = parent,
             ["frame"] = frame.AsDict(),
             ["site"] = SiteFrame(heroState, cfg, cx, cy),
             ["corridor"] = corDict,
