@@ -74,6 +74,40 @@ def test_corridor_grids_share_frame(corridor, man):
     assert top["origin"] == hm["origin"] and np.array_equal(t[::step, ::step], h)
 
 
+def test_corridor_sides_off_the_sample_step_still_reach_the_edges(csharp_cli, tiny_run, tmp_path):
+    """회랑 길이·폭이 표본 간격의 정수배가 아니어도 높이맵이 회랑 사각형을 끝까지 덮습니다.
+
+    엔진은 둘레 25 m 지형을 회랑 사각형(rect_engine_m)만큼 비우고 그 자리를 높이맵으로 채웁니다.
+    높이맵이 변에 못 미치면 그 틈이 지형 없는 띠로 보입니다. 간격 3 m 에 길이 1,201 m, 폭 401 m 를
+    주면, 길이와 폭은 3 m 의 정수배로 내려 1,200 m × 399 m 가 됩니다. 399 m 는 4 m 의 정수배가
+    아니므로, 재질 부피(4 m 격자)는 마지막 줄을 변 너머 1 m 에 두어 사각형을 덮습니다.
+    """
+    out = tmp_path / "corridor"
+    proc = csharp_cli(
+        "bake", "--hero", tiny_run / "hero", "--out", out, "--no-globe",
+        "--set", "profile.corridor.voxel_m=3.0",
+        "--set", "profile.corridor.length_m=1201.0",
+        "--set", "profile.corridor.width_m=401.0",
+    )  # fmt: skip
+    assert "[굽기] 설정한 회랑 크기를 줄였습니다: 1,201 × 401 m → 1,200 × 399 m" in proc.stdout
+    cor = read_json(out / "manifest.json")["corridor"]
+    assert (cor["length_m"], cor["width_m"], cor["voxel_m"]) == (1200.0, 399.0, 3.0)
+    rect = cor["rect_engine_m"]
+    hm, _ = _heightmap(out, "heightmap")
+    x0, _y0, z0 = hm["origin"]
+    assert hm["spacing_m"] == 3.0
+    assert (x0, z0) == (rect["x_min"], rect["z_min"])
+    assert x0 + (hm["width"] - 1) * 3.0 == pytest.approx(rect["x_max"], abs=1e-6)
+    assert z0 + (hm["height"] - 1) * 3.0 == pytest.approx(rect["z_max"], abs=1e-6)
+    st = read_json(out / "strata.json")
+    rows, _layers, cols = st["shape"]
+    step = st["spacing_m"]["x"]
+    assert read_json(out / "strata_top.json")["origin"] == hm["origin"]
+    over_x = x0 + (cols - 1) * step - rect["x_max"]
+    over_z = z0 + (rows - 1) * step - rect["z_max"]
+    assert sorted([over_x, over_z]) == pytest.approx([0.0, 1.0], abs=1e-6)
+
+
 def test_water_marks_dry_cells_and_counts_wet(corridor, man):
     _, w = _heightmap(corridor, "water")
     wet = w > WATER_NONE_M + 1

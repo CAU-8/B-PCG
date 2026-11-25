@@ -312,10 +312,12 @@ PROFILE_HELP: dict[str, str] = {
     "그런 자리가 없으면 전체 실행(all)에서는 평면 히어로로 바뀝니다",
     "profile.corridor.voxel_m": "회랑(L3) 높이맵과 동굴 메시의 간격입니다. 작을수록 자세하지만 "
     "굽기가 오래 걸립니다",
-    "profile.corridor.width_m": "걷는 회랑의 폭입니다. 히어로 한 변보다 크면 히어로에 맞춰 "
-    "줄어듭니다",
-    "profile.corridor.length_m": "걷는 회랑의 길이(강을 따라)입니다. 히어로 한 변보다 크면 "
-    "줄어듭니다",
+    "profile.corridor.width_m": "걷는 회랑의 폭(m)입니다. 히어로 한 변보다 크면 히어로에 맞춰 "
+    "줄어들고, voxel_m 의 정수배가 아니면 그 아래 정수배로 줄어듭니다(간격 2 m 에서 1,001 m → "
+    "1,000 m). voxel_m 이상이어야 합니다",
+    "profile.corridor.length_m": "걷는 회랑의 길이(강을 따라, m)입니다. 히어로 한 변보다 크면 "
+    "줄어들고, voxel_m 의 정수배가 아니면 그 아래 정수배로 줄어듭니다(간격 2 m 에서 6,001 m → "
+    "6,000 m). voxel_m 이상이어야 합니다",
     "profile.compute.numba_threads": "계산에 쓸 CPU 스레드 수입니다. 0 이면 모든 코어를 씁니다",
 }
 
