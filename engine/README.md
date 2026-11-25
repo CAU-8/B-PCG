@@ -247,7 +247,7 @@ C# 굽기(`src/Bpcg/Bake/Heightmap.cs`)가 쓰고, 엔진은 `HeightmapLoader.Lo
 
 | 파일 | 엔진의 쓰임 |
 |---|---|
-| `manifest.json` | 회랑 사각형(`corridor.rect_engine_m`), 높이 기준(`frame.y_offset_m`), 파일 목록, 동굴 삼각형 수 |
+| `manifest.json` | 회랑 사각형(`corridor.rect_engine_m`), 높이 기준(`frame.y_offset_m`), 파일 목록, 동굴 삼각형 수. 둘레 지형(`surround25`)은 이 사각형 안을 비우고, `heightmap` 이 그 자리를 채웁니다. 굽기는 `heightmap` 의 첫 표본과 마지막 표본을 사각형의 변 위에 둡니다 |
 | `heightmap`, `surround25` | 지형 메시·충돌 (`HeightmapTerrain`) |
 | `heightmap_detail`, `cave_mouth_detail` | (있으면) 프랙탈 디테일 레이어. `heightmap`·`cave_mouth` 와 같은 격자 |
 | `water` | 물이 있는 표본(−10,000보다 큼)이 닿는 칸만 사각형으로 |

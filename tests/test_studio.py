@@ -752,6 +752,9 @@ def test_validate_request_checks_hero_and_corridor_area():
     assert "3·spacing_m" in details({"profile.hero.size_m": 200.0})["profile.hero.size_m"]
     assert "상한" in details({"profile.hero.size_m": 600_000.0})["profile.hero.size_m"]
     assert "profile.corridor.voxel_m" in details({"profile.corridor.voxel_m": 0.0})
+    # tiny 회랑의 표본 간격은 8 m 라 폭 4 m 는 높이맵에 표본 한 줄뿐입니다.
+    narrow = details({"profile.corridor.width_m": 4.0})["profile.corridor.width_m"]
+    assert "width_m 4 m" in narrow and "voxel_m 8 m" in narrow
     assert "덮어쓸 수 없습니다" in details({"planet.name": "x"})["planet.name"]
     ok = validate_request({"profile": "tiny", "overrides": {"profile.hero.size_m": 6450.0}})
     assert ok["overrides"] == {"profile.hero.size_m": 6450.0}

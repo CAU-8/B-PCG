@@ -136,7 +136,8 @@ def domain_errors(cfg: Config, changed: set[str] | None = None) -> dict[str, str
     """형식은 맞지만 파이프라인이 받지 않는 영역 값 {키: 오류}.
 
     히어로 한 변·칸 간격(bpcg_studio.hero.hero_grid_size = C# Domain.HeroGridSize: 간격 > 0,
-    한 변 ≥ 3·간격, 칸 수 상한)과 회랑 길이·폭·복셀 간격(> 0)을 실행 전에 봅니다.
+    한 변 ≥ 3·간격, 칸 수 상한)과 회랑 길이·폭·복셀 간격(> 0, 길이·폭 ≥ 복셀 간격 =
+    C# Corridor.SizeSettings)을 실행 전에 봅니다.
     그대로 돌리면 행성 단계를 다 돈 뒤에야 히어로에서 멈추고, 그 오류가 '히어로 자리를
     찾지 못함' 으로 잘못 보입니다.
     changed: 사용자가 바꾼 키 (오류를 그 키에 붙임).
@@ -160,6 +161,18 @@ def domain_errors(cfg: Config, changed: set[str] | None = None) -> dict[str, str
             errors[f"profile.corridor.{name}"] = (
                 f"profile.corridor.{name} 은 0 보다 커야 합니다: {v!r}"
             )
+    if cor is not None and not any(
+        f"profile.corridor.{n}" in errors for n in ("length_m", "width_m", "voxel_m")
+    ):
+        voxel = cor.get("voxel_m")
+        for name, noun, josa in (("length_m", "길이", "가"), ("width_m", "폭", "이")):
+            v = cor.get(name)
+            if voxel is not None and v is not None and float(v) < float(voxel):
+                errors[f"profile.corridor.{name}"] = (
+                    f"회랑 {noun}(profile.corridor.{name} {v:g} m){josa} 높이맵의 "
+                    f"표본 간격(voxel_m {voxel:g} m)보다 짧아, 높이맵이 그 방향에 표본 한 줄만 "
+                    f"가집니다. {name} 을 {voxel:g} m 이상으로 늘리거나 voxel_m 을 줄이세요."
+                )
     return errors
 
 
