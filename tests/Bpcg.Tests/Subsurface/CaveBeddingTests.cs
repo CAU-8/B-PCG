@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Bpcg.Core;
+using Bpcg.Geology;
 using Bpcg.Subsurface;
 using Xunit;
 
@@ -358,5 +359,159 @@ public sealed class CaveBeddingTests
         Assert.Equal(Enumerable.Range(1, SinkCol).Sum(Segment), net.LowerLevelM, tolerance: 1e-9);
         // 내려간 깊이의 평균은 통로 칸 23개(샘 포함)로 나눕니다.
         Assert.Equal(d.Skip(1).Sum() / (SinkCol + 1), net.MeanLoopDepthM, tolerance: 1e-9);
+    }
+
+    [Fact]
+    public void SolubleFloorIsTheBottomOfTheSolubleRunBelowTheHeight()
+    {
+        // 칸 0: 석회암(바닥 500 m) / 대리암(450 m) / 두께 0 인 셰일(450 m) / 석회암(300 m) / 셰일 바탕 암석.
+        // 칸 1: 석회암(500 m) / 셰일(450 m) / 석회암(300 m) / 석회암 바탕 암석.
+        const int nL = 4;
+        double[] bottom = [500.0, 450.0, 450.0, 300.0, 500.0, 450.0, 300.0, 300.0];
+        byte[] rock =
+        [
+            Rocks.Limestone, Rocks.Marble, Rocks.Shale, Rocks.Limestone, Rocks.Shale,
+            Rocks.Limestone, Rocks.Shale, Rocks.Limestone, Rocks.Granite, Rocks.Limestone,
+        ];
+        // 녹는 층이 이어지는 데까지 내려갑니다. 깎여 없어진 셰일은 막지 않습니다.
+        Assert.Equal(300.0, Caves.SolubleFloor(bottom, rock, nL, 0, 520.0));
+        Assert.Equal(300.0, Caves.SolubleFloor(bottom, rock, nL, 0, 480.0));
+        // 녹지 않는 층 안의 높이는 더 내려갈 녹는 암석이 없습니다.
+        Assert.Equal(250.0, Caves.SolubleFloor(bottom, rock, nL, 0, 250.0));
+        // 칸 1 은 50 m 두께의 셰일이 석회암을 둘로 나눕니다. 아래 석회암은 두께 0 인 화강암을 건너 바탕 암석까지 녹습니다.
+        Assert.Equal(500.0, Caves.SolubleFloor(bottom, rock, nL, 1, 520.0));
+        Assert.Equal(480.0, Caves.SolubleFloor(bottom, rock, nL, 1, 480.0));
+        Assert.Equal(double.NegativeInfinity, Caves.SolubleFloor(bottom, rock, nL, 1, 400.0));
+        Assert.True(double.IsNaN(Caves.SolubleFloor(bottom, rock, nL, 1, double.NaN)));
+    }
+
+    [Fact]
+    public void ALoopStopsAboveTheBottomOfTheSolubleRock()
+    {
+        // 층리면을 따라가면 통로는 2열부터 물 높이 아래 20 m 입니다 (PassageRisesToTheSpringNoSteeperThanTheLimit 와 같은 땅).
+        // 녹는 암석의 바닥: 15열부터 물 높이 아래 12 m, 10~14열은 물 높이 그대로(아래층이 녹는 층 바닥에 놓임), 5열은 모름(NaN),
+        // 나머지는 바탕 암석까지 녹습니다.
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = RowWorld();
+        int n = N * N;
+        const double sin = 0.4;
+        const double deep = 20.0;
+        double span = CaveNetwork.LoopDepth(SinkCol * Dx, sin);
+        double[] bed = Enumerable.Repeat(double.NaN, n).ToArray();
+        double[] dip = new double[n];
+        for (int col = 0; col <= SinkCol; col++)
+        {
+            int c = Cell(Row, col);
+            bed[c] = levels[c] - ((10.0 * span) + deep);
+            dip[c] = sin;
+        }
+        static double Floor(int col, double level) =>
+            col >= 15 ? level - 12.0 : col >= 10 ? level : col == 5 ? double.NaN : double.NegativeInfinity;
+        int asked = 0;
+        double[] FloorAt(double[] x, double[] y, double[] lv)
+        {
+            asked += x.Length;
+            return x.Select((v, i) => Floor((int)Math.Floor(v / Dx), lv[i])).ToArray();
+        }
+        CaveNetwork net = CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(BedZ: bed, DipSin: dip, SolubleFloorAt: FloorAt));
+        Assert.Equal(SinkCol + 1, asked);
+        for (int col = 0; col <= SinkCol; col++)
+        {
+            int c = Cell(Row, col);
+            double top = levels[c] + (CaveNetwork.StreamLift * R);
+            double drop = Math.Min(deep, CaveNetwork.SpringRiseSlope * Dx * col);
+            double floor = Floor(col, levels[c]);
+            if (double.IsFinite(floor))
+            {
+                // 15열부터: 12 − 0.6·R = 10.8 m 까지만 내려가 통로 바닥이 녹는 암석의 바닥에 닿습니다. 10~14열: 내려가지 않습니다.
+                drop = Math.Min(drop, Math.Max(top - R - floor, 0.0));
+            }
+            Assert.Equal(top - drop, net.AxisZ[c], tolerance: 1e-9);
+            if (col >= 15)
+            {
+                Assert.Equal(levels[c] - 12.0, net.AxisZ[c] - R, tolerance: 1e-9);
+            }
+        }
+        Assert.Equal(levels[Cell(Row, 7)] + (CaveNetwork.StreamLift * R) - deep, net.AxisZ[Cell(Row, 7)], tolerance: 1e-9);
+        Assert.Equal(levels[Cell(Row, 5)] + (CaveNetwork.StreamLift * R) - deep, net.AxisZ[Cell(Row, 5)], tolerance: 1e-9);
+    }
+
+    [Fact]
+    public void TheSolubleFloorIsReadWhereThePassageRuns()
+    {
+        // PassageFollowsAHandMadeTiltedBedBetweenJitteredNodes 와 같은 땅입니다. 흔든 격자에서 통로는 꺾임을 다듬어 칸의 대표점에서
+        // 비켜 갑니다. 녹는 암석의 바닥이 자리마다 물결치면, 대표점이 아니라 통로가 지나는 자리에서 읽은 바닥 위에 통로가 남아야 합니다.
+        CellGraph g = Graph.FlatGraph(N, N, Dx, jitter: 1.0, seed: 11);
+        int n = N * N;
+        double[] levels = new double[n];
+        double[] z = new double[n];
+        bool[] allowed = new bool[n];
+        for (int c = 0; c < n; c++)
+        {
+            levels[c] = Level(c % N);
+            z[c] = levels[c] + 60.0;
+            allowed[c] = true;
+        }
+        int spring = Cell(Row, 0);
+        int sink = Cell(Row, SinkCol);
+        bool[] outlet = new bool[n];
+        outlet[spring] = true;
+        allowed[spring] = false;
+        double[] area = new double[n];
+        area[sink] = 2.0e5;
+        (double[] bottom, int nL) = TiltedLayers(g);
+        (double[] bedZ, double[] dipSin) = Bedding.AtLevel(g, bottom, nL, levels);
+        static double Floor(double x, double y, double level) => level - 6.0 + (4.0 * Math.Sin(x / 9.0) * Math.Cos(y / 11.0));
+        CaveNetwork net = CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(
+                BedZ: bedZ, DipSin: dipSin,
+                SolubleFloorAt: (x, y, lv) => x.Select((v, i) => Floor(v, y[i], lv[i])).ToArray()));
+
+        // 싱크홀에서 샘까지의 길. 칸마다 통로가 지나는 자리는 그 칸에서 시작하는 통로 조각의 시작점입니다.
+        var down = new Dictionary<int, (double X, double Y, double Step)>();
+        int e = 0;
+        for (int c = 0; c < n; c++)
+        {
+            if (net.Flow[c] > 0.0 && net.Parent[c] >= 0)
+            {
+                double ex = net.SegB[e * 3] - net.SegA[e * 3];
+                double ey = net.SegB[(e * 3) + 1] - net.SegA[(e * 3) + 1];
+                down[c] = (net.SegA[e * 3], net.SegA[(e * 3) + 1], Math.Sqrt((ex * ex) + (ey * ey)));
+                e++;
+            }
+        }
+        var path = new List<int>();
+        for (int c = sink; c >= 0; c = net.Parent[c])
+        {
+            path.Add(c);
+        }
+        Assert.Equal(spring, path[^1]);
+        var toSpring = new Dictionary<int, double> { [spring] = 0.0 };
+        for (int i = path.Count - 2; i >= 0; i--)
+        {
+            toSpring[path[i]] = toSpring[path[i + 1]] + down[path[i]].Step;
+        }
+        double span = CaveNetwork.LoopDepth(toSpring[sink], PlaneDipSin);
+
+        // 바닥이 없을 때의 깊이(톱니 깊이와 샘 쪽 자르기)를 바닥이 허락하는 만큼만 내려갑니다: 통로 바닥(가운데 선 − 반지름) ≥ 녹는 암석의 바닥.
+        int lifted = 0;
+        int offNode = 0;
+        foreach (int c in path.Where(c => c != spring))
+        {
+            double above = levels[c] - bedZ[c];
+            double saw = above - (span * Math.Floor(above / span));
+            double drop = Math.Min(saw, CaveNetwork.SpringRiseSlope * toSpring[c]);
+            double top = levels[c] + (CaveNetwork.StreamLift * R);
+            double floor = Floor(down[c].X, down[c].Y, levels[c]);
+            double room = Math.Max(top - R - floor, 0.0);
+            Assert.Equal(top - Math.Min(drop, room), net.AxisZ[c], tolerance: 1e-6);
+            if (drop > room + 0.5)
+            {
+                lifted++;
+                offNode += Math.Abs(Floor(g.Pos[c * 3], g.Pos[(c * 3) + 1], levels[c]) - floor) > 0.5 ? 1 : 0;
+            }
+        }
+        Assert.True(lifted >= 3, $"바닥에 막혀 덜 내려간 통로 칸이 {lifted}곳뿐이라 시험이 아무것도 확인하지 않습니다");
+        Assert.True(offNode >= 3, $"막힌 칸 가운데 대표점과 통로 자리의 바닥이 다른 칸이 {offNode}곳뿐이라 읽는 자리를 시험하지 못합니다");
     }
 }
