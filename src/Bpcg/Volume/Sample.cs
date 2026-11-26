@@ -1141,6 +1141,26 @@ public sealed class HeroVolume
     }
 
     /// <summary>
+    /// (x, y, z) 자리마다 높이 z 아래로 이어지는 녹는 암석의 바닥 높이 [m] (Caves.SolubleFloor). 지층 값은 이 3D 샘플 함수가 동굴을
+    /// 녹는 암석 안에만 그릴 때 쓰는 값(Columns, 칸 중심으로 옮겨 보간한 층 바닥)과 같습니다. 통로 그물은 이 값으로 아래층 통로가
+    /// 내려갈 수 있는 바닥을 정하므로, 통로의 가운데 선이 녹지 않는 암석에 들어가 잘리지 않습니다.
+    /// </summary>
+    private double[] SolubleFloorAt(double[] x, double[] y, double[] z)
+    {
+        double[] floor = new double[z.Length];
+        if (z.Length == 0)
+        {
+            return floor;
+        }
+        ColumnValues cols = Columns(x, y);
+        for (int q = 0; q < z.Length; q++)
+        {
+            floor[q] = Caves.SolubleFloor(cols.StrataBottom, cols.StrataRock, NLayers, q, z[q]);
+        }
+        return floor;
+    }
+
+    /// <summary>
     /// 동굴 조각을 만듭니다. 입구 칸마다 산 밖으로 열리는지 확인해 샘으로 삼고, 싱크홀에서 샘까지의 통로 그물
     /// (<see cref="CaveNetwork"/>)을 만든 뒤, 층 통로·수직굴·입구 굴을 캡슐(양 끝과 반지름) 목록으로 모읍니다.
     /// </summary>
@@ -1337,7 +1357,8 @@ public sealed class HeroVolume
                 BedZ: bedZ, DipSin: dipSin, StreamLossM3PerYr: streamLoss,
                 GroundAtNodes: cells => SurfaceHeight(
                     Array.ConvertAll(cells, c => graph.Pos[c * 3]), Array.ConvertAll(cells, c => graph.Pos[(c * 3) + 1])),
-                StreamRouteLevel0: route0));
+                StreamRouteLevel0: route0,
+                SolubleFloorAt: SolubleFloorAt));
         BuildDolines(
             graph, area, sinkSpacing,
             cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,

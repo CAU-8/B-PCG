@@ -34,10 +34,15 @@ public sealed record CaveNetworkParams(
 /// (N,) 개울이 사라지는 칸에서 샘까지 길을 찾을 때 쓰는 아래층 높이 [m] (Caves.RouteLevel0). 그린 아래층에, 지표에서 300 m 보다 깊어
 /// 굽지 않는 석회암의 아래 지하수면 높이를 더한 값입니다. 빗물이 모이는 싱크홀은 쓰지 않습니다 (없으면 levels 의 아래층).
 /// </param>
+/// <param name="SolubleFloorAt">
+/// (x, y, z) 자리마다 높이 z 아래로 이어지는 녹는 암석의 바닥 높이 [m]. 아래층 통로가 층리면을 따라 물 높이 아래로 내려가도 통로
+/// 바닥(가운데 선 − 반지름)이 이 높이 아래로 가지 않습니다. 통로의 꺾임을 다듬은 뒤의 자리에서 묻습니다. NaN 을 돌려준 자리와
+/// 주지 않은 경우는 막지 않습니다.
+/// </param>
 public sealed record CaveNetworkFields(
     double[]? DischargeM3PerYr = null, long[]? Receiver = null, double[]? UpliftMPerYr = null, double[]? BedZ = null,
     double[]? DipSin = null, double[]? StreamLossM3PerYr = null, Func<int[], double[]>? GroundAtNodes = null,
-    double[]? StreamRouteLevel0 = null);
+    double[]? StreamRouteLevel0 = null, Func<double[], double[], double[], double[]>? SolubleFloorAt = null);
 
 /// <summary>
 /// 통로 그물의 모양을 잰 값. 실제 동굴 지도 34개에서 잰 범위 (Collon 외 2017, 정정 2021): 마디에 이어진 가지 수의 평균 1.75~2.57
@@ -69,7 +74,8 @@ public sealed record CaveShape(
 /// 3. 통로 굵기는 두 한계 가운데 작은 쪽입니다 (Radius). 큰비 때의 물을 가득 채워 흘릴 수 있는 굵기, 그리고 통로가 물에 잠겨
 ///    있는 동안 벽이 녹아 물러난 거리.
 /// 4. 아래층 통로는 지층이 쌓인 면(층리면)을 따라갑니다. 층리면이 기울어 있으면 통로가 물 높이 아래로 내려갔다가 틈을 타고
-///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth 가 폭, SawtoothDepth 가 깊이).
+///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth 가 폭, SawtoothDepth 가 깊이). 녹는 암석의
+///    바닥 아래로는 내려가지 않습니다 (CaveNetworkFields.SolubleFloorAt).
 /// 길을 고르는 비교에는 더하기, 곱하기만 씁니다. 지수·로그 함수는 운영체제마다 끝자리가 달라 길이 달라질 수 있기 때문입니다.
 /// 굵기와 깊이(길을 고른 뒤의 모양)에만 거듭제곱을 씁니다.
 /// </remarks>
@@ -923,10 +929,20 @@ public sealed class CaveNetwork
                     done[a] = true;
                 }
             }
-            foreach (int c in cells)
+            // 층리면은 녹는 암석 아래에도 이어지지만 동굴은 녹는 암석 안에만 생깁니다. 그래서 통로 바닥(가운데 선 − 반지름)이 녹는
+            // 암석의 바닥 아래로 가지 않게 깊이를 줄입니다. 바닥 높이는 꺾임을 다듬은 뒤 통로가 실제로 지나는 자리(xy)에서 묻습니다.
+            double[]? floor = more.SolubleFloorAt?.Invoke(
+                cells.ConvertAll(c => xy[c * 2]).ToArray(), cells.ConvertAll(c => xy[(c * 2) + 1]).ToArray(),
+                cells.ConvertAll(c => routeLevels[c]).ToArray());
+            for (int t = 0; t < cells.Count; t++)
             {
+                int c = cells[t];
                 // 샘에서는 물이 지표로 나와야 하므로, 샘에 가까울수록 얕게 둡니다 (샘까지 거리 × SpringRiseSlope 보다 깊지 않게).
                 double drop = Math.Min(saw[c], SpringRiseSlope * toSpring[c]);
+                if (floor is not null && !double.IsNaN(floor[t]))
+                {
+                    drop = Math.Min(drop, Math.Max(axis[c] - radius[c] - floor[t], 0.0));
+                }
                 axis[c] -= drop;
                 meanLoop += drop;
                 nLower++;
