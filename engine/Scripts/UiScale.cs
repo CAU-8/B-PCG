@@ -11,7 +11,10 @@ namespace Bpcg.Engine;
 /// 둘 다 절반 크기로 보입니다. 그래서
 /// (1) 처음 뜰 때 창을 화면 배율만큼 키우고(<see cref="FitWindow"/>, 크기를 따로 주지 않았을 때만),
 /// (2) 창의 ContentScaleFactor 로 2D(HUD)만 키우고 3D 는 원래 해상도로 그립니다.
-/// 배율 = 자동 배율 × 사용자 배율입니다. 자동 배율은 화면 배율(맥·웨이랜드는 OS 배율, 윈도는 DPI ÷ 96)이되,
+/// 배율 = 자동 배율 × 사용자 배율입니다. 자동 배율(<see cref="AutoFactorFor"/>)은 화면 배율(맥·웨이랜드는 OS 배율,
+/// 윈도는 DPI ÷ 96)과 창 크기 배율 가운데 큰 값입니다. 창 크기 배율은 창이 기본 창(1152×648)의 몇 배인지입니다.
+/// 화면 배율만 보면, 배율 1 인 프로젝터에 1920×1080 창을 띄울 때 HUD 가 1배로 그려져 창에서 차지하는 몫이
+/// 노트북(배율 2, 2304×1296 창)의 0.6배로 줄어듭니다. 창 크기 배율을 함께 보면 1.67배로 그려 같은 몫을 지킵니다.
 /// 창이 작으면 HUD 가 서로 겹치지 않게 <see cref="MinCanvas"/> 를 넘지 않을 만큼 줄입니다(1 보다 작게는 줄이지 않음).
 /// 사용자 배율은 [-]·[=] 키로 10 % 씩 바꾸고 user://settings.cfg 에 남겨, 장면을 바꾸거나 다시 실행해도 그대로 씁니다.
 /// </remarks>
@@ -80,9 +83,7 @@ public static class UiScale
         {
             return false;
         }
-        var baseSize = new Vector2I(
-            ProjectSettings.GetSetting("display/window/size/viewport_width", 1152).AsInt32(),
-            ProjectSettings.GetSetting("display/window/size/viewport_height", 648).AsInt32());
+        Vector2I baseSize = BaseWindowSize();
         float scale = ScreenFactor(window);
         if (window.Size != baseSize || scale <= 1.0f)
         {
@@ -109,12 +110,24 @@ public static class UiScale
         return Math.Clamp(s, 1.0f, 4.0f);
     }
 
-    /// <summary>자동 배율: 화면 배율이되, 2D 화면이 MinCanvas 보다 작아지지 않게 줄임 (1 이상).</summary>
-    public static float AutoFactor(Window window)
+    /// <summary>프로젝트의 기본 창 크기 (px, 설정이 없으면 Godot 기본값 1152×648).</summary>
+    public static Vector2I BaseWindowSize() => new(
+        ProjectSettings.GetSetting("display/window/size/viewport_width", 1152).AsInt32(),
+        ProjectSettings.GetSetting("display/window/size/viewport_height", 648).AsInt32());
+
+    /// <summary>지금 창의 자동 배율 (<see cref="AutoFactorFor"/>).</summary>
+    public static float AutoFactor(Window window) => AutoFactorFor(window.Size, ScreenFactor(window), BaseWindowSize());
+
+    /// <summary>
+    /// 자동 배율: 화면 배율과 창 크기 배율(창이 기본 창의 몇 배인지, 가로·세로 가운데 작은 쪽) 가운데 큰 값이되,
+    /// 2D 화면이 MinCanvas 보다 작아지지 않게 줄입니다 (1 이상).
+    /// 예: 배율 1 화면의 1920×1080 창은 1.67, 배율 2 화면의 2304×1296 창은 2, 배율 2 화면의 1152×648 창은 1.08 입니다.
+    /// </summary>
+    public static float AutoFactorFor(Vector2 windowSize, float screenFactor, Vector2 baseSize)
     {
-        Vector2 size = window.Size;
-        float fit = Math.Min(size.X / MinCanvas.X, size.Y / MinCanvas.Y);
-        return Math.Max(1.0f, Math.Min(ScreenFactor(window), fit));
+        float bySize = Math.Min(windowSize.X / baseSize.X, windowSize.Y / baseSize.Y);
+        float fit = Math.Min(windowSize.X / MinCanvas.X, windowSize.Y / MinCanvas.Y);
+        return Math.Max(1.0f, Math.Min(Math.Max(screenFactor, bySize), fit));
     }
 
     /// <summary>사용자 배율 (UserMin~UserMax, 기본 1).</summary>

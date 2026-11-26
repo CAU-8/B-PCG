@@ -7,15 +7,17 @@ using Godot;
 namespace Bpcg.Engine;
 
 /// <summary>
-/// 높이맵 한 장을 읽어 메시(MeshInstance3D)와 충돌체(StaticBody3D)를 자식으로 만듭니다.
+/// 높이맵 한 장을 읽어 그리기용 메시와 충돌체(StaticBody3D)를 자식으로 만듭니다.
+/// 메시는 "Mesh" 아래에 64 × 64 칸 조각(MeshInstance3D "Chunk&lt;번호&gt;")과 치마("Skirt")로 나눠 둡니다(<see cref="MeshNode"/>).
 /// </summary>
 /// <remarks>
 /// 굽기 폴더가 없으면 HeightmapStem 대신 FallbackStem (samples/ 의 작은 표본)을 씁니다.
 /// res://baked/ 로 시작하는 경로는 <see cref="BakedPaths.Resolve"/> 로 지금 굽기 폴더로 바뀝니다.
-/// 만드는 일은 두 단계입니다. <see cref="Prepare(string, float, Rect2)"/> 가 파일을 읽고 메시 덩어리 배열과 충돌 조각을
-/// 계산하고 (주 스레드 밖에서 불러도 됨), <see cref="ApplySteps"/> 가 그 결과로 노드를 만듭니다 (주 스레드, 메시 덩어리나
-/// 충돌 조각 하나씩). 메시 Mesh 는 덩어리마다 면(surface) 하나이고, 충돌체 Body 아래에는 정사각 조각 Shape0, Shape1, … 이
-/// 있습니다 (<see cref="HeightmapLoader.BuildMeshChunks"/>, <see cref="HeightmapLoader.BuildShapeTiles"/>).
+/// 만드는 일은 두 단계입니다. <see cref="Prepare(string, float, Rect2)"/> 가 파일을 읽고 메시 조각 배열과 충돌 조각을
+/// 계산하고 (주 스레드 밖에서 불러도 됨), <see cref="ApplySteps"/> 가 그 결과로 노드를 만듭니다 (주 스레드, 메시 조각이나
+/// 충돌 조각 하나씩). 메시 조각이 따로 있어야 Godot 가 화면 밖 조각과 그림자 거리 밖 조각을 건너뛰고, 먼 조각을 거친
+/// 삼각형 목록으로 그립니다. 충돌체 Body 아래에는 정사각 조각 Shape0, Shape1, … 이 있습니다
+/// (<see cref="HeightmapLoader.BuildChunkArrays"/>, <see cref="HeightmapLoader.BuildShapeTiles"/>).
 /// <see cref="HoleMouth"/> 를 넣으면 동굴 입구 자리의 충돌면에 구멍을 뚫습니다 (구멍 닿은 조각을 바꾸고 Body/HolePatch 를 붙임).
 /// 구멍을 닫을 때(<see cref="SetHolesOpen"/>)는 Body/HolePlug 를 붙입니다.
 /// </remarks>
@@ -77,7 +79,8 @@ public partial class HeightmapTerrain : Node3D
     public HeightmapLoader.HoleSet? Holes { get; private set; }
 
     private sealed record Built(
-        HeightmapLoader Heightmap, ArrayMesh Mesh, HeightMapShape3D[] Shapes, Transform3D[] ShapeTransforms, IReadOnlyList<ShapeTile> Tiles);
+        HeightmapLoader Heightmap, ArrayMesh[] Chunks, bool[] OnEdge, ArrayMesh? Skirt, long Triangles,
+        HeightMapShape3D[] Shapes, Transform3D[] ShapeTransforms, IReadOnlyList<ShapeTile> Tiles);
 
     /// <summary>구멍을 뚫은 충돌면의 Godot 모양: 바뀐 조각 (조각 번호 → 모양), 덧판, 마개.</summary>
     private sealed record HoleShapes(
@@ -104,25 +107,25 @@ public partial class HeightmapTerrain : Node3D
     }
 
     /// <summary>
-    /// 높이맵 stem 을 읽어 메시 덩어리 배열과 충돌 조각을 계산합니다. Godot 노드와 자원을 만들지 않으므로 주 스레드 밖에서
+    /// 높이맵 stem 을 읽어 메시 조각 배열과 충돌 조각을 계산합니다. Godot 노드와 자원을 만들지 않으므로 주 스레드 밖에서
     /// 불러도 됩니다. 읽지 못하면 Heightmap.ErrorMessage 가 채워진 결과를 돌려줍니다.
     /// </summary>
     public static PreparedTerrain Prepare(string stem, float skirtM, Rect2 hole) =>
         Prepare(HeightmapLoader.LoadStem(stem), skirtM, hole);
 
-    /// <summary>이미 읽은 높이맵으로 메시 덩어리 배열과 충돌 조각을 계산합니다 (주 스레드 밖에서 불러도 됨).</summary>
+    /// <summary>이미 읽은 높이맵으로 메시 조각 배열과 충돌 조각을 계산합니다 (주 스레드 밖에서 불러도 됨).</summary>
     public static PreparedTerrain Prepare(HeightmapLoader hm, float skirtM, Rect2 hole)
     {
         if (!hm.IsValid())
         {
-            return new PreparedTerrain(hm.Stem, hm, [], []);
+            return PreparedTerrain.Failed(hm);
         }
         if (hole.HasArea())
         {
             // 경계 바로 안쪽 한 칸은 남겨 고운 지형과 이어지게 합니다.
             hole = hole.Grow(-hm.SpacingM);
         }
-        return new PreparedTerrain(hm.Stem, hm, hm.BuildMeshChunks(skirtM), hm.BuildShapeTiles(hole));
+        return new PreparedTerrain(hm.Stem, hm, hm.BuildChunkArrays(skirtM), hm.BuildShapeTiles(hole));
     }
 
     /// <summary>
@@ -138,7 +141,7 @@ public partial class HeightmapTerrain : Node3D
     }
 
     /// <summary>
-    /// <see cref="Apply"/> 를 나눠서 합니다: MoveNext 한 번에 메시 덩어리 하나나 충돌 조각 하나를 만듭니다. 부르는 쪽이
+    /// <see cref="Apply"/> 를 나눠서 합니다: MoveNext 한 번에 메시 조각 하나나 충돌 조각 하나를 만듭니다. 부르는 쪽이
     /// 단계 사이에 프레임을 그리면, 큰 지형(laptop 회랑 150만 표본)을 만드는 동안에도 화면이 멈추지 않습니다.
     /// 돌려주는 값은 지금까지 한 단계 수입니다. 끝까지 돌아야 BuildCount 가 늘고 다시 쓸 수 있게 기억됩니다.
     /// </summary>
@@ -152,18 +155,22 @@ public partial class HeightmapTerrain : Node3D
             yield break;
         }
         UsedStem = prepared.Stem;
-        var mesh = new ArrayMesh();
-        var meshInstance = new MeshInstance3D { Name = "Mesh", Mesh = mesh, Position = prepared.Heightmap.Origin };
-        if (Material is not null)
-        {
-            meshInstance.MaterialOverride = Material;
-        }
-        AddChild(meshInstance);
+        HeightmapLoader.ChunkedArrays arrays = prepared.Mesh;
+        bool hasSkirt = arrays.Skirt is not null;
+        var meshRoot = new Node3D { Name = "Mesh", Position = prepared.Heightmap.Origin };
+        AddChild(meshRoot);
+        var chunks = new ArrayMesh[arrays.Chunks.Count];
         int step = 0;
-        foreach (MeshArrays chunk in prepared.Chunks)
+        for (int i = 0; i < chunks.Length; i++)
         {
-            chunk.AddTo(mesh);
+            chunks[i] = arrays.Chunks[i].ToArrayMesh();
+            meshRoot.AddChild(ChunkNode(i, chunks[i], hasSkirt && arrays.Chunks[i].OnEdge, Material, ShadowOn));
             yield return ++step;
+        }
+        ArrayMesh? skirt = arrays.Skirt?.ToArrayMesh();
+        if (skirt is not null)
+        {
+            meshRoot.AddChild(SkirtNode(skirt, Material, ShadowOn));
         }
         var body = new StaticBody3D { Name = "Body" };
         AddChild(body);
@@ -175,7 +182,8 @@ public partial class HeightmapTerrain : Node3D
             yield return ++step;
         }
         _built[prepared.Stem] = new Built(
-            prepared.Heightmap, mesh, shapes, prepared.Tiles.Select(t => t.Transform).ToArray(), prepared.Tiles);
+            prepared.Heightmap, chunks, [.. arrays.Chunks.Select(c => c.OnEdge)], skirt, arrays.Triangles,
+            shapes, prepared.Tiles.Select(t => t.Transform).ToArray(), prepared.Tiles);
         BuildCount++;
         ApplyHoles();
     }
@@ -243,7 +251,7 @@ public partial class HeightmapTerrain : Node3D
             }
             catch (Exception e)
             {
-                prepared = new PreparedTerrain(stem, HeightmapLoader.Failed(stem, $"{e.GetType().Name}: {e.Message}"), [], []);
+                prepared = PreparedTerrain.Failed(HeightmapLoader.Failed(stem, $"{e.GetType().Name}: {e.Message}"));
             }
         }
         else
@@ -258,16 +266,60 @@ public partial class HeightmapTerrain : Node3D
         return true;
     }
 
+    /// <summary>
+    /// 나눠 만든 지형 메시를 노드로 만듭니다: "Mesh" 아래에 조각마다 "Chunk&lt;번호&gt;", 치마가 있으면 "Skirt".
+    /// 치마가 있으면 가장자리 조각은 <see cref="HeightmapLoader.EdgeLodBias"/> 배 먼 거리부터 거친 목록으로 바꿉니다.
+    /// </summary>
+    public static Node3D MeshNode(IReadOnlyList<ArrayMesh> chunks, IReadOnlyList<bool> onEdge, ArrayMesh? skirt, Vector3 origin,
+        Material? material, GeometryInstance3D.ShadowCastingSetting shadow = ShadowOn)
+    {
+        var root = new Node3D { Name = "Mesh", Position = origin };
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            root.AddChild(ChunkNode(i, chunks[i], skirt is not null && onEdge[i], material, shadow));
+        }
+        if (skirt is not null)
+        {
+            root.AddChild(SkirtNode(skirt, material, shadow));
+        }
+        return root;
+    }
+
+    private const GeometryInstance3D.ShadowCastingSetting ShadowOn = GeometryInstance3D.ShadowCastingSetting.On;
+
+    /// <summary>조각 메시 하나의 노드. edgeBias 면 거친 목록으로 바꾸는 거리를 EdgeLodBias 배로 늘립니다.</summary>
+    private static MeshInstance3D ChunkNode(
+        int i, ArrayMesh mesh, bool edgeBias, Material? material, GeometryInstance3D.ShadowCastingSetting shadow) =>
+        new()
+        {
+            Name = $"Chunk{i}",
+            Mesh = mesh,
+            MaterialOverride = material,
+            CastShadow = shadow,
+            LodBias = edgeBias ? HeightmapLoader.EdgeLodBias : 1.0f,
+        };
+
+    /// <summary>치마 메시의 노드. 지형 셰이더(cross_section)는 치마의 층 색을 지표 높이 대신 그린 높이로 고릅니다 (벽 아래쪽은 땅속).</summary>
+    private static MeshInstance3D SkirtNode(ArrayMesh mesh, Material? material, GeometryInstance3D.ShadowCastingSetting shadow)
+    {
+        var skirt = new MeshInstance3D { Name = "Skirt", Mesh = mesh, MaterialOverride = material, CastShadow = shadow };
+        skirt.SetInstanceShaderParameter("is_skirt", true);
+        return skirt;
+    }
+
     /// <summary>지형이 보이는지 (메시만 숨기고 충돌은 남깁니다).</summary>
     public void SetMeshVisible(bool on)
     {
-        if (GetNodeOrNull("Mesh") is MeshInstance3D mesh)
+        if (GetNodeOrNull("Mesh") is Node3D mesh)
         {
             mesh.Visible = on;
         }
     }
 
-    public bool IsMeshVisible() => GetNodeOrNull("Mesh") is MeshInstance3D mesh && mesh.Visible;
+    public bool IsMeshVisible() => GetNodeOrNull("Mesh") is Node3D mesh && mesh.Visible;
+
+    /// <summary>지형 메시를 가장 고운 목록으로 그릴 때의 삼각형 수 (치마 포함). 메시가 없으면 0.</summary>
+    public long MeshTriangles() => _built.TryGetValue(UsedStem, out Built? b) ? b.Triangles : 0;
 
     /// <summary>이 노드 기준 국소 좌표 (x, z) 의 지면 높이 (m). 지형 밖이면 NaN.</summary>
     public float HeightAt(Vector3 localPos) => Heightmap is null ? float.NaN : Heightmap.HeightAt(localPos);
@@ -288,13 +340,7 @@ public partial class HeightmapTerrain : Node3D
         ClearChildren();
         Heightmap = built.Heightmap;
         UsedStem = stem;
-
-        var meshInstance = new MeshInstance3D { Name = "Mesh", Mesh = built.Mesh, Position = Heightmap.Origin };
-        if (Material is not null)
-        {
-            meshInstance.MaterialOverride = Material;
-        }
-        AddChild(meshInstance);
+        AddChild(MeshNode(built.Chunks, built.OnEdge, built.Skirt, Heightmap.Origin, Material));
 
         var body = new StaticBody3D { Name = "Body" };
         for (int i = 0; i < built.Shapes.Length; i++)
@@ -453,10 +499,13 @@ public partial class HeightmapTerrain : Node3D
 }
 
 /// <summary>
-/// 다른 스레드에서 읽고 계산해 둔 지형: 높이맵, 메시 덩어리 배열, 충돌 조각. 덩어리가 없으면 읽지 못한 것입니다
+/// 다른 스레드에서 읽고 계산해 둔 지형: 높이맵, 메시 조각 배열, 충돌 조각. 조각이 없으면 읽지 못한 것입니다
 /// (Heightmap.ErrorMessage 에 까닭).
 /// </summary>
-public sealed record PreparedTerrain(string Stem, HeightmapLoader Heightmap, List<MeshArrays> Chunks, List<ShapeTile> Tiles)
+public sealed record PreparedTerrain(string Stem, HeightmapLoader Heightmap, HeightmapLoader.ChunkedArrays Mesh, List<ShapeTile> Tiles)
 {
-    public bool IsValid => Chunks.Count > 0 && Heightmap.IsValid();
+    public bool IsValid => Mesh.Chunks.Count > 0 && Heightmap.IsValid();
+
+    /// <summary>읽지 못한 높이맵 hm 의 결과 (조각 없음).</summary>
+    public static PreparedTerrain Failed(HeightmapLoader hm) => new(hm.Stem, hm, new HeightmapLoader.ChunkedArrays([], null, 0), []);
 }

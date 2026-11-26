@@ -81,7 +81,7 @@ public partial class Main : Node3D
     private long _lastLoadFrame;
 
     /// <summary>
-    /// 불러오는 동안 한 프레임에 쓰는 만들기 시간 (ms). 일 조각(메시 덩어리, 충돌 조각)을 이 시간이 찰 때까지 이어서 하고
+    /// 불러오는 동안 한 프레임에 쓰는 만들기 시간 (ms). 일 조각(메시 조각, 충돌 조각)을 이 시간이 찰 때까지 이어서 하고
     /// 화면을 그립니다. 조각 하나가 이보다 길면 그 프레임만 길어집니다.
     /// </summary>
     public const double LoadFrameBudgetMs = 25.0;

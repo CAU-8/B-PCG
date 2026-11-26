@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Bpcg.Core;
 using Godot;
 
 namespace Bpcg.Engine;
 
 /// <summary>
 /// 굽기(Bpcg.Bake.Heightmap)가 쓴 높이맵 한 장(.bin + .json)을 읽습니다.
-/// 읽은 뒤 그리기용 <see cref="ArrayMesh"/> 와 충돌용 <see cref="HeightMapShape3D"/> 를 만듭니다.
+/// 읽은 뒤 그리기용 메시(한 장 <see cref="BuildMesh"/>, 조각으로 나눈 <see cref="BuildChunkArrays"/>)와
+/// 충돌용 <see cref="HeightMapShape3D"/> 조각을 만듭니다.
 /// </summary>
 /// <remarks>
 /// 좌표 약속 (Godot 국소 접평면 좌표, 단위 m): X = 동쪽, Y = 위, Z = 남쪽.
@@ -20,8 +22,36 @@ public sealed class HeightmapLoader
 {
     public const string Format = "float32_le";
 
-    /// <summary>메시 덩어리 하나에 담는 꼭짓점 수의 목표 (<see cref="BuildMeshChunks"/>).</summary>
-    public const int MeshChunkVertices = 100_000;
+    /// <summary>
+    /// 지형을 나눠 그리는 조각 한 변의 칸 수. 조각으로 나눠야 Godot 가 화면 밖 조각과 그림자 거리 밖 조각을 건너뜁니다.
+    /// 끝에 남는 칸이 이 값의 절반보다 적으면 앞 조각에 붙입니다.
+    /// </summary>
+    public const int ChunkQuads = 64;
+
+    /// <summary>
+    /// 조각마다 미리 만들어 두는 거친 메시의 칸 건너뛰기 간격. 2 는 두 칸마다 한 줄만 써서 삼각형이 약 4분의 1이 됩니다.
+    /// 조각 둘레는 늘 모든 꼭짓점을 써서, 옆 조각이 어떤 간격을 쓰든 틈이 생기지 않습니다.
+    /// </summary>
+    public static readonly int[] LodStrides = [2, 4, 8, 16, 32];
+
+    /// <summary>거친 메시의 높이 오차 하한 (m). 평평한 조각도 0 이 아니게 둡니다(Godot 가 거리 0 에서 0 ÷ 0 을 하지 않게).</summary>
+    public const float MinLodErrorM = 0.001f;
+
+    /// <summary>
+    /// 높이맵 가장자리에 닿은 조각의 거친 메시 전환 거리 배수. 치마(가장자리에서 아래로 내린 벽)가 있는 지형에서, 거친 메시가
+    /// 가장자리 바로 안쪽에서 가장자리 높이보다 1 px 안쪽만큼 꺼지면 치마 윗부분이 가는 점선으로 드러납니다. 그래서 이 조각들은
+    /// 4배 먼 거리(화면 오차 0.25 px)부터 거친 메시로 바꿉니다(GeometryInstance3D.LodBias).
+    /// </summary>
+    public const float EdgeLodBias = 4.0f;
+
+    /// <summary>
+    /// 나눠 그리는 지형 메시의 배열: 조각(행 우선, 조각마다 거친 삼각형 목록과 가장자리 여부)과 둘레 치마(없으면 null).
+    /// Godot 자원이 아니므로 주 스레드 밖에서 만들고, 주 스레드에서 <see cref="MeshArrays.ToArrayMesh"/> 로 메시를 만듭니다.
+    /// </summary>
+    /// <param name="Chunks">조각 배열. 꼭짓점은 BuildMesh 와 같은 타일 국소 좌표라 모두 origin 에 놓습니다.</param>
+    /// <param name="Skirt">가장자리 치마만 담은 배열.</param>
+    /// <param name="Triangles">가장 고운 목록으로 그릴 때의 삼각형 수 (치마 포함).</param>
+    public sealed record ChunkedArrays(List<MeshArrays> Chunks, MeshArrays? Skirt, long Triangles);
 
     /// <summary>
     /// 충돌 조각 한 변의 표본 수 상한 (256 칸). 조각이 작을수록 한 조각을 만드는 동안 화면이 덜 멈춥니다.
@@ -166,64 +196,341 @@ public sealed class HeightmapLoader
     }
 
     /// <summary>
-    /// <see cref="BuildMeshArrays"/> 의 메시를 행 묶음 여러 덩어리로 나눕니다 (덩어리마다 꼭짓점 maxVertices 개 안팎).
-    /// 이웃 덩어리와 경계 행을 같이 가지므로 이음매가 없고, 치마는 마지막 덩어리입니다. 주 스레드가 덩어리 하나씩 메시 면
-    /// (surface)으로 올려, 큰 지형도 한 프레임에 몰아 만들지 않습니다. Godot 자원을 만들지 않으므로 주 스레드 밖에서
-    /// 불러도 됩니다.
+    /// 그리기용 메시를 chunkQuads × chunkQuads 칸 조각으로 나눈 배열을 만듭니다. 꼭짓점과 법선은 <see cref="BuildMesh"/> 와
+    /// 같고, 조각 경계의 꼭짓점은 양쪽 조각에 한 번씩 들어갑니다. 조각마다 <see cref="LodStrides"/> 간격의 거친 삼각형 목록을
+    /// 함께 넣고, 목록마다 그 조각의 높이 오차(m)를 붙입니다. Godot 는 이 오차가 화면에서 1 px(프로젝트 설정
+    /// rendering/mesh_lod/lod_change/threshold_pixels)보다 작아지는 거리부터 거친 목록으로 그립니다.
+    /// skirtM &gt; 0 이면 둘레 치마를 따로 만듭니다. Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 되고,
+    /// 조각마다 따로 계산해 여러 코어로 나눠도 결과가 같습니다.
     /// </summary>
-    public List<MeshArrays> BuildMeshChunks(float skirtM = 0.0f, int maxVertices = MeshChunkVertices)
+    public ChunkedArrays BuildChunkArrays(float skirtM = 0.0f, int chunkQuads = ChunkQuads)
     {
-        MeshArrays full = BuildMeshArrays(skirtM);
-        int rowsPerChunk = Math.Max(2, maxVertices / Width);
-        var chunks = new List<MeshArrays>();
-        for (int row0 = 0; ; row0 += rowsPerChunk - 1)
+        int[] cols = ChunkEdges(Width - 1, chunkQuads);
+        int[] rows = ChunkEdges(Height - 1, chunkQuads);
+        int nc = cols.Length - 1;
+        int n = (rows.Length - 1) * nc;
+        var parts = new MeshArrays[n];
+        Parallelism.ForTasks(n, k =>
         {
-            int row1 = Math.Min(row0 + rowsPerChunk - 1, Height - 1);
-            int first = row0 * Width;
-            int last = ((row1 + 1) * Width) - 1;
-            // 행 우선으로 쌓은 사각형이라, 이 행 묶음의 삼각형 번호는 한 구간에 이어져 있습니다.
-            int[] indices = full.Indices[(row0 * (Width - 1) * 6)..(row1 * (Width - 1) * 6)];
-            for (int i = 0; i < indices.Length; i++)
+            int row = k / nc;
+            int col = k % nc;
+            bool onEdge = row == 0 || row == rows.Length - 2 || col == 0 || col == nc - 1;
+            parts[k] = BuildChunk(rows[row], rows[row + 1], cols[col], cols[col + 1], onEdge);
+        });
+        long triangles = parts.Sum(p => (long)p.Indices.Length / 3);
+        MeshArrays? skirt = skirtM > 0.0f ? BuildSkirtArrays(skirtM) : null;
+        if (skirt is not null)
+        {
+            triangles += skirt.Indices.Length / 3;
+        }
+        return new ChunkedArrays([.. parts], skirt, triangles);
+    }
+
+    /// <summary>
+    /// 칸 수 n 을 size 칸씩 나눈 조각 경계 (0, size, 2·size, …, n). 끝에 남는 조각이 size 의 절반보다 작으면 앞 조각에 붙입니다.
+    /// 예: n = 3,000, size = 64 이면 경계 48개(조각 47개), 끝 조각은 56칸입니다.
+    /// </summary>
+    public static int[] ChunkEdges(int n, int size)
+    {
+        var edges = new List<int> { 0 };
+        for (int at = size; at < n; at += size)
+        {
+            edges.Add(at);
+        }
+        if (edges.Count > 1 && n - edges[^1] < size / 2)
+        {
+            edges.RemoveAt(edges.Count - 1);
+        }
+        edges.Add(n);
+        return [.. edges];
+    }
+
+    /// <summary>
+    /// 가로 nx 칸, 세로 nz 칸 조각의 삼각형 목록 (꼭짓점 번호 = 행 · (nx + 1) + 열). stride 1 은 모든 칸을 쓰는
+    /// BuildMesh 와 같은 목록입니다. stride s &gt; 1 은 s 칸마다 한 줄만 쓰는 거친 목록이고, s 는 nx 와 nz 보다 작아야 합니다.
+    /// 거친 목록도 조각 둘레의 꼭짓점은 모두 써서, 옆 조각이 어떤 간격을 쓰든 경계선이 늘 같습니다.
+    /// 둘레에 닿지 않은 거친 칸은 삼각형 둘, 둘레에 한 변이 닿은 칸은 그 변의 꼭짓점들을 반씩 나눠 맞은편 두 모서리에서
+    /// 부채꼴로 잇고, 두 변이 닿은 귀퉁이 칸은 안쪽 모서리 하나에서 부채꼴로 잇습니다.
+    /// 모든 삼각형은 위에서 볼 때 시계 방향(Godot 앞면)이고, 목록마다 조각 사각형을 겹침 없이 꼭 한 번 덮습니다.
+    /// </summary>
+    public static int[] LodIndices(int nx, int nz, int stride)
+    {
+        int w = nx + 1;
+        if (stride <= 1)
+        {
+            int[] full = new int[nx * nz * 6];
+            int k = 0;
+            for (int r = 0; r < nz; r++)
             {
-                indices[i] -= first;
+                for (int c = 0; c < nx; c++)
+                {
+                    int nw = (r * w) + c;
+                    full[k] = nw;
+                    full[k + 1] = nw + 1;
+                    full[k + 2] = nw + w;
+                    full[k + 3] = nw + 1;
+                    full[k + 4] = nw + w + 1;
+                    full[k + 5] = nw + w;
+                    k += 6;
+                }
             }
-            chunks.Add(new MeshArrays
+            return full;
+        }
+        if (stride >= Math.Min(nx, nz))
+        {
+            throw new ArgumentException(
+                $"거친 메시 간격 stride {stride} 칸이 조각 크기 {nx} × {nz} 칸보다 작아야 합니다. stride 를 {Math.Min(nx, nz) - 1} 이하로 주세요");
+        }
+        int[] cs = CoarseLines(nx, stride);
+        int[] rs = CoarseLines(nz, stride);
+        var indices = new List<int>();
+        var ring = new List<int>((4 * stride) + 4);
+        void Tri(int a, int b, int c)
+        {
+            // 위에서 볼 때 시계 방향 (열 = x 오른쪽, 행 = z 아래쪽 화면에서 외적 > 0) 으로 맞춥니다.
+            long cross = ((long)((b % w) - (a % w)) * ((c / w) - (a / w))) - ((long)((b / w) - (a / w)) * ((c % w) - (a % w)));
+            indices.Add(a);
+            indices.Add(cross > 0 ? b : c);
+            indices.Add(cross > 0 ? c : b);
+        }
+        for (int ri = 0; ri < rs.Length - 1; ri++)
+        {
+            for (int ci = 0; ci < cs.Length - 1; ci++)
             {
-                Vertices = full.Vertices[first..(last + 1)],
-                Normals = full.Normals[first..(last + 1)],
-                Uvs = full.Uvs[first..(last + 1)],
-                Indices = indices,
-            });
-            if (row1 == Height - 1)
+                int rA = rs[ri];
+                int rB = rs[ri + 1];
+                int cA = cs[ci];
+                int cB = cs[ci + 1];
+                bool north = ri == 0;
+                bool south = ri == rs.Length - 2;
+                bool west = ci == 0;
+                bool east = ci == cs.Length - 2;
+                int nw = (rA * w) + cA;
+                int ne = (rA * w) + cB;
+                int sw = (rB * w) + cA;
+                int se = (rB * w) + cB;
+                int fine = (north ? 1 : 0) + (south ? 1 : 0) + (west ? 1 : 0) + (east ? 1 : 0);
+                if (fine == 0)
+                {
+                    Tri(nw, ne, sw);
+                    Tri(ne, se, sw);
+                    continue;
+                }
+                if (fine == 1)
+                {
+                    // 둘레에 닿은 변의 꼭짓점 top[0..len] 과 맞은편 두 모서리 a1 (top[0] 쪽), a2 (top[len] 쪽).
+                    // top 의 앞 절반은 a1 에서, 뒤 절반은 a2 에서 부채꼴로 잇고, 가운데 꼭짓점과 a1·a2 로 삼각형 하나를 둡니다.
+                    bool alongRow = north || south;
+                    int line = north ? rA : south ? rB : west ? cA : cB;
+                    int lo = alongRow ? cA : rA;
+                    int len = alongRow ? cB - cA : rB - rA;
+                    int a1 = north ? sw : south ? nw : west ? ne : nw;
+                    int a2 = north ? se : south ? ne : west ? se : sw;
+                    int Top(int u) => alongRow ? (line * w) + lo + u : ((lo + u) * w) + line;
+                    int mid = len / 2;
+                    for (int u = 0; u < mid; u++)
+                    {
+                        Tri(a1, Top(u), Top(u + 1));
+                    }
+                    Tri(a1, Top(mid), a2);
+                    for (int u = mid; u < len; u++)
+                    {
+                        Tri(a2, Top(u), Top(u + 1));
+                    }
+                    continue;
+                }
+                // 귀퉁이 칸: 둘레를 시계 방향으로 돌며 둘레에 놓인 변의 꼭짓점을 모두 넣고, 안쪽 모서리에서 부채꼴로 잇습니다.
+                ring.Clear();
+                ring.Add(nw);
+                for (int c = cA + 1; north && c < cB; c++)
+                {
+                    ring.Add((rA * w) + c);
+                }
+                ring.Add(ne);
+                for (int r = rA + 1; east && r < rB; r++)
+                {
+                    ring.Add((r * w) + cB);
+                }
+                ring.Add(se);
+                for (int c = cB - 1; south && c > cA; c--)
+                {
+                    ring.Add((rB * w) + c);
+                }
+                ring.Add(sw);
+                for (int r = rB - 1; west && r > rA; r--)
+                {
+                    ring.Add((r * w) + cA);
+                }
+                int apex = !north && !west ? nw : !north && !east ? ne : !south && !east ? se : sw;
+                int start = ring.IndexOf(apex);
+                for (int j = 1; j < ring.Count - 1; j++)
+                {
+                    Tri(apex, ring[(start + j) % ring.Count], ring[(start + j + 1) % ring.Count]);
+                }
+            }
+        }
+        return [.. indices];
+    }
+
+    /// <summary>0, s, 2s, … (n 보다 작은 것) 과 n.</summary>
+    private static int[] CoarseLines(int n, int stride)
+    {
+        var lines = new List<int>();
+        for (int at = 0; at < n; at += stride)
+        {
+            lines.Add(at);
+        }
+        lines.Add(n);
+        return [.. lines];
+    }
+
+    /// <summary>행 r0..r1, 열 c0..c1 (양 끝 포함) 조각의 꼭짓점·법선과 삼각형 목록 (가장 고운 목록과 거친 목록들).</summary>
+    private MeshArrays BuildChunk(int r0, int r1, int c0, int c1, bool onEdge)
+    {
+        int nx = c1 - c0;
+        int nz = r1 - r0;
+        int w = nx + 1;
+        var vertices = new Vector3[w * (nz + 1)];
+        var normals = new Vector3[w * (nz + 1)];
+        for (int r = 0; r <= nz; r++)
+        {
+            for (int c = 0; c <= nx; c++)
+            {
+                int row = r0 + r;
+                int col = c0 + c;
+                vertices[(r * w) + c] = new Vector3(col * SpacingM, Heights[(row * Width) + col], row * SpacingM);
+                normals[(r * w) + c] = NormalAt(row, col);
+            }
+        }
+        var lods = new List<(float ErrorM, int[] Indices)>();
+        float last = 0.0f;
+        foreach (int stride in LodStrides)
+        {
+            if (stride >= Math.Min(nx, nz))
             {
                 break;
             }
+            // 오차는 간격이 커질수록 커지게 맞춥니다 (Godot 는 오차가 작은 목록부터 차례로 봅니다).
+            int[] lod = LodIndices(nx, nz, stride);
+            float errorM = Math.Max(Math.Max(LodErrorM(r0, c0, nx, lod), MinLodErrorM), last * 1.01f);
+            lods.Add((errorM, lod));
+            last = errorM;
         }
-        int skirtStart = (Width - 1) * (Height - 1) * 6;
-        if (full.Indices.Length > skirtStart)
+        return new MeshArrays { Vertices = vertices, Normals = normals, Indices = LodIndices(nx, nz, 1), Lods = lods, OnEdge = onEdge };
+    }
+
+    /// <summary>
+    /// 거친 삼각형 목록 lodIndices 로 그린 면이 조각 (r0, c0, 가로 nx 칸) 의 표본 높이와 다른 정도의 최댓값 (m).
+    /// 삼각형마다 덮는 표본을 한 줄씩 훑어, 삼각형 평면의 높이와 표본 높이를 견줍니다.
+    /// </summary>
+    private float LodErrorM(int r0, int c0, int nx, int[] lodIndices)
+    {
+        int w = nx + 1;
+        double worst = 0.0;
+        for (int t = 0; t < lodIndices.Length; t += 3)
         {
-            // 치마 삼각형이 쓰는 꼭짓점(둘레 위·아래)만 모아 번호를 새로 매깁니다.
-            var local = new Dictionary<int, int>();
-            var vertices = new List<Vector3>();
-            var normals = new List<Vector3>();
-            var uvs = new List<Vector2>();
-            int[] indices = new int[full.Indices.Length - skirtStart];
-            for (int i = 0; i < indices.Length; i++)
+            int r1 = lodIndices[t] / w;
+            int k1 = lodIndices[t] % w;
+            int r2 = lodIndices[t + 1] / w;
+            int k2 = lodIndices[t + 1] % w;
+            int r3 = lodIndices[t + 2] / w;
+            int k3 = lodIndices[t + 2] % w;
+            double h1 = H(r0 + r1, c0 + k1);
+            double det = ((double)(r2 - r1) * (k3 - k1)) - ((double)(k2 - k1) * (r3 - r1));
+            if (det == 0.0)
             {
-                int g = full.Indices[skirtStart + i];
-                if (!local.TryGetValue(g, out int l))
-                {
-                    l = vertices.Count;
-                    local[g] = l;
-                    vertices.Add(full.Vertices[g]);
-                    normals.Add(full.Normals[g]);
-                    uvs.Add(full.Uvs[g]);
-                }
-                indices[i] = l;
+                continue;
             }
-            chunks.Add(new MeshArrays { Vertices = [.. vertices], Normals = [.. normals], Uvs = [.. uvs], Indices = indices });
+            // 평면 h = h1 + dhDr · (행 − r1) + dhDk · (열 − k1)
+            double dh2 = H(r0 + r2, c0 + k2) - h1;
+            double dh3 = H(r0 + r3, c0 + k3) - h1;
+            double dhDr = ((dh2 * (k3 - k1)) - ((k2 - k1) * dh3)) / det;
+            double dhDk = (((r2 - r1) * dh3) - (dh2 * (r3 - r1))) / det;
+            for (int r = Math.Min(r1, Math.Min(r2, r3)); r <= Math.Max(r1, Math.Max(r2, r3)); r++)
+            {
+                // 이 행이 삼각형과 겹치는 열 범위
+                double lo = double.PositiveInfinity;
+                double hi = double.NegativeInfinity;
+                EdgeSpan(r, r1, k1, r2, k2, ref lo, ref hi);
+                EdgeSpan(r, r2, k2, r3, k3, ref lo, ref hi);
+                EdgeSpan(r, r3, k3, r1, k1, ref lo, ref hi);
+                for (int k = (int)Math.Ceiling(lo - 1e-9); k <= (int)Math.Floor(hi + 1e-9); k++)
+                {
+                    double lod = h1 + (dhDr * (r - r1)) + (dhDk * (k - k1));
+                    worst = Math.Max(worst, Math.Abs(H(r0 + r, c0 + k) - lod));
+                }
+            }
         }
-        return chunks;
+        return (float)worst;
+    }
+
+    /// <summary>행 r 이 변 (ra, ka)–(rb, kb) 와 만나는 열을 [lo, hi] 에 넣습니다. 수평 변이 그 행 위에 있으면 두 끝을 넣습니다.</summary>
+    private static void EdgeSpan(int r, int ra, int ka, int rb, int kb, ref double lo, ref double hi)
+    {
+        if (ra == rb)
+        {
+            if (ra == r)
+            {
+                lo = Math.Min(lo, Math.Min(ka, kb));
+                hi = Math.Max(hi, Math.Max(ka, kb));
+            }
+            return;
+        }
+        if ((long)(r - ra) * (r - rb) <= 0)
+        {
+            double k = ka + ((double)(r - ra) * (kb - ka) / (rb - ra));
+            lo = Math.Min(lo, k);
+            hi = Math.Max(hi, k);
+        }
+    }
+
+    /// <summary>둘레 치마만 담은 배열 (양면, 삼각형은 한 면에 둘씩 앞뒤로 넣음). Godot 자원을 만들지 않습니다.</summary>
+    private MeshArrays BuildSkirtArrays(float skirtM)
+    {
+        int[] ring = Perimeter();
+        int n = ring.Length;
+        var vertices = new Vector3[2 * n];
+        var normals = new Vector3[2 * n];
+        for (int j = 0; j < n; j++)
+        {
+            int row = ring[j] / Width;
+            int col = ring[j] % Width;
+            vertices[j] = new Vector3(col * SpacingM, Heights[ring[j]], row * SpacingM);
+            vertices[n + j] = vertices[j] - new Vector3(0.0f, skirtM, 0.0f);
+            normals[j] = NormalAt(row, col);
+            normals[n + j] = normals[j];
+        }
+        int[] indices = new int[n * 12];
+        int k = 0;
+        for (int j = 0; j < n; j++)
+        {
+            int a = j;
+            int b = (j + 1) % n;
+            int aLow = n + j;
+            int bLow = n + ((j + 1) % n);
+            foreach (int v in (int[])[a, b, aLow, b, bLow, aLow, a, aLow, b, b, aLow, bLow])
+            {
+                indices[k++] = v;
+            }
+        }
+        return new MeshArrays { Vertices = vertices, Normals = normals, Indices = indices };
+    }
+
+    private float H(int row, int col) => Heights[(row * Width) + col];
+
+    /// <summary>표본 (row, col) 의 법선. 양옆 표본의 높이 차로 기울기를 잽니다 (가장자리는 한쪽 차).</summary>
+    private Vector3 NormalAt(int row, int col)
+    {
+        int rowN = Math.Max(row - 1, 0);
+        int rowS = Math.Min(row + 1, Height - 1);
+        int colW = Math.Max(col - 1, 0);
+        int colE = Math.Min(col + 1, Width - 1);
+        int b = row * Width;
+        float dxM = (colE - colW) * SpacingM;
+        float dzM = (rowS - rowN) * SpacingM;
+        float dhDx = (Heights[b + colE] - Heights[b + colW]) / dxM;
+        float dhDz = (Heights[(rowS * Width) + col] - Heights[(rowN * Width) + col]) / dzM;
+        return new Vector3(-dhDx, 1.0f, -dhDz).Normalized();
     }
 
     /// <summary>
@@ -778,6 +1085,12 @@ public sealed class MeshArrays
 
     public int[] Indices { get; init; } = [];
 
+    /// <summary>거친 삼각형 목록과 그 높이 오차 (m), 오차가 작은 것부터 (<see cref="HeightmapLoader.BuildChunkArrays"/>). 비어 있으면 없음.</summary>
+    public IReadOnlyList<(float ErrorM, int[] Indices)> Lods { get; init; } = [];
+
+    /// <summary>지형 조각이 높이맵 가장자리에 닿는지 (<see cref="HeightmapLoader.EdgeLodBias"/>).</summary>
+    public bool OnEdge { get; init; }
+
     /// <summary>Godot 메시를 만듭니다 (주 스레드). 꼭짓점이 없으면 면이 없는 빈 메시입니다.</summary>
     public ArrayMesh ToArrayMesh()
     {
@@ -802,7 +1115,17 @@ public sealed class MeshArrays
             arrays[(int)Mesh.ArrayType.TexUV] = Uvs;
         }
         arrays[(int)Mesh.ArrayType.Index] = Indices;
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        if (Lods.Count == 0)
+        {
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            return;
+        }
+        var lods = new Godot.Collections.Dictionary();
+        foreach ((float errorM, int[] lodIndices) in Lods)
+        {
+            lods[errorM] = lodIndices;
+        }
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, lods: lods);
     }
 }
 

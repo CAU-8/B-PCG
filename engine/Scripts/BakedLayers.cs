@@ -162,7 +162,7 @@ public partial class BakedLayers : Node3D
     private HeightmapTerrain _terrain = null!;
     private HeightmapTerrain? _surround;
     private MeshInstance3D? _water;
-    private MeshInstance3D? _waterTable;
+    private Node3D? _waterTable;
     private Node3D? _caves;
     private MeshInstance3D? _section;
     private float _sectionYCenter;
@@ -186,7 +186,7 @@ public partial class BakedLayers : Node3D
     private readonly Dictionary<string, HeightmapLoader> _mouths = [];
 
     /// <summary>
-    /// 다른 스레드가 읽어 둔 회랑 파일로 지형과 레이어를 만듭니다 (주 스레드). MoveNext 한 번에 일 한 조각(지형 메시 덩어리
+    /// 다른 스레드가 읽어 둔 회랑 파일로 지형과 레이어를 만듭니다 (주 스레드). MoveNext 한 번에 일 한 조각(지형 메시 조각
     /// 하나, 충돌 조각 하나, 텍스처 묶음 하나 등)을 하고, 다음 조각이 속한 단계의 번호(<see cref="BuildStages"/>)를
     /// 돌려줍니다. Main 이 프레임마다 한 번씩 불러, 조각 사이에 불러오기 화면을 그립니다. 끝나면 회랑 지형이 있고, 구운
     /// 묶음이 있으면 Loaded 가 true 입니다.
@@ -254,6 +254,7 @@ public partial class BakedLayers : Node3D
                 Strata.ApplyTo(_terrainMaterial);
             }
             ApplyCaveMouth(files.UsesDetail ? CaveMouthDetailName : CaveMouthName);
+            ApplySurfaceHeight();
         }
 
         yield return 2;
@@ -605,9 +606,29 @@ public partial class BakedLayers : Node3D
         {
             ApplyCaveMouth(on ? CaveMouthDetailName : CaveMouthName);
         }
+        ApplySurfaceHeight();
         ApplySectionSurface();
         ApplySurfaceOffset(on);
         return on;
+    }
+
+    /// <summary>
+    /// 지형 재질이 땅속 층 깊이를 그린 면 대신 지금 회랑 높이맵에서 재게 합니다 (cross_section.gdshader 의 surface_y).
+    /// 먼 지형 조각은 칸을 건너뛴 거친 메시로 그려 그린 면이 실제 지표보다 몇 m 높거나 낮을 수 있습니다. 그 높이로 층을 고르면
+    /// 더 깊은 층의 색이 칠해집니다 (예: 흙 대신 그 아래 석회암 색).
+    /// </summary>
+    private void ApplySurfaceHeight()
+    {
+        HeightmapLoader? now = _terrain.Heightmap;
+        if (_terrainMaterial is null || now is null || !now.IsValid())
+        {
+            return;
+        }
+        _terrainMaterial.SetShaderParameter("has_surface_height", true);
+        _terrainMaterial.SetShaderParameter("surface_height_tex", CachedTexture(now));
+        _terrainMaterial.SetShaderParameter("surface_height_origin", now.Origin);
+        _terrainMaterial.SetShaderParameter("surface_height_spacing_m", now.SpacingM);
+        _terrainMaterial.SetShaderParameter("surface_height_size", new Vector2(now.Width, now.Height));
     }
 
     /// <summary>
@@ -646,7 +667,7 @@ public partial class BakedLayers : Node3D
         }
     }
 
-    /// <summary>주변 지형을 만듭니다. 메시 덩어리나 충돌 조각 하나마다 한 번 돌려줍니다 (<see cref="HeightmapTerrain.ApplySteps"/>).</summary>
+    /// <summary>주변 지형을 만듭니다. 메시 조각이나 충돌 조각 하나마다 한 번 돌려줍니다 (<see cref="HeightmapTerrain.ApplySteps"/>).</summary>
     private IEnumerable<int> BuildSurround(PreparedTerrain? prepared)
     {
         if (prepared is null)
@@ -770,17 +791,15 @@ public partial class BakedLayers : Node3D
         {
             return;
         }
-        _waterTable = new MeshInstance3D
-        {
-            Name = "WaterTable",
-            Mesh = WaterTable.BuildMesh(),
-            Position = WaterTable.Origin,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
         ShaderMaterial m = NewCutMaterial(WaterShaderPath);
         m.SetShaderParameter("water_color", WaterTableColor);
         m.SetShaderParameter("roughness", 0.3f);
-        _waterTable.MaterialOverride = m;
+        // 지형과 같이 조각으로 나눠, 화면 밖 조각은 건너뛰고 먼 조각은 거친 목록으로 그립니다.
+        HeightmapLoader.ChunkedArrays arrays = WaterTable.BuildChunkArrays();
+        _waterTable = HeightmapTerrain.MeshNode(
+            [.. arrays.Chunks.Select(c => c.ToArrayMesh())], [.. arrays.Chunks.Select(c => c.OnEdge)], null, WaterTable.Origin, m,
+            GeometryInstance3D.ShadowCastingSetting.Off);
+        _waterTable.Name = "WaterTable";
         AddChild(_waterTable);
         SetSection(SectionOn, SectionPoint, SectionNormal);
     }

@@ -12,8 +12,8 @@ Godot 는 사용자 폴더에 설정과 user:// 를 쓰므로 HOME (리눅스 XD
 
 검사
 - test_engine_imports_cleanly: 가져오기가 프로젝트 폴더(.godot/ 밖)에 .uid·.import 만 만듦.
-- test_engine_without_bake: 빈 굽기 폴더로 회랑(표본 지형만, 화면의 '불러오기 문제' 상자)과
-  지구본('자료가 없습니다').
+- test_engine_without_bake: 빈 굽기 폴더로 회랑(표본 지형만, 화면의 '불러오기 문제' 상자,
+  지형 조각과 거친 삼각형 목록, 화면 속도 줄)과 지구본('자료가 없습니다').
 - test_engine_generates_and_loads: 엔진 안에서 tiny 를 만들고(처음 화면의 --generate),
   그 실행으로 회랑·지구본 검사를 돌려 레이어·동굴 삼각형·입구 수·지구본 필드 수가 굽기 결과와
   같은지 봄. 회랑을 여러 프레임에 나눠 불러오는지, 지형을 한 번만 만드는지, 충돌면 조각의 솔기를
@@ -256,6 +256,8 @@ def test_engine_without_bake(engine, tmp_path):
     # 구운 회랑이 없다는 사실을 콘솔만이 아니라 화면의 '불러오기 문제' 상자에도 띄웁니다.
     shown = "불러오기 문제 화면: 불러오기 문제 1개 | • 구운 회랑의 목차 파일이 없어"
     assert f"{shown} 작은 표본 지형만 보여 줍니다" in out
+    # 표본(129 × 129)은 64 × 64 칸 조각 4개로 나뉘고, 거친 삼각형 목록이 조각을 꼭 한 번 덮습니다.
+    assert "지형 조각: 표본 4 조각" in out
     out = _scene(engine, GLOBE_SCENE, _baked(empty), ok="BPCG_GLOBE_OK (no data)")
     assert "자료 없음 알림: 지구본 자료가 없습니다" in out
 
@@ -277,6 +279,8 @@ def test_engine_generates_and_loads(engine, generated_run):
         assert "레이어: terrain, surround, water, water_table, section" in out
     assert f"입구 {man['caves']['n_entrances']}," in out
     assert "프랙탈 디테일: 켜짐 (처음)" in out
+    assert "지형 조각: 회랑" in out
+    assert "화면 속도 줄: P 로 숨기기·켜기 확인" in out
     # 다른 스레드와 여러 프레임에 나눠 불러오고, 회랑 지형은 디테일 하나만 만들고,
     # 충돌면은 정사각 조각입니다.
     assert "불러오기: " in out and "지형 메시 1번 만듦" in out
@@ -304,13 +308,14 @@ def test_engine_generates_and_loads(engine, generated_run):
         assert "이름표 '히어로 유역 (" in out
 
 
-def test_engine_shows_load_problems(engine, generated_run, tmp_path):
+def test_engine_shows_load_problems(engine, cave_run, tmp_path):
     """망가진 동굴 메시와 빠진 지하수면 파일을 화면의 '불러오기 문제' 상자에 띄웁니다.
 
-    나머지 레이어로는 회랑을 엽니다.
+    나머지 레이어로는 회랑을 엽니다. tiny 시드 0 회랑에는 동굴 메시가 없을 수 있어(입구 0곳),
+    동굴이 꼭 생기는 실행(cave_run)을 망가뜨립니다.
     """
     baked = tmp_path / "broken"
-    shutil.copytree(generated_run / "corridor", baked)
+    shutil.copytree(cave_run / "corridor", baked)
     glb = baked / "caves.glb"
     glb.write_bytes(glb.read_bytes()[: glb.stat().st_size // 2])  # 뒤 절반을 잘라 망가뜨림
     (baked / "water_table.bin").unlink()
