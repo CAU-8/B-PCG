@@ -64,8 +64,9 @@ uv run bpcg bake --hero out/earth/hero
 
 | 다른 실행 방법 | 명령 |
 |---|---|
+| 같은 시드의 노이즈 비교본 열기 | `uv run bpcg noise --profile tiny --seed 0` 뒤 `$GODOT --path engine -- --baked-dir="$(pwd)/out/earth-noise/corridor"`. 처음 화면에서는 '만드는 방법'을 '노이즈 비교본'으로 고릅니다([docs/noise_world.md](../docs/noise_world.md)) |
 | 편집기 없이 처음 화면부터 | `dotnet build engine/Bpcg.Engine.csproj` 뒤 `$GODOT --path engine` |
-| 화면 없이 생성만 (자동 실행·시험용) | `HOME=$(mktemp -d) $GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-when-done`. 끝나면 `BPCG_GENERATE_OK <실행 폴더>` 를 찍습니다 |
+| 화면 없이 생성만 (자동 실행·시험용) | `HOME=$(mktemp -d) $GODOT --headless --path engine -- --generate --profile=tiny --seed=0 --quit-when-done`. 끝나면 `BPCG_GENERATE_OK <실행 폴더>` 를 찍습니다. `--noise` 를 더하면 노이즈 비교본을 만듭니다 |
 | 새 파일 가져오기 (처음 한 번, 장면·셰이더를 바꾼 뒤) | `HOME=$(mktemp -d) $GODOT --headless --path engine --import`. 동굴 메시가 100 MB를 넘으면 1분 안팎 걸립니다 |
 
 화면 없이 돌리는 두 명령은 `HOME` 을 임시 폴더로 바꿔서 돌립니다. `--import` 는 편집기를 화면 없이 띄우는 명령이라, `HOME` 을 그대로 두면 내 Godot 편집기 설정 파일을 덮어씁니다([docs/history.md](../docs/history.md)의 2026-10-02 줄). 리눅스에서 `XDG_CONFIG_HOME`·`XDG_DATA_HOME` 을 쓰고 있다면 그 둘도, 윈도우에서는 `APPDATA`·`LOCALAPPDATA` 를 임시 폴더로 바꿉니다(시험이 쓰는 방법: [tests/test_engine.py](../tests/test_engine.py)의 `_isolated_env`).

@@ -78,6 +78,7 @@ uv run bpcg studio
 ```bash
 uv run bpcg --help                # 명령과 옵션 목록
 uv run bpcg compare run           # 기존 지형 생성 방법과 같은 시드로 비교 (docs/compare.md)
+uv run bpcg noise --profile tiny  # 같은 시드의 행성 전체를 노이즈만으로 만들어 Godot에서 비교 (docs/noise_world.md)
 dotnet build Bpcg.slnx            # C# 빌드 (생성기, 명령줄, 결과 그림, 엔진, 시험)
 dotnet test --solution Bpcg.slnx  # C# 시험 (golden 파일과 비트까지 같은지 등)
 uv run pytest -m "not slow"       # 파이썬 빠른 시험 (C# 결과 파일, 스튜디오). 전부는 uv run pytest
