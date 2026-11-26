@@ -76,8 +76,22 @@ public sealed class StrataVolume
 
     public string ErrorMessage { get; private set; } = "";
 
-    /// <summary>dir 아래 strata.json, strata.u8, strata_top.* 을 읽습니다.</summary>
+    /// <summary>텍스처로 올리기 전의 3D 텍스처 한 장씩 (행마다, 가로 = 열, 세로 = 층). CreateTextures 뒤에는 비웁니다.</summary>
+    private Image[] _slices = [];
+
+    /// <summary>dir 아래 strata.json, strata.u8, strata_top.* 을 읽고 셰이더용 텍스처까지 만듭니다 (주 스레드).</summary>
     public static StrataVolume LoadDir(string dir)
+    {
+        StrataVolume volume = ReadDir(dir);
+        volume.CreateTextures();
+        return volume;
+    }
+
+    /// <summary>
+    /// dir 아래 파일을 읽고 3D 텍스처의 장(Image)까지 만듭니다. 그래픽 카드로 올리는 텍스처는 만들지 않으므로 주 스레드
+    /// 밖에서 불러도 됩니다. 읽은 뒤 주 스레드에서 <see cref="CreateTextures"/> 를 부릅니다.
+    /// </summary>
+    public static StrataVolume ReadDir(string dir)
     {
         var volume = new StrataVolume();
         volume.Read(dir);
@@ -131,10 +145,18 @@ public sealed class StrataVolume
         return Data[(((row * Layers) + layer) * Cols) + col];
     }
 
+    /// <summary>굽기가 층리의 어두운 띠에 붙이는 이름 꼬리 (src/Bpcg/Bake/Corridor.cs 의 범례: '&lt;암석&gt;_dark_bed').</summary>
+    public const string DarkBedSuffix = "_dark_bed";
+
     /// <summary>재질 번호의 한국어 이름 (모르면 "번호 N").</summary>
     public string NameOf(int id)
     {
         string english = Names.GetValueOrDefault(id, "");
+        // 층리의 어두운 띠는 번호와 색만 다른 같은 암석입니다. 꼬리를 떼고 암석 이름으로 보여 줍니다.
+        if (english.EndsWith(DarkBedSuffix, StringComparison.Ordinal))
+        {
+            english = english[..^DarkBedSuffix.Length];
+        }
         return KoreanNames.TryGetValue(english, out string? korean) ? korean : $"번호 {id}";
     }
 
@@ -198,23 +220,32 @@ public sealed class StrataVolume
             List<object?> rgb = Json.Arr(entry["rgb"])!;
             Colors[id] = Color.Color8((byte)Json.I(rgb[0]), (byte)Json.I(rgb[1]), (byte)Json.I(rgb[2]));
         }
-        BuildTextures();
-    }
-
-    private void BuildTextures()
-    {
         int sliceBytes = Layers * Cols;
-        var images = new Godot.Collections.Array<Image>();
+        _slices = new Image[Rows];
         for (int row = 0; row < Rows; row++)
         {
             byte[] slice = Data.AsSpan(row * sliceBytes, sliceBytes).ToArray();
-            images.Add(Image.CreateFromData(Cols, Layers, false, Image.Format.R8, slice));
+            _slices[row] = Image.CreateFromData(Cols, Layers, false, Image.Format.R8, slice);
         }
+    }
+
+    /// <summary>
+    /// 읽은 자료로 셰이더용 텍스처(3D 재질, 윗면 높이, 색표)를 만듭니다. 그래픽 카드로 올리므로 주 스레드에서 부릅니다.
+    /// 읽기에 실패했으면 아무것도 하지 않고, 텍스처를 만들지 못하면 ErrorMessage 를 채웁니다.
+    /// </summary>
+    public void CreateTextures()
+    {
+        if (!IsValid() || Texture is not null)
+        {
+            return;
+        }
+        var images = new Godot.Collections.Array<Image>(_slices);
+        _slices = [];
         Texture = new ImageTexture3D();
         Error err = Texture.Create(Image.Format.R8, Cols, Layers, Rows, false, images);
         if (err != Error.Ok)
         {
-            ErrorMessage = $"3D 텍스처를 만들지 못했습니다 (오류 {err})";
+            ErrorMessage = $"3D 텍스처를 만들지 못했습니다 (Godot 오류 {err}, 크기 {Cols} × {Layers} × {Rows})";
             return;
         }
         TopTexture = ImageTexture.CreateFromImage(Image.CreateFromData(

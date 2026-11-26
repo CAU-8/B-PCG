@@ -198,6 +198,102 @@ public static class Caves
     }
 
     /// <summary>
+    /// 개울이 사라지는 자리에서 샘까지 길을 찾을 때 쓰는 아래층 높이 (route_level_0) [m].
+    /// 동굴 층(CaveLevels)은 회랑 재질 부피를 굽는 깊이(groundwater.max_depth_m) 안에만 둡니다. 그보다 깊은 석회암에도 물이
+    /// 흐르는 길은 있으므로, 아래층이 비어 있는 까닭이 '지표에서 너무 깊어서'뿐인 칸은 아래 지하수면 높이를 씁니다.
+    /// - 아래층(level0)이 있는 칸: 그 높이.
+    /// - 아래층이 없고, 지표 z 에서 아래 지하수면 zLower 까지 maxDepth 보다 깊고, 그 높이의 암석이 물에 녹는 칸: zLower.
+    /// - 그 밖의 칸: NaN (그 높이의 암석이 녹지 않는 칸, 지하수면이 지표 가까이 있어 동굴 층을 두지 않은 칸 등).
+    /// 히어로 단계(KarstStreams.DrainsToSpring)와 굽기(CaveNetwork.Build)가 같은 값을 보도록 모든 높이를 32비트 실수로 줄여
+    /// 견줍니다. 굽기는 히어로 묶음에 32비트로 저장한 값을 읽기 때문입니다.
+    /// 예: 산등성이 밑이라 지표가 아래 지하수면보다 420 m 높은 석회암 칸은 아래층이 없지만, 이 함수는 그 칸에 아래 지하수면 높이를 줍니다.
+    /// level0·zLower·z: (N,) [m]. 반환: (N,) [m].
+    /// </summary>
+    public static double[] RouteLevel0(double[] level0, double[] zLower, double[] z, LayerColumns columns, double maxDepth)
+    {
+        int n = level0.Length;
+        if (zLower.Length != n || z.Length != n || columns.NCells != n)
+        {
+            throw new ArgumentException(
+                $"level0, zLower, z, columns 는 칸 수가 같아야 합니다. 받은 칸 수: {n}, {zLower.Length}, {z.Length}, {columns.NCells}");
+        }
+        if (!(maxDepth >= 0.0))
+        {
+            throw new ArgumentException($"groundwater.max_depth_m 은 0 이상이어야 합니다. 받은 값: {maxDepth}");
+        }
+        int nl = columns.NLayers;
+        double[] route = new double[n];
+        Parallelism.For(0, n, c =>
+        {
+            double lv = (float)level0[c];
+            if (double.IsFinite(lv))
+            {
+                route[c] = lv;
+                return;
+            }
+            route[c] = NpMath.NaN;
+            double zl = (float)zLower[c];
+            double zs = (float)z[c];
+            if (!double.IsFinite(zl) || !(zs - zl > maxDepth))
+            {
+                return;
+            }
+            int layer = nl;
+            for (int i = 0; i < nl; i++)
+            {
+                if ((double)(float)columns.Bottom[(c * nl) + i] < zl)
+                {
+                    layer = i;
+                    break;
+                }
+            }
+            if (Rocks.Soluble[columns.Rock[(c * (nl + 1)) + layer]])
+            {
+                route[c] = zl;
+            }
+        });
+        return route;
+    }
+
+    /// <summary>
+    /// 지층 기둥 c 에서 높이 z 아래로 이어지는 녹는 암석의 바닥 높이 (soluble_floor) [m]. 아래층 동굴 통로가 층리면을 따라 물 높이
+    /// 아래로 내려갈 때, 통로 바닥이 이 높이 아래로 가지 않게 합니다 (CaveNetworkFields.SolubleFloorAt).
+    /// - z 가 녹지 않는 층에 있으면 z 입니다 (더 내려갈 녹는 암석이 없음).
+    /// - z 의 층부터 아래로 녹는 층이 이어지면, 이어진 마지막 녹는 층의 바닥입니다. 두께가 0 인 층(깎여 없어진 층)은 건너뜁니다.
+    /// - 맨 아래 바탕 암석까지 녹으면 −∞, z 가 NaN 이면 NaN 입니다.
+    /// 예: 층 바닥이 위에서부터 500 m(석회암), 450 m(대리암), 300 m(석회암)이고 그 아래가 셰일이면 z = 480 m 의 바닥은 300 m 입니다.
+    /// 대리암 자리에 셰일이 있으면 z = 520 m 의 바닥은 500 m 이고, z = 480 m 는 셰일 안이라 480 m 입니다.
+    /// bottom: (N·L) 층 바닥 [m], rock: (N·(L+1)) 암석 번호 (LayerColumns 와 같은 배치).
+    /// </summary>
+    public static double SolubleFloor(double[] bottom, byte[] rock, int nLayers, int c, double z)
+    {
+        if (double.IsNaN(z))
+        {
+            return NpMath.NaN;
+        }
+        int li = Model.LayerIndexAt(bottom, nLayers, c, z);
+        if (!Rocks.Soluble[rock[(c * (nLayers + 1)) + li]])
+        {
+            return z;
+        }
+        double floor = li == nLayers ? double.NegativeInfinity : bottom[(c * nLayers) + li];
+        for (int j = li + 1; j <= nLayers && floor > double.NegativeInfinity; j++)
+        {
+            double bot = j == nLayers ? double.NegativeInfinity : bottom[(c * nLayers) + j];
+            if (!(bot < floor))
+            {
+                continue;
+            }
+            if (!Rocks.Soluble[rock[(c * (nLayers + 1)) + j]])
+            {
+                break;
+            }
+            floor = bot;
+        }
+        return floor;
+    }
+
+    /// <summary>
     /// 동굴 층 높이와 입구 비트 (cave_levels). 반환: cave_level_&lt;k&gt;_m (동굴 없으면 NaN), cave_entrance.
     /// </summary>
     public static FieldSet CaveLevels(
@@ -231,9 +327,17 @@ public static class Caves
         double tol = cfg.F("caves.entrance_tolerance_m");
         double spacing = cfg.F("caves.entrance_spacing_m");
         double maxDepth = cfg.F("groundwater.max_depth_m");
-        if (!(levels >= 1 && levels <= MaxLevels))
+        // 층마다 필드 cave_level_<k>_m 가 있어야 저장할 수 있습니다. 지금 필드 표에는 0층과 1층뿐입니다.
+        int supported = 0;
+        while (supported < MaxLevels && Fields.All.ContainsKey(LevelFieldName(supported)))
         {
-            throw new ArgumentException($"caves.levels 는 1..{MaxLevels} 이어야 합니다: {levels}");
+            supported++;
+        }
+        if (!(levels >= 1 && levels <= supported))
+        {
+            throw new ArgumentException(
+                $"caves.levels 는 1..{supported} 이어야 합니다: {levels}. 층을 더 두려면 src/Bpcg/Core/Fields.cs 에 "
+                + $"{LevelFieldName(supported)} 필드를 먼저 더하세요");
         }
         if (!(fK >= 0.0 && r > 0.0 && tol >= 0.0 && spacing >= 0.0))
         {

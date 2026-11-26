@@ -10,11 +10,15 @@ namespace Bpcg.Engine.Tests;
 /// 엔진 연기 검사(smoke test). 화면 없이(--headless) 돌려 회랑 장면의 핵심 경로가 살아 있는지 봅니다.
 /// </summary>
 /// <remarks>
-/// 실행 (csharp/Bpcg.Engine 에서, 처음 한 번과 코드를 바꾼 뒤에는 dotnet build 와 --import 를 먼저):
-/// <c>godot --headless --path . res://Tests/smoke.tscn -- [--baked-dir=&lt;폴더&gt;] [--expect-baked]</c>.
+/// 실행 (engine 폴더에서, 처음 한 번과 코드를 바꾼 뒤에는 dotnet build 와 --import 를 먼저):
+/// <c>HOME=$(mktemp -d) godot --headless --path . res://Tests/smoke.tscn -- [--baked-dir=&lt;폴더&gt;] [--expect-baked]</c>.
+/// HOME 을 임시 폴더로 바꾸지 않으면 내 Godot 편집기 설정과 user:// 를 덮어씁니다 (engine/README.md 의 '검사').
 /// Godot 는 스크립트 오류가 있어도 종료 코드 0 으로 끝나므로, 성공하면 'BPCG_SMOKE_OK' 를 찍고 Quit(0),
 /// 실패하면 'BPCG_SMOKE_FAIL: &lt;이유&gt;' 를 찍고 Quit(1) 합니다. 구운 묶음이 있으면 레이어 불러오기와
-/// 보이기·숨기기, 단면, 프랙탈 디테일도 검사합니다. --expect-baked 를 주면 묶음이 없을 때 실패합니다.
+/// 보이기·숨기기, 단면, 프랙탈 디테일, 동굴 걷기(충돌면, 입구 구멍, 걸어 들어가기)도 검사합니다. 낙하 한계는 늘 검사합니다.
+/// --expect-baked 를 주면 묶음이 없거나 불러오기 문제가 있을 때 실패합니다.
+/// --expect-problems=&lt;글&gt;|&lt;글&gt; 을 주면 화면의 '불러오기 문제' 상자에 그 글들이 다 있는지만 보고 끝냅니다
+/// (일부러 망가뜨린 묶음용).
 /// </remarks>
 public partial class SmokeTest : Node
 {
@@ -35,7 +39,8 @@ public partial class SmokeTest : Node
     public static readonly Dictionary<string, string[]> ShaderUniforms = new()
     {
         ["res://shaders/cross_section.gdshader"] =
-            ["plane_normal", "plane_offset_m", "strata_thickness_m", "section_rect", "hole_rect", "color_mode", "strata", "palette"],
+            ["plane_normal", "plane_offset_m", "strata_thickness_m", "section_rect", "hole_rect", "color_mode", "strata", "palette",
+             "has_surface_height", "surface_height_tex"],
         ["res://shaders/strata_section.gdshader"] =
             ["strata", "strata_top", "palette", "surface_height", "water_table", "section_rect"],
         ["res://shaders/cave.gdshader"] = ["palette", "use_palette", "plane_normal"],
@@ -43,6 +48,11 @@ public partial class SmokeTest : Node
     };
 
     public const string ExpectBakedArg = "--expect-baked";
+    public const string ExpectProblemsPrefix = "--expect-problems=";
+
+    /// <summary>솔기 걷기 검사: 이만큼 물리 프레임 동안 앞으로 걷고, 이 경사(m/m)보다 완만한 곳을 고릅니다.</summary>
+    public const int WalkFrames = 90;
+    public const float GentleSlope = 0.3f;
 
     /// <summary>노클립 검사: 이만큼 물리 프레임 동안 키를 누릅니다.</summary>
     public const int FlyFrames = 30;
@@ -54,11 +64,35 @@ public partial class SmokeTest : Node
     /// <summary>플레이어가 땅에 닿기를 기다리는 최대 물리 프레임 수.</summary>
     public const int MaxLandingFrames = 600;
 
-    /// <summary>검사 전체 시간 제한 (ms). 넘으면 실패로 끝냅니다.</summary>
-    public const ulong WatchdogMs = 60000;
+    /// <summary>검사 전체 시간 제한 (ms). 넘으면 실패로 끝냅니다. 동굴 걷기(낙하 수십 m)까지 기계가 바쁠 때도 들어가게 잡습니다.</summary>
+    public const ulong WatchdogMs = 150000;
 
     /// <summary>프랙탈 디테일 높이맵 이름 (굽기 폴더 안).</summary>
     public const string DetailName = "heightmap_detail";
+
+    /// <summary>동굴 걷기: 입구 앞에서 굴 안쪽으로 걸어 들어갈 거리 (m). 2초 동안 앞으로 나아가지 못하면 멈춥니다.</summary>
+    public const float WalkInM = 12.0f;
+
+    /// <summary>동굴 걷기: 내려서기를 기다리는 최대 물리 프레임 수 (60 Hz 로 20 초, 약 2 km 자유 낙하).</summary>
+    public const int MaxFallFrames = 1200;
+
+    /// <summary>동굴 걷기: 위에서 떨어져 보는 입구 구멍 수의 위 한계 (시간을 아끼려고).</summary>
+    public const int MaxDropHoles = 6;
+
+    /// <summary>
+    /// 동굴 걷기: 떨어져 볼 만큼 넓은 입구 구멍의 기준 (m). 입구 지도(cave_mouth) 값이 이보다 작은 (동굴 안으로 0.6 m 넘게 든)
+    /// 표본이 있는 구멍만 떨어져 봅니다. 더 얕은 구멍은 지름이 1 m 안팎이라, 몸 반지름 0.4 m 인 플레이어가 가장자리에 걸립니다.
+    /// </summary>
+    public const float WideHoleMouthM = -0.6f;
+
+    /// <summary>동굴 걷기 동안 물리 시간을 빠르게 돌리는 배수 (물리 한 걸음의 길이는 그대로).</summary>
+    public const float CaveTimeScale = 4.0f;
+
+    /// <summary>동굴 바닥에 섰다고 볼 때, 발과 그 아래 동굴 충돌면 사이의 허용 거리 (m).</summary>
+    public const float CaveFloorToleranceM = 0.3f;
+
+    /// <summary>나눠 만든 메시 검사에서 둘레에 다는 치마 깊이 (m).</summary>
+    public const float SkirtCheckM = 30.0f;
 
     private bool _done;
     private ulong _startedMs;
@@ -97,17 +131,36 @@ public partial class SmokeTest : Node
         {
             return;
         }
-        Main? main = InstantiateMain();
-        if (main is null)
+        Main? main = await InstantiateMain();
+        if (main is null || !CheckProblems(main))
         {
             return;
         }
-        if (!await CheckPhysics(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main) || !CheckLayers(main)
-            || !CheckUiScale(main))
+        if (ExpectedProblems().Length > 0)
+        {
+            Pass();
+            return;
+        }
+        if (!await CheckPhysics(main) || !await CheckSeamWalk(main) || !await CheckNoclip(main) || !await CheckFractalDetail(main)
+            || !CheckLayers(main) || !await CheckCaves(main) || !await CheckFallLimit(main) || !CheckUiScale(main)
+            || !CheckPerfLine(main) || !await CheckStartReturn())
         {
             return;
         }
         Pass();
+    }
+
+    /// <summary>--expect-problems= 로 받은 글 조각 ('|' 로 나눔). 없으면 빈 배열.</summary>
+    private static string[] ExpectedProblems()
+    {
+        foreach (string arg in OS.GetCmdlineUserArgs())
+        {
+            if (arg.StartsWith(ExpectProblemsPrefix, StringComparison.Ordinal))
+            {
+                return arg[ExpectProblemsPrefix.Length..].Split('|', StringSplitOptions.RemoveEmptyEntries);
+            }
+        }
+        return [];
     }
 
     private SignalAwaiter ProcessFrame() => ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -222,18 +275,162 @@ public partial class SmokeTest : Node
             return Fail($"HeightAt 이 표본 값과 다릅니다: {hm.HeightAt(probe)}, 기대 {expected}");
         }
         GD.Print($"높이맵: {w} x {h}, 간격 {hm.SpacingM:F1} m, 높이 {lo:F2} ~ {hi:F2} m");
+        return CheckChunkedMesh(hm);
+    }
+
+    /// <summary>
+    /// 나눠 만든 지형 메시: 조각 수와 가장 고운 삼각형 수(치마 포함), 가장 고운 목록과 치마의 삼각형이 한 장 메시의
+    /// 삼각형과 꼭짓점 위치·법선까지 같은지 (순서만 다름), 그리고 여러 조각 크기와 간격에서 거친 삼각형 목록이 조각을
+    /// 겹침 없이 꼭 한 번 덮는지 봅니다. 회랑 지형은 조각 하나씩 여러 프레임에 나눠 만듭니다.
+    /// </summary>
+    private bool CheckChunkedMesh(HeightmapLoader hm)
+    {
+        int w = hm.Width;
+        int h = hm.Height;
+        HeightmapLoader.ChunkedArrays chunked = hm.BuildChunkArrays(SkirtCheckM);
+        int nChunks = (HeightmapLoader.ChunkEdges(w - 1, HeightmapLoader.ChunkQuads).Length - 1)
+            * (HeightmapLoader.ChunkEdges(h - 1, HeightmapLoader.ChunkQuads).Length - 1);
+        long want = ((long)(w - 1) * (h - 1) * 2) + (((2 * (w + h)) - 4) * 4);
+        if (chunked.Chunks.Count != nChunks || chunked.Triangles != want || chunked.Skirt is null)
+        {
+            return Fail($"지형 조각 {chunked.Chunks.Count} 개 (기대 {nChunks}), 삼각형 {chunked.Triangles} (기대 {want}), "
+                + $"치마 {(chunked.Skirt is null ? "없음" : "있음")}");
+        }
+        MeshArrays whole = hm.BuildMeshArrays(SkirtCheckM);
+        var counts = new Dictionary<(Vector3, Vector3, Vector3, Vector3, Vector3, Vector3), int>();
+        void Count(MeshArrays m, int sign)
+        {
+            for (int t = 0; t < m.Indices.Length; t += 3)
+            {
+                (int a, int b, int c) = (m.Indices[t], m.Indices[t + 1], m.Indices[t + 2]);
+                var key = (m.Vertices[a], m.Normals[a], m.Vertices[b], m.Normals[b], m.Vertices[c], m.Normals[c]);
+                counts[key] = counts.GetValueOrDefault(key) + sign;
+            }
+        }
+        Count(whole, 1);
+        foreach (MeshArrays chunk in chunked.Chunks)
+        {
+            Count(chunk, -1);
+        }
+        Count(chunked.Skirt, -1);
+        int mismatched = counts.Values.Count(v => v != 0);
+        if (mismatched > 0)
+        {
+            return Fail($"지형 조각과 치마의 삼각형 가운데 {mismatched} 가지가 한 장 메시와 다릅니다 (꼭짓점 위치·법선까지 견줌)");
+        }
+        int lists = 0;
+        foreach (int nx in new[] { 32, 33, 56, 63, 64, 95 })
+        {
+            foreach (int nz in new[] { 32, 52, 64 })
+            {
+                foreach (int stride in new[] { 1, 2, 3, 4, 8, 16, 31, 32 })
+                {
+                    if (stride > 1 && stride >= Math.Min(nx, nz))
+                    {
+                        continue;
+                    }
+                    string? why = LodCoverError(nx, nz, stride);
+                    if (why is not null)
+                    {
+                        return Fail($"거친 삼각형 목록 (조각 {nx} × {nz} 칸, 간격 {stride}): {why}");
+                    }
+                    lists++;
+                }
+            }
+        }
+        GD.Print($"지형 조각: 표본 {chunked.Chunks.Count} 조각, 가장 고운 삼각형 {chunked.Triangles} (치마 포함)이 한 장 메시와 같음, "
+            + $"거친 목록 {lists} 개가 조각을 꼭 한 번 덮음");
         return true;
     }
 
-    /// <summary>회랑 장면을 만들어 트리에 붙이고 구성이 맞는지 봅니다. 실패하면 null.</summary>
-    private Main? InstantiateMain()
+    /// <summary>
+    /// 삼각형 목록이 nx × nz 칸 사각형을 겹침 없이 꼭 한 번 덮는지 봅니다: 넓이 합 = nx · nz, 모두 시계 방향(앞면 위),
+    /// 같은 변을 같은 방향으로 두 번 쓰지 않음, 짝 없는 변은 조각 둘레의 한 칸짜리 변뿐. 맞으면 null, 아니면 까닭.
+    /// </summary>
+    private static string? LodCoverError(int nx, int nz, int stride)
+    {
+        int[] idx = HeightmapLoader.LodIndices(nx, nz, stride);
+        int w = nx + 1;
+        long twiceArea = 0;
+        var edges = new HashSet<(int, int)>();
+        for (int t = 0; t < idx.Length; t += 3)
+        {
+            int a = idx[t];
+            int b = idx[t + 1];
+            int c = idx[t + 2];
+            long cross = ((long)((b % w) - (a % w)) * ((c / w) - (a / w))) - ((long)((b / w) - (a / w)) * ((c % w) - (a % w)));
+            if (cross <= 0)
+            {
+                return $"{t / 3}번 삼각형이 시계 방향이 아니거나 넓이가 0 입니다";
+            }
+            twiceArea += cross;
+            foreach ((int p, int q) in new[] { (a, b), (b, c), (c, a) })
+            {
+                if (!edges.Add((p, q)))
+                {
+                    return $"변 {p}–{q} 를 같은 방향으로 두 번 씁니다 (겹침)";
+                }
+            }
+        }
+        if (twiceArea != 2L * nx * nz)
+        {
+            return $"넓이 합 {twiceArea / 2.0} 이 {nx * nz} 와 다릅니다";
+        }
+        foreach ((int p, int q) in edges)
+        {
+            if (edges.Contains((q, p)))
+            {
+                continue;
+            }
+            bool sameRow = p / w == q / w && (p / w == 0 || p / w == nz) && Math.Abs(p - q) == 1;
+            bool sameCol = p % w == q % w && (p % w == 0 || p % w == nx) && Math.Abs(p - q) == w;
+            if (!sameRow && !sameCol)
+            {
+                return $"변 {p}–{q} 의 짝이 없는데 조각 둘레의 한 칸짜리 변이 아닙니다 (틈)";
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 회랑 장면을 만들어 트리에 붙이고, 다 불러올 때까지 기다린 뒤 구성이 맞는지 봅니다. 실패하면 null.
+    /// 붙인 바로 뒤에는 진행 막대가 떠 있고 플레이어가 멈춰 있어야 합니다 (불러오기가 다른 스레드와 여러 프레임에 나뉨).
+    /// 다 불러오면 회랑 지형 메시는 한 번만 만들었어야 합니다 (프랙탈 디테일이 있으면 디테일 지형만).
+    /// </summary>
+    private async Task<Main?> InstantiateMain()
     {
         if (GD.Load(MainScene) is not PackedScene packed || packed.Instantiate() is not Main main)
         {
             Fail($"회랑 장면을 만들지 못했습니다: {MainScene}");
             return null;
         }
+        ulong addStart = Time.GetTicksMsec();
         GetTree().Root.AddChild(main);
+        ulong addMs = Time.GetTicksMsec() - addStart;
+        if (main.IsLoaded || !main.Hud.Loading.IsLoadingVisible || main.Player.ProcessMode != ProcessModeEnum.Disabled)
+        {
+            Fail("회랑 장면을 붙인 바로 뒤인데 진행 막대가 없거나, 이미 다 불러왔거나, 플레이어가 움직입니다 "
+                + $"(불러옴 {main.IsLoaded}, 진행 막대 {main.Hud.Loading.IsLoadingVisible}, 플레이어 {main.Player.ProcessMode})");
+            return null;
+        }
+        string firstStage = main.Hud.Loading.StageText;
+        int frames = 0;
+        while (!main.IsLoaded)
+        {
+            await ProcessFrame();
+            frames++;
+            if (_done)
+            {
+                return null;
+            }
+        }
+        if (main.Hud.Loading.IsLoadingVisible || main.Player.ProcessMode == ProcessModeEnum.Disabled)
+        {
+            Fail("다 불러왔는데 진행 막대가 떠 있거나 플레이어가 멈춰 있습니다");
+            return null;
+        }
+        GD.Print($"불러오기: {main.LoadSeconds * 1000.0:F0} ms, 장면 붙이기 {addMs} ms, 가장 긴 프레임 {main.LongestLoadFrameMs:F0} ms, "
+            + $"프레임 {frames}개, 첫 진행 글 '{firstStage}'");
 
         HeightmapTerrain? terrain = main.GetNodeOrNull<HeightmapTerrain>("Terrain");
         if (terrain?.Heightmap is null || !terrain.Heightmap.IsValid())
@@ -241,14 +438,24 @@ public partial class SmokeTest : Node
             Fail("Terrain 노드가 없거나 높이맵을 읽지 못했습니다");
             return null;
         }
-        if (terrain.GetNodeOrNull("Mesh") is not MeshInstance3D)
+        if (terrain.BuildCount != 1)
         {
-            Fail("Terrain 아래 Mesh 가 없습니다");
+            Fail($"회랑에 들어가며 지형 메시와 충돌면을 {terrain.BuildCount}번 만들었습니다 (1번이어야 함, 지형 {terrain.UsedStem})");
             return null;
         }
-        if (terrain.GetNodeOrNull("Body/Shape") is not CollisionShape3D collision || collision.Shape is not HeightMapShape3D)
+        if (terrain.GetNodeOrNull("Mesh") is not Node3D meshRoot || meshRoot.GetNodeOrNull("Chunk0") is not MeshInstance3D)
         {
-            Fail("Terrain 아래 Body/Shape (HeightMapShape3D) 가 없습니다");
+            Fail("Terrain 아래 Mesh (지형 조각을 담는 노드) 나 첫 조각 Mesh/Chunk0 이 없습니다");
+            return null;
+        }
+        if (terrain.SkirtM > 0.0f && (terrain.GetNodeOrNull("Mesh/Skirt") is not MeshInstance3D skirt
+            || !skirt.GetInstanceShaderParameter("is_skirt").AsBool()))
+        {
+            Fail("치마 노드 Mesh/Skirt 가 없거나, 치마의 층 색을 그린 높이로 고르는 is_skirt 가 꺼져 있습니다");
+            return null;
+        }
+        if (!CheckCollisionTiles(terrain))
+        {
             return null;
         }
         if (terrain.Material is not ShaderMaterial material || material.Shader?.ResourcePath != CrossSectionShader)
@@ -296,8 +503,76 @@ public partial class SmokeTest : Node
             Fail("손전등 (Player/Head/Camera/Lamp) 이 없습니다");
             return null;
         }
-        GD.Print($"회랑 장면: 지형 {terrain.UsedStem}");
+        GD.Print($"회랑 장면: 지형 {terrain.UsedStem}, 지형 메시 {terrain.BuildCount}번 만듦");
         return main;
+    }
+
+    /// <summary>
+    /// 충돌면: Terrain/Body 아래 조각이 모두 정사각 HeightMapShape3D 여야 합니다. 가로·세로가 다르면 Jolt 가 삼각형 메시로
+    /// 바꿔 laptop 회랑에서 몇 초씩 멈춥니다. 조각 수와 크기가 <see cref="HeightmapLoader.TileStarts"/> 와 같은지도 봅니다.
+    /// </summary>
+    private bool CheckCollisionTiles(HeightmapTerrain terrain)
+    {
+        HeightmapLoader hm = terrain.Heightmap!;
+        if (terrain.GetNodeOrNull("Body") is not StaticBody3D body)
+        {
+            return Fail("Terrain 아래 Body (StaticBody3D) 가 없습니다");
+        }
+        // 동굴 입구 구멍의 덧판(HolePatch)과 마개(HolePlug)는 조각이 아니라서 빼고 셉니다.
+        List<CollisionShape3D> shapes = body.GetChildren().OfType<CollisionShape3D>()
+            .Where(c => c.Name.ToString().StartsWith("Shape", StringComparison.Ordinal)).ToList();
+        int size = hm.ShapeTileSize();
+        int expected = HeightmapLoader.TileStarts(hm.Width, size).Count * HeightmapLoader.TileStarts(hm.Height, size).Count;
+        if (shapes.Count != expected)
+        {
+            return Fail($"충돌 조각이 {shapes.Count}개입니다 (기대 {expected}개, 높이맵 {hm.Width} × {hm.Height})");
+        }
+        foreach (CollisionShape3D c in shapes)
+        {
+            if (c.Shape is not HeightMapShape3D h || h.MapWidth != size || h.MapDepth != size)
+            {
+                return Fail($"충돌 조각 {c.Name} 이 {size} × {size} 정사각 HeightMapShape3D 가 아닙니다");
+            }
+        }
+        GD.Print($"충돌 조각: {shapes.Count}개 ({size} × {size} 표본, 높이맵 {hm.Width} × {hm.Height})");
+        return true;
+    }
+
+    /// <summary>
+    /// 불러오기 문제: 화면의 문제 상자가 <see cref="BakedLayers.Problems"/> 를 모두 보여 주는지, --expect-problems 로 받은
+    /// 글이 다 있는지 봅니다. --expect-baked 인데 문제가 있으면 실패입니다.
+    /// </summary>
+    private bool CheckProblems(Main main)
+    {
+        List<string> problems = main.Baked.Problems;
+        LoadScreen screen = main.Hud.Loading;
+        if ((problems.Count > 0) != screen.IsProblemsVisible)
+        {
+            return Fail($"불러오기 문제 {problems.Count}개인데 문제 상자 보임 = {screen.IsProblemsVisible}");
+        }
+        foreach (string p in problems)
+        {
+            if (!screen.ProblemsText.Contains(p, StringComparison.Ordinal))
+            {
+                return Fail($"불러오기 문제가 화면 상자에 없습니다: {p}");
+            }
+        }
+        if (problems.Count > 0)
+        {
+            GD.Print("불러오기 문제 화면: " + screen.ProblemsText.Replace("\n", " | ", StringComparison.Ordinal));
+        }
+        foreach (string want in ExpectedProblems())
+        {
+            if (!screen.ProblemsText.Contains(want, StringComparison.Ordinal))
+            {
+                return Fail($"불러오기 문제 상자에 '{want}' 가 없습니다: {screen.ProblemsText}");
+            }
+        }
+        if (ExpectedProblems().Length == 0 && OS.GetCmdlineUserArgs().Contains(ExpectBakedArg) && problems.Count > 0)
+        {
+            return Fail("구운 묶음을 문제없이 불러와야 하는데 불러오기 문제가 있습니다: " + string.Join(" / ", problems));
+        }
+        return true;
     }
 
     private Godot.Collections.Array<Rid> RayExclude(Main main)
@@ -322,6 +597,9 @@ public partial class SmokeTest : Node
         {
             return Fail("플레이어가 노클립으로 시작하지 않았습니다");
         }
+        // 동굴 입구 구멍 위라면 동굴로 떨어지므로, 구멍 없는 칸 위로 옮겨 내려섭니다.
+        Vector3 spawn = terrain.ToLocal(player.GlobalPosition);
+        player.GlobalPosition = terrain.ToGlobal(AwayFromHoles(terrain, spawn) with { Y = spawn.Y });
         player.SetNoclip(false);
         await PhysicsFrame();
         await PhysicsFrame();
@@ -332,13 +610,20 @@ public partial class SmokeTest : Node
         int lastRow = hm.Height - 1;
         int lastCol = hm.Width - 1;
         var extent = new Vector3(lastCol * hm.SpacingM, 0.0f, lastRow * hm.SpacingM);
-        Vector2I[] samples = [new(0, 0), new(lastRow / 3, lastCol / 4), new(lastRow / 2, lastCol / 2), new(lastRow, lastCol)];
+        var samples = new List<Vector2I> { new(0, 0), new(lastRow / 3, lastCol / 4), new(lastRow / 2, lastCol / 2), new(lastRow, lastCol) };
+        // 충돌 조각의 솔기(이웃 조각과 같이 쓰는 열)와 그 양옆 표본도 쏩니다.
+        int size = hm.ShapeTileSize();
+        foreach (int col0 in HeightmapLoader.TileStarts(hm.Width, size).Skip(1))
+        {
+            samples.AddRange([new(lastRow / 3, col0 - 1), new(lastRow / 3, col0), new(lastRow / 3, col0 + 1)]);
+        }
         foreach (Vector2I rc in samples)
         {
             Vector3 local = hm.Origin + new Vector3(rc.Y * hm.SpacingM, 0.0f, rc.X * hm.SpacingM);
             // 가장자리 표본은 모양 경계에 걸리므로 안쪽으로 1 cm 옮겨 쏩니다.
             local.X = Math.Clamp(local.X, hm.Origin.X + 0.01f, hm.Origin.X + extent.X - 0.01f);
             local.Z = Math.Clamp(local.Z, hm.Origin.Z + 0.01f, hm.Origin.Z + extent.Z - 0.01f);
+            local = AwayFromHoles(terrain, local);
             Vector3 top = terrain.ToGlobal(new Vector3(local.X, hm.Origin.Y + hm.MaxHeightM + 100.0f, local.Z));
             Vector3 bottom = terrain.ToGlobal(new Vector3(local.X, hm.Origin.Y + hm.MinHeightM - 100.0f, local.Z));
             var query = PhysicsRayQueryParameters3D.Create(top, bottom, 0xFFFFFFFF, exclude);
@@ -373,8 +658,108 @@ public partial class SmokeTest : Node
         {
             return Fail($"플레이어 발 높이 {player.GlobalPosition.Y} 가 지면 {ground} 와 다릅니다");
         }
-        GD.Print($"물리: 광선 오차 최대 {worst:F4} m, 플레이어 착지 {frames} 프레임");
+        GD.Print($"물리: 광선 {samples.Count}곳 오차 최대 {worst:F4} m, 플레이어 착지 {frames} 프레임");
         return true;
+    }
+
+    /// <summary>
+    /// 충돌 조각의 솔기 넘어 걷기: 솔기 둘레가 완만한 행을 골라, 솔기 3 m 서쪽에서 동쪽으로 걸어 솔기를 넘는지 봅니다.
+    /// 조각 경계에서 걸려 멈추거나 튀어 오르면 실패입니다. 조각이 하나뿐이거나 완만한 행이 없으면 건너뜁니다.
+    /// </summary>
+    private async Task<bool> CheckSeamWalk(Main main)
+    {
+        HeightmapTerrain terrain = main.Terrain;
+        Player player = main.Player;
+        HeightmapLoader hm = terrain.Heightmap!;
+        List<int> starts = HeightmapLoader.TileStarts(hm.Width, hm.ShapeTileSize());
+        if (starts.Count < 2)
+        {
+            GD.Print("솔기 걷기: 충돌 조각이 하나라 건너뜀");
+            return true;
+        }
+        int seam = starts[1];
+        int reach = Math.Max(1, Mathf.CeilToInt(4.0f / hm.SpacingM));
+        int row = -1;
+        for (int r = hm.Height / 4; r < hm.Height * 3 / 4 && row < 0; r++)
+        {
+            bool gentle = true;
+            for (int c = seam - reach; c < seam + reach && gentle; c++)
+            {
+                float dx = Math.Abs(hm.Heights[(r * hm.Width) + c + 1] - hm.Heights[(r * hm.Width) + c]) / hm.SpacingM;
+                float dz = Math.Abs(hm.Heights[((r + 1) * hm.Width) + c] - hm.Heights[(r * hm.Width) + c]) / hm.SpacingM;
+                gentle = dx < GentleSlope && dz < GentleSlope;
+            }
+            row = gentle ? r : -1;
+        }
+        if (row < 0)
+        {
+            GD.Print($"솔기 걷기: 솔기 둘레에 경사 {GentleSlope} 보다 완만한 행이 없어 건너뜀");
+            return true;
+        }
+        Vector3 seamLocal = hm.Origin + new Vector3(seam * hm.SpacingM, 0.0f, row * hm.SpacingM);
+        Vector3 startLocal = seamLocal - new Vector3(3.0f, 0.0f, 0.0f);
+        player.SetNoclip(false);
+        player.GlobalPosition = terrain.ToGlobal(new Vector3(startLocal.X, terrain.HeightAt(startLocal) + 0.5f, startLocal.Z));
+        Vector3 rot = player.Rotation;
+        rot.Y = -Mathf.Pi * 0.5f;
+        player.Rotation = rot;
+        // IsOnFloor 는 다음 MoveAndSlide 에서야 바뀌므로, 옮긴 뒤 한 프레임은 기다리고 셉니다.
+        await PhysicsFrame();
+        for (int i = 0; i < MaxLandingFrames && !player.IsOnFloor(); i++)
+        {
+            await PhysicsFrame();
+        }
+        if (!player.IsOnFloor())
+        {
+            player.SetNoclip(true);
+            return Fail($"솔기 걷기: 솔기 서쪽 3 m 에서 {MaxLandingFrames} 물리 프레임 안에 땅에 닿지 않았습니다");
+        }
+        float x0 = player.GlobalPosition.X;
+        Input.ActionPress("move_forward");
+        float worstRise = 0.0f;
+        for (int i = 0; i < WalkFrames; i++)
+        {
+            await PhysicsFrame();
+            float ground = main.GroundY(player.GlobalPosition);
+            worstRise = Math.Max(worstRise, player.GlobalPosition.Y - ground);
+        }
+        Input.ActionRelease("move_forward");
+        float moved = player.GlobalPosition.X - x0;
+        float expected = player.WalkSpeedMS * WalkFrames / Godot.Engine.PhysicsTicksPerSecond;
+        Vector3 end = terrain.ToLocal(player.GlobalPosition);
+        player.SetNoclip(true);
+        if (end.X <= seamLocal.X || moved < 0.7f * expected)
+        {
+            return Fail($"솔기 걷기: 동쪽으로 {moved:F2} m 걸었습니다 (기대 {expected:F2} m, 솔기 x = {seamLocal.X:F1}, 끝 x = {end.X:F1})");
+        }
+        if (worstRise > 0.5f)
+        {
+            return Fail($"솔기 걷기: 걷는 동안 땅에서 {worstRise:F2} m 떴습니다 (조각 경계에 걸려 튀었을 수 있음)");
+        }
+        GD.Print($"솔기 걷기: 열 {seam} 솔기를 넘어 {moved:F2} m (기대 {expected:F2} m), 땅에서 가장 높이 뜬 높이 {worstRise:F2} m");
+        return true;
+    }
+
+    /// <summary>
+    /// 국소 좌표 local 이 충돌면 구멍 가까이(동굴 입구)면, 구멍에 닿지 않는 가장 가까운 표본 자리로 옮깁니다 (y 는 그대로).
+    /// 높이맵과 충돌면이 같은 높이여야 하는 검사가 씁니다.
+    /// </summary>
+    private static Vector3 AwayFromHoles(HeightmapTerrain terrain, Vector3 local)
+    {
+        HeightmapLoader hm = terrain.Heightmap!;
+        for (int ring = 1; terrain.NearHole(local) && ring < 64; ring++)
+        {
+            for (int k = 0; k < 8 * ring; k++)
+            {
+                float a = Mathf.Tau * k / (8 * ring);
+                Vector3 p = local + (new Vector3(Mathf.Cos(a), 0.0f, Mathf.Sin(a)) * ring * hm.SpacingM);
+                if (float.IsFinite(hm.HeightAt(p)) && !terrain.NearHole(p))
+                {
+                    return p;
+                }
+            }
+        }
+        return local;
     }
 
     /// <summary>노클립: 충돌을 끄고, 중력 없이 바라보는 방향과 위로 납니다.</summary>
@@ -416,10 +801,15 @@ public partial class SmokeTest : Node
         {
             return Fail($"노클립 위로 날기: {rise:F2} m 올랐습니다 (기대 {expected:F2} m)");
         }
-        // 땅속에서 걷기로 바꾸면 지면 위로 올라옵니다.
+        // 땅속(동굴 밖 바위 속)에서 걷기로 바꾸면 지면 위로 올라옵니다.
         HeightmapTerrain terrain = main.Terrain;
         Vector3 c = terrain.Heightmap!.Center();
-        player.GlobalPosition = terrain.ToGlobal(c - new Vector3(0.0f, 30.0f, 0.0f));
+        float depth = 30.0f;
+        while (main.InCave(terrain.ToGlobal(c - new Vector3(0.0f, depth - player.Shape.Position.Y, 0.0f))) && depth < 300.0f)
+        {
+            depth += 10.0f;
+        }
+        player.GlobalPosition = terrain.ToGlobal(c - new Vector3(0.0f, depth, 0.0f));
         player.SetNoclip(false);
         float ground = terrain.ToGlobal(c).Y;
         if (player.GlobalPosition.Y < ground)
@@ -486,6 +876,14 @@ public partial class SmokeTest : Node
         {
             return Fail("재질 부피를 읽지 못했거나 크기가 다릅니다");
         }
+        // 화면의 "… 속" 글은 범례 이름을 한국어로 바꿔 씁니다. 범례의 모든 번호에 이름이 있어야 "번호 19 속" 같은 글이 안 뜹니다.
+        foreach (int id in baked.Strata.Names.Keys)
+        {
+            if (baked.Strata.NameOf(id).StartsWith("번호 ", StringComparison.Ordinal))
+            {
+                return Fail($"재질 번호 {id} ({baked.Strata.Names[id]}) 의 한국어 이름이 없습니다");
+            }
+        }
         // 지표 10 m 아래 표본은 재질 부피의 값이어야 합니다 (255 공기, 254 물 포함).
         Vector3 c = terrain.Heightmap!.Center();
         Vector3 probe = terrain.ToGlobal(c - new Vector3(0.0f, 10.0f, 0.0f));
@@ -530,8 +928,22 @@ public partial class SmokeTest : Node
             return Fail("모두 보기 뒤에 지형이 숨어 있습니다");
         }
 
-        // 단면: 켜면 판이 보이고 지형 재질의 자르는 면이 바뀝니다.
+        // 지형 재질은 층 깊이를 그린 면 대신 지금 회랑 높이맵에서 잽니다 (먼 조각의 거친 메시에서 색이 바뀌지 않게).
         var m = (ShaderMaterial)terrain.Material!;
+        var heightSize = new Vector2(terrain.Heightmap.Width, terrain.Heightmap.Height);
+        if (!m.GetShaderParameter("has_surface_height").AsBool()
+            || m.GetShaderParameter("surface_height_size").AsVector2() != heightSize)
+        {
+            return Fail($"지형 재질에 회랑 높이맵({heightSize.X} × {heightSize.Y})이 들어가지 않았습니다");
+        }
+        var surround = baked.GetNode<HeightmapTerrain>("Surround");
+        int edgeChunks = terrain.GetNode("Mesh").GetChildren()
+            .Count(n => n is GeometryInstance3D g && Mathf.IsEqualApprox(g.LodBias, HeightmapLoader.EdgeLodBias));
+        GD.Print($"지형 조각: 회랑 {terrain.GetNode("Mesh").GetChildCount()} 노드 (가장자리 {edgeChunks} 조각은 거친 메시 전환 거리 "
+            + $"{HeightmapLoader.EdgeLodBias:F0}배), 주변 지형 {surround.GetNode("Mesh").GetChildCount()} 노드, "
+            + $"가장 고운 삼각형 회랑 {terrain.MeshTriangles()} · 주변 {surround.MeshTriangles()}");
+
+        // 단면: 켜면 판이 보이고 지형 재질의 자르는 면이 바뀝니다.
         Vector3 cg = terrain.ToGlobal(c);
         baked.SetSection(true, cg, Vector3.Back);
         var section = baked.GetNode<MeshInstance3D>("Section");
@@ -599,6 +1011,7 @@ public partial class SmokeTest : Node
             return Fail("프랙탈 디테일 버튼이 없거나 눌려 있지 않습니다");
         }
         HeightmapLoader detail = terrain.Heightmap!;
+        int builds = terrain.BuildCount;
         HeightmapLoader b = HeightmapLoader.LoadStem(BakedPaths.Dir().PathJoin("heightmap"));
         if (!b.IsValid() || b.Heights.Length != detail.Heights.Length)
         {
@@ -644,6 +1057,10 @@ public partial class SmokeTest : Node
         if (terrain.UsedStem != BakedPaths.Dir().PathJoin("heightmap"))
         {
             return Fail($"프랙탈 디테일을 껐는데 지형이 {terrain.UsedStem} 입니다");
+        }
+        if (terrain.BuildCount != builds + 1)
+        {
+            return Fail($"프랙탈 디테일을 처음 껐는데 지형을 {terrain.BuildCount - builds}번 만들었습니다 (기본 지형 1번이어야 함)");
         }
         if (!terrain.IsMeshVisible())
         {
@@ -709,7 +1126,11 @@ public partial class SmokeTest : Node
         player.SetNoclip(false);
         for (int i = 0; i < 2; i++)
         {
-            Vector3 feet = terrain.ToGlobal(new Vector3(probe.X, terrain.HeightAt(probe) - 3.0f, probe.Z));
+            // 동굴 안이면 올리지 않는 것이 맞으므로, 몸 가운데가 동굴 밖(바위 속)인 깊이를 고릅니다.
+            Vector3 feet = terrain.ToGlobal(new Vector3(probe.X, terrain.HeightAt(probe), probe.Z));
+            float below = new[] { 3.0f, 1.5f, 6.0f, 10.0f }
+                .FirstOrDefault(b => !main.InCave(feet + (Vector3.Up * (player.Shape.Position.Y - b))), 3.0f);
+            feet.Y -= below;
             player.GlobalPosition = feet;
             baked.ToggleLayer("fractal_detail");
             float ground = main.GroundY(player.GlobalPosition);
@@ -723,6 +1144,10 @@ public partial class SmokeTest : Node
         if (!baked.IsLayerVisible("fractal_detail"))
         {
             return Fail("프랙탈 디테일을 두 번 바꿨는데 켜져 있지 않습니다");
+        }
+        if (terrain.BuildCount != builds + 1)
+        {
+            return Fail($"프랙탈 디테일을 네 번 바꾸며 지형을 {terrain.BuildCount - builds}번 만들었습니다 (처음 끌 때 1번만이어야 함)");
         }
         GD.Print($"프랙탈 디테일: 켜짐 (처음), {OS.GetKeycodeString(key)} 키, 높이 차 최대 {worstM:F2} m, "
             + $"끄기 {offMs} ms, 다시 켜기 {onMs} ms");
@@ -753,6 +1178,409 @@ public partial class SmokeTest : Node
         return true;
     }
 
+    /// <summary>
+    /// 동굴 걷기: 동굴 메시의 삼각형이 모두 충돌체에 들었는지, 지형 충돌면의 입구 구멍이 굽기가 센 입구 표본 수와 같고
+    /// '동굴 입구 구멍' 레이어를 끄면 막히는지 봅니다. 회랑 간격이 가장 가는 통로 반지름(2 m) 이하라 동굴 메시가 통로를
+    /// 그릴 수 있으면, 걷는 플레이어가 입구로 걸어 들어가 통로 바닥에 서는지, 입구 구멍(입구 굴·싱크홀) 위에서 떨어지면
+    /// 동굴 바닥에 서는지, 동굴 안에서 걷기를 다시 켜도 지표로 올라가지 않는지, 낙하 한계가 동굴보다 낮은지도 봅니다.
+    /// </summary>
+    private async Task<bool> CheckCaves(Main main)
+    {
+        BakedLayers baked = main.Baked;
+        HeightmapTerrain terrain = main.Terrain;
+        Player player = main.Player;
+        if (!baked.Loaded || baked.CaveFaces == 0)
+        {
+            GD.Print("동굴 걷기: 동굴 메시가 없어 건너뜁니다");
+            return true;
+        }
+        if (baked.CaveBody is null || baked.CaveCollisionFaces != baked.CaveFaces
+            || CaveCollision.CountFaces(baked.CaveBody) != baked.CaveFaces)
+        {
+            return Fail($"동굴 충돌 삼각형 {baked.CaveCollisionFaces} 개가 동굴 메시 삼각형 {baked.CaveFaces} 개와 다릅니다");
+        }
+        if ((baked.CaveBody.CollisionLayer & 1u) == 0 || (player.CollisionMask & 1u) == 0)
+        {
+            return Fail("동굴 충돌체가 걷는 플레이어와 부딪는 물리 층 1 에 없습니다");
+        }
+        Transform3D caveXf = baked.CaveBody.GlobalTransform;
+        float caveMinY = baked.CaveBody.GetChildren().OfType<CollisionShape3D>()
+            .SelectMany(s => ((ConcavePolygonShape3D)s.Shape).GetFaces()).Min(v => (caveXf * v).Y);
+        if (!CheckEdgeWall(main, caveMinY))
+        {
+            return false;
+        }
+        if (!(player.FallLimitYM < caveMinY))
+        {
+            return Fail($"낙하 한계 {player.FallLimitYM:F1} m 가 가장 낮은 동굴 면 {caveMinY:F1} m 보다 높습니다");
+        }
+
+        // 지형 충돌면의 입구 구멍: 굽기가 센 입구 표본 수 (cave_mouth 의 n_open) 와 같아야 합니다.
+        // 다만 충돌 조각마다 첫 표본(조각의 북서쪽 모서리)은 비우지 않으므로 그 수를 뺍니다.
+        string mouthName = terrain.UsedStem.EndsWith(DetailName, StringComparison.Ordinal)
+            && HeightmapLoader.Exists(BakedPaths.Dir().PathJoin("cave_mouth_detail")) ? "cave_mouth_detail" : "cave_mouth";
+        HeightmapLoader mouth = HeightmapLoader.LoadStem(BakedPaths.Dir().PathJoin(mouthName));
+        OrderedDictionary<string, object?>? mouthMeta = Json.Obj(Json.Get(Json.Obj(baked.Manifest["file_meta"]), mouthName));
+        if (!mouth.IsValid() || mouthMeta is null)
+        {
+            return Fail($"동굴 메시가 있는데 입구 높이맵 {mouthName} 을 읽지 못했습니다: {mouth.ErrorMessage}");
+        }
+        HeightmapLoader shapeGrid = terrain.Heightmap!;
+        int corners = shapeGrid.TileOrigins().Count(o => mouth.Heights[(o.Row0 * mouth.Width) + o.Col0] < 0.0f);
+        int expected = Json.I(Json.Get(mouthMeta, "n_open") ?? 0L) - corners;
+        int nOpen = terrain.Holes?.Open.Length ?? 0;
+        if (nOpen != expected)
+        {
+            return Fail($"지형 충돌면 구멍 표본 {nOpen} 개가 {mouthName} 의 입구 표본 {expected} 개와 다릅니다");
+        }
+        if (nOpen > 0 && !await CheckHoleToggle(main))
+        {
+            return false;
+        }
+        HeightmapLoader hm = terrain.Heightmap!;
+        if (hm.SpacingM > Bpcg.Subsurface.CaveNetwork.RadiusMinM + 1e-3f || nOpen == 0)
+        {
+            GD.Print($"동굴 걷기: 충돌 삼각형 {baked.CaveCollisionFaces} (조각 {baked.CaveCollisionTiles}), 입구 구멍 표본 {nOpen}. "
+                + $"걸어 들어가기는 건너뜀 (회랑 간격 {hm.SpacingM:F0} m, 가장 가는 통로 반지름 {Bpcg.Subsurface.CaveNetwork.RadiusMinM:F0} m, 입구 구멍 {nOpen})");
+            return true;
+        }
+
+        double timeScale = Godot.Engine.TimeScale;
+        Godot.Engine.TimeScale = CaveTimeScale;
+        try
+        {
+            player.SetNoclip(false);
+            string? walked = await WalkIntoEntrance(main);
+            if (walked is null)
+            {
+                return false;
+            }
+            // 동굴 안에서 날기로 바꿨다가 걷기로 돌아와도 지표로 올라가지 않고 그 자리에 있어야 합니다.
+            Vector3 here = player.GlobalPosition;
+            if (!main.InCave(player.Shape.GlobalPosition))
+            {
+                return Fail($"통로 바닥에 섰는데 몸 가운데 ({player.Shape.GlobalPosition}) 가 동굴 안으로 잡히지 않습니다");
+            }
+            player.SetNoclip(true);
+            player.SetNoclip(false);
+            if (player.GlobalPosition.DistanceTo(here) > 0.01f)
+            {
+                return Fail($"동굴 안에서 걷기를 다시 켰더니 자리가 바뀌었습니다: {here} → {player.GlobalPosition}");
+            }
+            string? dropped = await DropIntoHoles(main);
+            if (dropped is null)
+            {
+                return false;
+            }
+            GD.Print($"동굴 걷기: 충돌 삼각형 {baked.CaveCollisionFaces} (조각 {baked.CaveCollisionTiles}), 입구 구멍 표본 {nOpen} "
+                + $"(덧판 삼각형 {terrain.Holes!.PatchTriangles}), {walked}, {dropped}, 낙하 한계 {player.FallLimitYM:F0} m (가장 낮은 동굴 면 {caveMinY:F0} m)");
+        }
+        finally
+        {
+            Godot.Engine.TimeScale = timeScale;
+            player.SetNoclip(true);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 회랑 가장자리 땅속 벽: 있고, 위 끝이 어디서나 회랑 지표보다 EdgeWallCoverM 아래이고(지표를 걷는 플레이어가 걸리지 않음),
+    /// 서쪽 가장자리 가운데에서 땅속을 밖으로 쏜 광선을 막는지 봅니다.
+    /// </summary>
+    private bool CheckEdgeWall(Main main, float caveMinY)
+    {
+        BakedLayers baked = main.Baked;
+        HeightmapTerrain terrain = main.Terrain;
+        if (baked.CaveEdgeWall is not StaticBody3D wall || wall.GetNodeOrNull<CollisionShape3D>("Shape")?.Shape is not ConcavePolygonShape3D shape)
+        {
+            return Fail("동굴이 있는데 회랑 가장자리 땅속 벽이 없습니다");
+        }
+        Transform3D xf = wall.GlobalTransform;
+        float worst = float.NegativeInfinity;
+        foreach (Vector3 v in shape.GetFaces())
+        {
+            Vector3 g = xf * v;
+            float ground = main.GroundY(g);
+            if (float.IsFinite(ground))
+            {
+                worst = Math.Max(worst, g.Y - (ground - CaveCollision.EdgeWallCoverM));
+            }
+        }
+        if (worst > 0.01f)
+        {
+            return Fail($"회랑 가장자리 땅속 벽이 지표 {CaveCollision.EdgeWallCoverM} m 아래보다 {worst:F2} m 높이 올라옵니다");
+        }
+        Rect2 rect = baked.CorridorRect;
+        Vector3 inner = new(rect.Position.X + 1.0f, 0.0f, rect.GetCenter().Y);
+        float top = main.GroundY(inner) - CaveCollision.EdgeWallCoverM;
+        inner.Y = 0.5f * (top + caveMinY);
+        // 동굴·지형 충돌면이 우연히 먼저 맞지 않도록 벽 말고는 모두 뺍니다.
+        Godot.Collections.Array<Rid> others = [main.Player.GetRid(), baked.CaveBody!.GetRid()];
+        foreach (string path in new[] { "Terrain/Body", "Baked/Surround/Body" })
+        {
+            if (main.GetNodeOrNull(path) is StaticBody3D body)
+            {
+                others.Add(body.GetRid());
+            }
+        }
+        var query = PhysicsRayQueryParameters3D.Create(inner, inner + (Vector3.Left * 3.0f), 1u, others);
+        Godot.Collections.Dictionary hit = terrain.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0 || hit["collider"].AsGodotObject() != wall)
+        {
+            return Fail($"회랑 서쪽 가장자리 땅속 ({inner}) 에서 밖으로 쏜 광선이 가장자리 벽에 맞지 않았습니다");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 낙하 한계: 지형·주변 지형·동굴 가운데 가장 낮은 면보다 Main.FallMarginM 아래에 있는지, 걷는 플레이어가 그 아래로
+    /// 떨어지면 처음 자리(가장 낮은 면보다 위)로 돌아오는지 봅니다.
+    /// </summary>
+    private async Task<bool> CheckFallLimit(Main main)
+    {
+        Player player = main.Player;
+        float low = main.LowestSolidY();
+        if (Math.Abs(player.FallLimitYM - (low - Main.FallMarginM)) > 1e-2f)
+        {
+            return Fail($"낙하 한계 {player.FallLimitYM:F2} m 가 가장 낮은 면 {low:F2} m 보다 {Main.FallMarginM} m 아래가 아닙니다");
+        }
+        player.SetNoclip(false);
+        Vector3 c = main.Terrain.ToGlobal(main.Terrain.Heightmap!.Center());
+        player.GlobalPosition = new Vector3(c.X, player.FallLimitYM + 1.0f, c.Z);
+        player.Velocity = Vector3.Zero;
+        for (int i = 0; i < 120 && player.GlobalPosition.Y < low; i++)
+        {
+            await PhysicsFrame();
+        }
+        float y = player.GlobalPosition.Y;
+        player.SetNoclip(true);
+        if (!(y > low))
+        {
+            return Fail($"낙하 한계 {player.FallLimitYM:F1} m 아래로 떨어졌는데 처음 자리로 돌아오지 않았습니다 (y = {y:F1})");
+        }
+        GD.Print($"낙하 한계: {player.FallLimitYM:F0} m (가장 낮은 면 {low:F0} m 보다 {Main.FallMarginM:F0} m 아래), 그 아래로 떨어지면 처음 자리로 돌아옴");
+        return true;
+    }
+
+    /// <summary>
+    /// 지형 충돌면 구멍 켜기·끄기: 입구 표본 가운데 가장 깊이 동굴 안인 자리에서 아래로 쏜 광선이 구멍이면 지형 충돌면을
+    /// 지나가고, '동굴 입구 구멍' 레이어를 끄면 마개가 붙어 높이맵 높이에서 맞고, 다시 켜면 지나가는지 봅니다.
+    /// 끄고 켜는 데 걸린 시간도 찍습니다 (큰 높이맵 충돌 모양을 바꿔 끼우지 않으므로 몇 ms 입니다).
+    /// </summary>
+    private async Task<bool> CheckHoleToggle(Main main)
+    {
+        HeightmapTerrain terrain = main.Terrain;
+        BakedLayers baked = main.Baked;
+        HeightmapLoader.HoleSet holes = terrain.Holes!;
+        int deepest = holes.Open.MinBy(i => holes.Mouth[i]);
+        Vector3 local = terrain.Heightmap!.SamplePosition(deepest);
+        float expected = terrain.ToGlobal(local).Y;
+        if (TerrainHitY(main, local) is float y)
+        {
+            return Fail($"입구 구멍 자리 ({local.X:F1}, {local.Z:F1}) 에서 광선이 지형 충돌면 {y:F2} m 에 맞았습니다");
+        }
+        ulong t = Time.GetTicksMsec();
+        baked.SetLayerVisible("entrance_holes", false);
+        await PhysicsFrame();
+        ulong offMs = Time.GetTicksMsec() - t;
+        if (terrain.Holes is not null || terrain.GetNodeOrNull("Body/HolePlug") is null)
+        {
+            return Fail("'동굴 입구 구멍' 을 껐는데 지형 충돌면에 마개(Body/HolePlug)가 붙지 않았습니다");
+        }
+        await PhysicsFrame();
+        if (TerrainHitY(main, local) is not float closed || Math.Abs(closed - expected) > RayToleranceM)
+        {
+            return Fail($"'동굴 입구 구멍' 을 껐는데 입구 자리의 지형 충돌면이 {expected:F2} m 에서 맞지 않습니다");
+        }
+        t = Time.GetTicksMsec();
+        baked.SetLayerVisible("entrance_holes", true);
+        await PhysicsFrame();
+        ulong onMs = Time.GetTicksMsec() - t;
+        await PhysicsFrame();
+        if (terrain.Holes?.Open.Length != holes.Open.Length || terrain.GetNodeOrNull("Body/HolePlug") is not null
+            || TerrainHitY(main, local) is not null)
+        {
+            return Fail("'동굴 입구 구멍' 을 다시 켰는데 지형 충돌면 구멍이 돌아오지 않았습니다");
+        }
+        GD.Print($"입구 구멍 충돌면: 덧판 삼각형 {holes.PatchTriangles}, 마개 삼각형 {holes.PlugTriangles}, "
+            + $"끄기 {offMs} ms, 다시 켜기 {onMs} ms (물리 한 걸음 포함)");
+        return true;
+    }
+
+    /// <summary>회랑 지형 충돌면만 맞히는 광선을 local (지형 국소 좌표) 의 위에서 아래로 쏩니다. 맞은 전역 높이, 없으면 null.</summary>
+    private static float? TerrainHitY(Main main, Vector3 local)
+    {
+        HeightmapTerrain terrain = main.Terrain;
+        HeightmapLoader hm = terrain.Heightmap!;
+        Vector3 top = terrain.ToGlobal(new Vector3(local.X, hm.Origin.Y + hm.MaxHeightM + 100.0f, local.Z));
+        Vector3 bottom = terrain.ToGlobal(new Vector3(local.X, hm.Origin.Y + hm.MinHeightM - 100.0f, local.Z));
+        Godot.Collections.Array<Rid> exclude = [main.Player.GetRid()];
+        foreach (string path in new[] { "Baked/Surround/Body", "Baked/Caves/" + CaveCollision.BodyName })
+        {
+            if (main.GetNodeOrNull(path) is StaticBody3D body)
+            {
+                exclude.Add(body.GetRid());
+            }
+        }
+        var query = PhysicsRayQueryParameters3D.Create(top, bottom, 0xFFFFFFFF, exclude);
+        Godot.Collections.Dictionary hit = terrain.GetWorld3D().DirectSpaceState.IntersectRay(query);
+        return hit.Count == 0 ? null : hit["position"].AsVector3().Y;
+    }
+
+    /// <summary>
+    /// 걷기로 T(다음 동굴 입구)를 눌러 입구 아래 가장자리 앞에 서고, 앞으로 WalkInFrames 동안 걸어 굴 안 통로 바닥에 서는지
+    /// 입구마다 봅니다. 하나라도 되면 그 결과 글, 모두 안 되면 실패를 알리고 null.
+    /// </summary>
+    private async Task<string?> WalkIntoEntrance(Main main)
+    {
+        BakedLayers baked = main.Baked;
+        Player player = main.Player;
+        PhysicsDirectSpaceState3D space = main.GetWorld3D().DirectSpaceState;
+        var reasons = new List<string>();
+        int n = baked.EntrancesInside.Count;
+        var tried = new HashSet<int>();
+        for (int attempt = 0; attempt < n; attempt++)
+        {
+            // 걷는 중의 T 는 설 자리가 없는 입구를 건너뛰므로, 실제로 선 입구 번호를 Main 에서 읽습니다.
+            main.GoToEntrance(1);
+            if (player.Noclip)
+            {
+                reasons.Add("설 자리가 있는 입구가 없음");
+                player.SetNoclip(false);
+                break;
+            }
+            int k = main.EntranceIndex;
+            if (!tried.Add(k))
+            {
+                break;
+            }
+            if (!await Land(player))
+            {
+                reasons.Add($"{k + 1}번: 입구 앞에 내려서지 못함 (발 {player.GlobalPosition.Y:F1} m)");
+                continue;
+            }
+            Vector3 start = player.GlobalPosition;
+            Vector3 inward = baked.EntrancesInside[k] - baked.EntrancesOutside[k];
+            inward.Y = 0.0f;
+            inward = inward.Normalized();
+            // 물리 프레임 수가 아니라 걸은 거리로 멈춥니다. 기계가 바쁘면 기다림 한 번에 물리 걸음이 여럿 지나갑니다.
+            Input.ActionPress("move_forward");
+            float inM = 0.0f;
+            float best = 0.0f;
+            for (int i = 0, idle = 0; i < MaxFallFrames && inM < WalkInM && idle < 120; i++)
+            {
+                await PhysicsFrame();
+                inM = (player.GlobalPosition - start).Dot(inward);
+                (best, idle) = inM > best + 0.01f ? (inM, 0) : (best, idle + 1);
+            }
+            Input.ActionRelease("move_forward");
+            bool landed = await Land(player);
+            Vector3 p = player.GlobalPosition;
+            float cover = main.GroundY(p) - p.Y;
+            float floor = CaveCollision.FloorBelow(space, p + (Vector3.Up * 0.5f), 0.5f + CaveFloorToleranceM);
+            inM = (p - start).Dot(inward);
+            if (landed && cover >= 2.0f && float.IsFinite(floor) && inM >= WalkInM - 1.0f)
+            {
+                return $"{k + 1}번 입구로 {inM:F1} m 걸어 들어가 지표 {cover:F1} m 아래 통로 바닥에 섬";
+            }
+            reasons.Add($"{k + 1}번: 바닥에 섬 {landed}, 안쪽으로 {inM:F1} m, 지표 아래 {cover:F1} m, 발 아래 동굴 면 {floor:F2} (발 {p.Y:F2})");
+        }
+        Fail("걷기로 동굴 입구에 들어가 통로 바닥에 서지 못했습니다: " + string.Join("; ", reasons));
+        return null;
+    }
+
+    /// <summary>
+    /// 입구 구멍(지형 충돌면에서 비운 표본이 이어진 덩어리) 가운데 플레이어가 지나갈 만큼 넓은 구멍(WideHoleMouthM)마다,
+    /// 가장 깊이 동굴 안인 표본 1 m 위에서 걷는 플레이어를 떨어뜨려 지형에 서지 않고 그 아래 동굴 바닥에 서는지 봅니다
+    /// (구멍 MaxDropHoles 개까지). 결과 글, 실패하면 null.
+    /// </summary>
+    private async Task<string?> DropIntoHoles(Main main)
+    {
+        HeightmapTerrain terrain = main.Terrain;
+        Player player = main.Player;
+        HeightmapLoader hm = terrain.Heightmap!;
+        PhysicsDirectSpaceState3D space = main.GetWorld3D().DirectSpaceState;
+        List<int> holes = DeepestPerHole(terrain.Holes!, hm.Width);
+        List<int> wide = holes.Where(s => terrain.Holes!.Mouth[s] <= WideHoleMouthM).ToList();
+        if (wide.Count == 0)
+        {
+            return $"입구 구멍 {holes.Count}곳이 모두 플레이어보다 좁아(입구 지도 값 {WideHoleMouthM} m 이하인 표본 없음) 떨어져 보기를 건너뜀";
+        }
+        var depths = new List<float>();
+        foreach (int s in wide.Take(MaxDropHoles))
+        {
+            Vector3 top = terrain.ToGlobal(hm.SamplePosition(s) + Vector3.Up);
+            player.GlobalPosition = top;
+            player.Velocity = Vector3.Zero;
+            bool landed = await Land(player);
+            Vector3 p = player.GlobalPosition;
+            float cover = main.GroundY(p) - p.Y;
+            float floor = CaveCollision.FloorBelow(space, p + (Vector3.Up * 0.5f), 0.5f + CaveFloorToleranceM);
+            if (!landed || cover < 0.5f || !float.IsFinite(floor))
+            {
+                Fail($"입구 구멍 ({top.X:F1}, {top.Z:F1}) 위에서 떨어졌는데 동굴 바닥에 서지 않았습니다: 바닥에 섬 {landed}, "
+                    + $"발 {p.Y:F2} m, 지표 아래 {cover:F2} m, 발 아래 동굴 면 {floor:F2}");
+                return null;
+            }
+            depths.Add(top.Y - 1.0f - p.Y);
+        }
+        return $"입구 구멍 {holes.Count}곳 (플레이어가 지나갈 만큼 넓은 곳 {wide.Count}곳) 가운데 {depths.Count}곳에 떨어져 동굴 바닥에 섬 "
+            + $"(떨어진 깊이 {string.Join(", ", depths.Select(d => $"{d:F1}"))} m)";
+    }
+
+    /// <summary>비운 표본을 여덟 이웃으로 이은 덩어리마다 mouth 가 가장 작은 (가장 깊이 동굴 안인) 표본. 덩어리 첫 표본 순서.</summary>
+    private static List<int> DeepestPerHole(HeightmapLoader.HoleSet holes, int width)
+    {
+        var seen = new HashSet<int>();
+        var result = new List<int>();
+        foreach (int s in holes.Open)
+        {
+            if (!seen.Add(s))
+            {
+                continue;
+            }
+            int best = s;
+            var stack = new Stack<int>([s]);
+            while (stack.Count > 0)
+            {
+                int i = stack.Pop();
+                if (holes.Mouth[i] < holes.Mouth[best])
+                {
+                    best = i;
+                }
+                for (int dr = -1; dr <= 1; dr++)
+                {
+                    for (int dc = -1; dc <= 1; dc++)
+                    {
+                        int c = (i % width) + dc;
+                        int j = i + (dr * width) + dc;
+                        if (c >= 0 && c < width && holes.IsOpen(j) && seen.Add(j))
+                        {
+                            stack.Push(j);
+                        }
+                    }
+                }
+            }
+            result.Add(best);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 걷는 플레이어가 바닥에 내려서 멈출 때까지 (세 프레임 잇달아 바닥에 닿고 위아래 속력이 0.1 m/s 미만) 기다립니다.
+    /// MaxFallFrames 안에 멈추면 true.
+    /// </summary>
+    private async Task<bool> Land(Player player)
+    {
+        int still = 0;
+        for (int i = 0; i < MaxFallFrames && still < 3; i++)
+        {
+            await PhysicsFrame();
+            still = player.IsOnFloor() && Math.Abs(player.Velocity.Y) < 0.1f ? still + 1 : 0;
+        }
+        return still >= 3;
+    }
+
     private static InputEventKey KeyEvent(Key key) => new() { PhysicalKeycode = key, Keycode = key, Pressed = true };
 
     /// <summary>HUD 배율: 장면이 창에 '자동 배율 × 사용자 배율' 을 걸고, [=]·[-] 키가 10 % 씩 바꾸는지 봅니다.</summary>
@@ -781,7 +1609,100 @@ public partial class SmokeTest : Node
         {
             return Fail($"[-] 뒤 배율이 처음 {before:F2} 로 돌아오지 않았습니다: {UiScale.UserFactor():F2}");
         }
-        GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인");
+        // 자동 배율 = max(화면 배율, 창 크기 배율), 2D 화면이 1024×600 보다 작아지지 않게 줄임, 1 이상.
+        Vector2 baseSize = UiScale.BaseWindowSize();
+        (Vector2 Size, float Screen, float Want)[] cases =
+        [
+            (new Vector2(1920.0f, 1080.0f), 1.0f, 1920.0f / 1152.0f),   // 배율 1 프로젝터: 창 크기로 1.67
+            (new Vector2(2304.0f, 1296.0f), 2.0f, 2.0f),                // 맥 레티나 기본 창
+            (new Vector2(1152.0f, 648.0f), 2.0f, 648.0f / 600.0f),      // 레티나의 작은 창: 겹치지 않게 1.08
+            (new Vector2(1024.0f, 768.0f), 1.0f, 1.0f),                 // 4:3 프로젝터: 1 아래로 줄이지 않음
+        ];
+        foreach ((Vector2 size, float screenScale, float want) in cases)
+        {
+            float got = UiScale.AutoFactorFor(size, screenScale, baseSize);
+            if (Math.Abs(got - want) > 1e-3f)
+            {
+                return Fail($"창 {size.X}×{size.Y}, 화면 배율 {screenScale} 의 자동 배율이 {got:F3} 입니다 (기대 {want:F3})");
+            }
+        }
+        GD.Print($"HUD 배율: 자동 {screen:F2} × 사용자 {before:F2}, [=]·[-] 확인, 배율 1 화면의 1920×1080 창 "
+            + $"{UiScale.AutoFactorFor(new Vector2(1920.0f, 1080.0f), 1.0f, baseSize):F2}배");
+        return true;
+    }
+
+    /// <summary>HUD 화면 속도 줄: 처음에 켜져 있고 P 로 숨기고 다시 켜는지, 큰 수를 '만' 단위로 줄여 쓰는지 봅니다.</summary>
+    private bool CheckPerfLine(Main main)
+    {
+        Hud hud = main.Hud;
+        if (!hud.PerfVisible)
+        {
+            return Fail("화면 속도 줄이 처음부터 꺼져 있습니다");
+        }
+        hud._UnhandledInput(KeyEvent(Hud.PerfKey));
+        if (hud.PerfVisible)
+        {
+            return Fail("P 를 눌렀는데 화면 속도 줄이 남아 있습니다");
+        }
+        hud._UnhandledInput(KeyEvent(Hud.PerfKey));
+        if (!hud.PerfVisible)
+        {
+            return Fail("P 를 다시 눌렀는데 화면 속도 줄이 켜지지 않았습니다");
+        }
+        (long N, string Want)[] cases = [(9_999, "9,999"), (205_192, "20.5만"), (6_271_682, "627만"), (25_198_728, "2,520만")];
+        foreach ((long n, string want) in cases)
+        {
+            if (FrameStats.Man(n) != want)
+            {
+                return Fail($"FrameStats.Man({n}) 이 '{FrameStats.Man(n)}' 입니다 (기대 '{want}')");
+            }
+        }
+        string line = FrameStats.HudLine(new FrameStats.Sample(59.6, 0.0, 1_018_244, 1_347_904, 268));
+        if (line != "화면 속도 60 fps · 삼각형 102만 + 그림자 135만")
+        {
+            return Fail($"화면 속도 줄이 '{line}' 입니다");
+        }
+        GD.Print($"화면 속도 줄: P 로 숨기기·켜기 확인, 예: {line}");
+        return true;
+    }
+
+    /// <summary>
+    /// 처음 화면으로 돌아가기: --baked-dir 로 띄우면 처음 화면은 처음 한 번만 회랑으로 건너뛰고, 그다음부터는 화면을
+    /// 그대로 띄워야 합니다 (회랑에서 N). 처음 화면이 고른 폴더(RuntimeDir)는 명령줄 폴더보다 앞서야 합니다.
+    /// 이 검사 장면은 처음 화면을 거치지 않았으므로, 처음 화면이 처음 열릴 때 쓰는 명령줄 차례를 여기서 씁니다.
+    /// </summary>
+    private async Task<bool> CheckStartReturn()
+    {
+        string? cmd = BakedPaths.CommandLineDir();
+        if (cmd is null)
+        {
+            GD.Print("처음 화면: --baked-dir 없이 돌아 건너뜀");
+            return true;
+        }
+        if (StartMenu.CommandLineUsed || !StartMenu.TakeCommandLine() || StartMenu.TakeCommandLine())
+        {
+            return Fail("처음 화면이 명령줄 옵션을 처음 한 번만 따르지 않습니다 (StartMenu.TakeCommandLine)");
+        }
+        Node scene = GetTree().CurrentScene;
+        var start = GD.Load<PackedScene>(Main.StartScene).Instantiate<StartMenu>();
+        GetTree().Root.AddChild(start);
+        await ProcessFrame();
+        await ProcessFrame();
+        if (GetTree().CurrentScene != scene || !start.IsInsideTree() || start.GetChildCount() == 0)
+        {
+            return Fail("--baked-dir 로 띄운 뒤 다시 연 처음 화면이 화면을 만들지 않았거나 회랑으로 건너뛰었습니다");
+        }
+        start.QueueFree();
+        string chosen = cmd + "_chosen_in_start_menu";
+        BakedPaths.RuntimeDir = chosen;
+        bool startWins = BakedPaths.Dir() == chosen;
+        BakedPaths.RuntimeDir = null;
+        if (!startWins || BakedPaths.Dir() != cmd)
+        {
+            return Fail($"처음 화면에서 고른 폴더가 명령줄 --baked-dir 보다 앞서지 않습니다 (Dir() = {BakedPaths.Dir()})");
+        }
+        await ProcessFrame();
+        GD.Print("처음 화면: --baked-dir 건너뛰기는 처음 한 번만, 다시 열면 화면이 뜨고 고른 폴더가 앞섬");
         return true;
     }
 

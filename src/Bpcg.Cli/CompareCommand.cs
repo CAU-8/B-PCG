@@ -15,6 +15,42 @@ public static class CompareCommand
 {
     public const string Usage = "usage: bpcg compare {methods,run,list,render} ...";
 
+    /// <summary>bpcg compare --help 가 보여 주는 사용법. 옵션 이름은 <see cref="Allowed"/> 와 같아야 합니다 (시험이 봅니다).</summary>
+    public const string Help = Usage + """
+
+
+        기존 지형 생성 방법과 B-PCG 를 같은 시드, 같은 크기의 평면에서 돌리고 같은 지표로 잽니다 (docs/compare.md).
+
+        명령
+          methods  등록된 방법과 매개변수를 보여 줍니다
+          run      설정 파일의 방법을 모두 돌려 결과 묶음을 만듭니다 (기본 out/compare/default)
+          list     결과 묶음의 지표 표를 보여 줍니다
+          render   방법 하나의 고도 그림(PNG)을 그리고 그 경로를 찍습니다
+
+        옵션
+          --json           methods, list: 표 대신 JSON 으로 찍습니다
+          --config <파일>  run: 비교 설정 TOML (기본 configs/compare/default.toml)
+          --out <폴더>     run: 결과를 쓸 폴더
+          --seeds <목록>   run: 쉼표로 이은 시드 (예: 0,1,2)
+          --only <목록>    run: 쉼표로 이은 방법 id 만 돌립니다
+          --param 키=값    run: 설정 값 하나를 바꿉니다. 여러 번 쓸 수 있습니다 (예: --param grid.n=64)
+          --force          run: 저장해 둔 결과가 있어도 다시 만듭니다
+          --set <이름>     list, render: 결과 묶음 이름이나 폴더 (기본 default)
+          --seed <정수>    list: 그 시드만 보여 줍니다. render: 그릴 시드 (꼭 필요)
+          --method <id>    render: 그릴 방법 id (꼭 필요)
+          --scale <방식>   render: 색 범위를 self(그 지형만) 나 group(같은 시드의 모든 방법)으로 맞춥니다 (기본 self)
+          --stage <정수>   render: 완성된 지형 대신 연산 과정의 그 단계를 그립니다
+
+        예
+          uv run bpcg compare run --param grid.n=64 --seeds 0 --out out/compare/try
+          uv run bpcg compare list --set try
+          uv run bpcg compare render --set try --seed 0 --method bpcg
+        """;
+
+    /// <summary>argv 에 -h, --help 가 있거나 첫 낱말이 help 이면 사용법을 보여 달라는 뜻입니다.</summary>
+    public static bool WantsHelp(string[] argv) =>
+        argv.Length > 0 && (argv[0] == "help" || Array.Exists(argv, a => a is "--help" or "-h"));
+
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         ["methods"] = ["--json"],
@@ -308,6 +344,11 @@ public static class CompareCommand
     /// <summary>bpcg compare … (argv 는 compare 다음부터). 반환: 종료 코드.</summary>
     public static int Dispatch(string[] argv)
     {
+        if (WantsHelp(argv))
+        {
+            Say(Help);
+            return 0;
+        }
         Args a = Parse(argv);
         return a.Command switch
         {

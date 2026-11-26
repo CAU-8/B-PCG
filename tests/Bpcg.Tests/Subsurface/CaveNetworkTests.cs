@@ -206,6 +206,37 @@ public sealed class CaveNetworkTests
         Assert.Empty(net.Lakes);
     }
 
+    // 수직굴은 칸의 노드(흔든 자리)에 섭니다. 그 자리의 지표가 칸 중심 높이보다 높으면, 칸 중심 높이에서 시작한 수직굴은
+    // 지표에 닿지 못하고 땅속에서 끝납니다. GroundAtNodes 가 노드 자리의 지표를 알려 주면 그보다 위에서 시작해야 합니다.
+    [Fact]
+    public void ShaftsStartAboveTheGroundAtTheirOwnNode()
+    {
+        int[] sinks = [Cell(3, 20), Cell(12, 22), Cell(21, 18)];
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World(sinks, 2.0e5);
+        const double Bump = 7.5;
+        int[]? asked = null;
+        CaveNetwork net = CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(
+            GroundAtNodes: cells =>
+            {
+                asked = cells;
+                return cells.Select(c => z[c] + Bump).ToArray();
+            }));
+        Assert.Equal(sinks.OrderBy(c => c), asked);
+        int k = 0;
+        for (int e = 0; e < net.NSegments; e++)
+        {
+            if (!net.SegIsShaft[e])
+            {
+                continue;
+            }
+            int s = net.Sinks[k++];
+            double top = net.SegA[(e * 3) + 2] - net.SegRadius[e];
+            Assert.Equal(z[s] + Bump + CaveNetwork.ShaftAboveGroundM, top, 9);
+        }
+        Assert.Equal(sinks.Length, k);
+        Assert.Equal(0, net.NStreamSinksWithoutCave);
+    }
+
     [Fact]
     public void DippingBedsMakeThePassageLoopBelowTheWaterAndLeaveLakes()
     {
@@ -328,5 +359,139 @@ public sealed class CaveNetworkTests
             () => CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(UpliftMPerYr: new double[5])));
         Assert.Contains("UpliftMPerYr", e.Message, StringComparison.Ordinal);
         Assert.Contains("5", e.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BankSpringsJoinTheLowestWaterNextToTheLevel()
+    {
+        // 5×5 칸, 가운데 열(2열)이 강이고 수면은 위에서부터 101, 100.5, 100, 100, 99 m. 아래층은 모든 칸에서 100.2 m 입니다.
+        const int size = 5;
+        CellGraph g = Graph.FlatGraph(size, size, Dx);
+        int n = size * size;
+        double[] level0 = Enumerable.Repeat(100.2, n).ToArray();
+        bool[] water = new bool[n];
+        double[] wl = Enumerable.Repeat(double.NaN, n).ToArray();
+        double[] river = [101.0, 100.5, 100.0, 100.0, 99.0];
+        for (int row = 0; row < size; row++)
+        {
+            water[(row * size) + 2] = true;
+            wl[(row * size) + 2] = river[row];
+        }
+        level0[(4 * size) + 2] = double.NaN;
+        (bool[] spring, int[] bankTo) = CaveNetwork.BankSprings(g, level0, water, wl);
+        // 수면이 아래층 이하인 물 칸은 그 자리가 샘입니다. 아래층이 없는 물 칸(맨 아래)은 샘이 아닙니다.
+        Assert.True(spring[(2 * size) + 2]);
+        Assert.Equal(-1, bankTo[(2 * size) + 2]);
+        Assert.False(spring[(4 * size) + 2]);
+        // 수면(101 m)이 아래층(100.2 m)보다 높은 물 칸 (0,2) 는 샘이 아닙니다. 동굴의 물이 위로 솟지 못합니다.
+        // (1,2) 도 수면(100.5 m)이 높지만, 옆 물 칸 (2,2) 의 수면이 100 m 라 그쪽으로 빠지는 샘입니다.
+        Assert.False(spring[2]);
+        Assert.True(spring[(1 * size) + 2]);
+        Assert.Equal((2 * size) + 2, bankTo[(1 * size) + 2]);
+        // (0,1): 옆 물 칸의 수면 101 m·100.5 m 가 아래층보다 높아 샘이 아닙니다.
+        Assert.False(spring[1]);
+        // (2,1): 100 m 인 물 칸 둘 가운데 번호가 작은 (2,2) 로 잇습니다. (3,3): 가장 낮은 99 m 칸 (4,2) 로 잇습니다.
+        Assert.True(spring[(2 * size) + 1]);
+        Assert.Equal((2 * size) + 2, bankTo[(2 * size) + 1]);
+        Assert.Equal((4 * size) + 2, bankTo[(3 * size) + 3]);
+        // 물 칸과 닿지 않은 칸 (2,0) 은 샘이 아닙니다. 이미 다른 까닭으로 샘인 칸(skip)은 다시 보지 않습니다.
+        Assert.False(spring[2 * size]);
+        bool[] skip = new bool[n];
+        skip[(2 * size) + 1] = true;
+        (spring, bankTo) = CaveNetwork.BankSprings(g, level0, water, wl, skip);
+        Assert.False(spring[(2 * size) + 1]);
+        Assert.Equal(-1, bankTo[(2 * size) + 1]);
+        ArgumentException e = Assert.Throws<ArgumentException>(() => CaveNetwork.BankSprings(g, level0, new bool[4], wl));
+        Assert.Contains("4", e.Message, StringComparison.Ordinal);
+    }
+
+    // 개울이 사라지는 칸은 히어로 단계가 '아래층이 있고 샘까지 닿는지'(KarstStreams.WithoutSpring)로 골랐습니다. 굽기도 같은 판단만 해야
+    // 지표에서 사라진 개울마다 싱크홀이 생깁니다. 지표에서 아래층까지 10 m 가 안 되거나 그 칸이 샘이어도 싱크홀을 둡니다.
+    [Fact]
+    public void AStreamSinkOnlyNeedsItsLowerLevelToReachASpring()
+    {
+        int shallow = Cell(6, 14);
+        int spring = Cell(N / 2, 0);
+        int noLevel = Cell(18, 20);
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World([], 0.0, jitter: 0.0);
+        z[shallow] = levels[shallow] + 5.0;
+        levels[noLevel] = double.NaN;
+        double[] loss = new double[N * N];
+        loss[shallow] = 4.0e6;
+        loss[spring] = 1.0e6;
+        loss[noLevel] = 2.0e6;
+        CaveNetwork net = CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(StreamLossM3PerYr: loss));
+        Assert.Equal([shallow, spring], net.Sinks);
+        Assert.Equal([true, true], net.SinkIsStream);
+        Assert.Equal(1, net.NStreamSinksWithoutCave);
+        Assert.Equal(2, net.SegIsShaft.Count(b => b));
+        // 샘 칸에서 사라진 물은 수직굴로 내려가 그 자리에서 나옵니다. 샘으로 나오는 물은 두 개울의 합입니다.
+        Assert.Equal(5.0e6, net.Flow[spring], 3);
+        Assert.Equal(1, net.NSprings);
+        // 빗물만 모이는 칸이라면 5 m 깊이에는 싱크홀을 두지 않습니다 (NoSinkWhereTheLevelIsShallowOrTheWaterCannotReachASpring).
+    }
+
+    // 굽는 깊이(300 m)보다 깊어 그리지 않은 아래층 띠가 샘과 싱크홀 사이에 있으면, 빗물 싱크홀은 샘까지 닿지 못합니다.
+    // 개울이 사라지는 싱크홀은 길 높이(StreamRouteLevel0)로 그 밑의 석회암을 지나 샘까지 갑니다.
+    [Fact]
+    public void AStreamSinkRoutesUnderABandTooDeepToBake()
+    {
+        int stream = Cell(6, 14);
+        int rain = Cell(18, 20);
+        (CellGraph g, double[] z, double[] levels, bool[] outlet, bool[] allowed, double[] area) = World([rain], 2.0e5, jitter: 0.0);
+        double[] route = (double[])levels.Clone();
+        for (int row = 0; row < N; row++)
+        {
+            levels[Cell(row, 10)] = double.NaN;
+        }
+        double[] loss = new double[N * N];
+        loss[stream] = 3.0e6;
+        CaveNetwork net = CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params,
+            new CaveNetworkFields(StreamLossM3PerYr: loss, StreamRouteLevel0: route));
+        Assert.Equal([stream], net.Sinks);
+        Assert.Equal(0, net.NStreamSinksWithoutCave);
+        // 개울의 물은 10열 밑을 지나 샘까지 갑니다. 그 칸의 통로는 길 높이 + 0.4 × 반지름에 놓입니다.
+        int c = stream;
+        bool crossed = false;
+        while (net.Parent[c] >= 0)
+        {
+            c = net.Parent[c];
+            if (c % N == 10)
+            {
+                crossed = true;
+                Assert.Equal(route[c] + (CaveNetwork.StreamLift * net.CellRadius[c]), net.AxisZ[c], 9);
+            }
+        }
+        Assert.True(crossed);
+        Assert.Equal(Cell(N / 2, 0), c);
+        Assert.Equal(3.0e6, net.Flow[c], 3);
+        // 10열 밑의 석회암이 옆 칸보다 0.5 m 높아도(물이 넘쳐 넘어가는 턱), 개울의 물은 그 높이까지 차올라 넘어갑니다.
+        double[] ridge = (double[])route.Clone();
+        for (int row = 0; row < N; row++)
+        {
+            ridge[Cell(row, 10)] += 0.5;
+        }
+        CaveNetwork over = CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params,
+            new CaveNetworkFields(StreamLossM3PerYr: loss, StreamRouteLevel0: ridge));
+        Assert.Equal([stream], over.Sinks);
+        Assert.Equal(3.0e6, over.Flow[Cell(N / 2, 0)], 3);
+        // 그린 층에 물 높이가 낮아지는 길이 있으면 그 길을 씁니다. 길 높이를 주든 안 주든 통로가 같습니다.
+        double[] open = (double[])route.Clone();
+        CaveNetwork drawn = CaveNetwork.Build(
+            g, z, open, outlet, allowed, area, Params, new CaveNetworkFields(StreamLossM3PerYr: loss, StreamRouteLevel0: open));
+        CaveNetwork drawnPlain = CaveNetwork.Build(g, z, open, outlet, allowed, area, Params, new CaveNetworkFields(StreamLossM3PerYr: loss));
+        Assert.Equal(drawnPlain.Parent, drawn.Parent);
+        Assert.Equal(drawnPlain.SegA, drawn.SegA);
+        // 길 높이를 주지 않으면 개울 싱크홀도 샘까지 닿지 못합니다.
+        CaveNetwork plain = CaveNetwork.Build(g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(StreamLossM3PerYr: loss));
+        Assert.Empty(plain.Sinks);
+        Assert.Equal(1, plain.NStreamSinksWithoutCave);
+        // 그린 아래층이 있는 칸에서 길 높이가 다르면 받은 값을 알려 줍니다.
+        route[stream] += 1.0;
+        ArgumentException e = Assert.Throws<ArgumentException>(() => CaveNetwork.Build(
+            g, z, levels, outlet, allowed, area, Params, new CaveNetworkFields(StreamLossM3PerYr: loss, StreamRouteLevel0: route)));
+        Assert.Contains($"칸 {stream}", e.Message, StringComparison.Ordinal);
     }
 }

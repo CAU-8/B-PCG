@@ -13,6 +13,9 @@ public static class LogText
     /// <summary>천 단위 쉼표를 넣은 정수 (1572864 → "1,572,864").</summary>
     public static string N(long v) => v.ToString("N0", CultureInfo.InvariantCulture);
 
+    /// <summary>천 단위 쉼표를 넣고 소수는 셋째 자리까지 쓴 실수 (6001 → "6,001", 6000.5 → "6,000.5").</summary>
+    public static string Num(double v) => v.ToString("#,0.###", CultureInfo.InvariantCulture);
+
     /// <summary>0~1 비율을 백분율로 (0.6225 → "62.2%").</summary>
     public static string Pct(double fraction) => (fraction * 100.0).ToString("F1", CultureInfo.InvariantCulture) + "%";
 

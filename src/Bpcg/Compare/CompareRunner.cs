@@ -208,7 +208,8 @@ public static partial class CompareRunner
             {
                 MethodInstance inst = cfg.Instances.FirstOrDefault(i => i.Id == head)
                     ?? throw new ArgumentException($"설정에 없는 인스턴스입니다: {head} (있는 것: {string.Join(", ", cfg.Instances.Select(i => i.Id))})");
-                inst.Params[tail] = value;
+                // --param bpcg.profile=tiny 처럼 따옴표 없이 준 글자는 BareText 로 읽힙니다. 글자 매개변수가 받게 글자로 바꿉니다.
+                inst.Params[tail] = value is BareText bare ? bare.Text : value;
                 inst.Resolve();
             }
         }
@@ -382,6 +383,9 @@ public static partial class CompareRunner
                 throw new InvalidDataException($"[{inst.Id}] 결과 고도는 ({n}, {n}) 유한한 값이어야 합니다: 원소 {z.Length}");
             }
             float[] stored = Array.ConvertAll(z, v => (float)v);
+            // 옛 meta.json 을 먼저 지웁니다. z.npy 만 새로 쓰고 멈추면, 다음 실행이 옛 열쇠(z_key)를 보고
+            // 새 z.npy 와 옛 지표를 저장해 둔 결과로 잘못 집어 씁니다.
+            File.Delete(Path.Combine(dir, "meta.json"));
             Npy.WriteFile(zPath, stored, [n, n]);
             z = Array.ConvertAll(stored, v => (double)v); // 지표는 저장한 float32 로 잽니다 (캐시로 읽을 때와 같게)
             string layDir = Path.Combine(dir, "layers");

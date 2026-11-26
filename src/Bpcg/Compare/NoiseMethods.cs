@@ -15,7 +15,7 @@ namespace Bpcg.Compare;
 /// </remarks>
 public static class NoiseMethods
 {
-    public const long StreamBase = 7000; // 방법마다 시드를 가르는 해시 용도 번호의 시작
+    public const long StreamBase = 7000; // 방법마다 시드를 구분하는 해시 용도 번호의 시작
     private const long StreamSeed = StreamBase + 101;
     private const long StreamOffset = StreamBase + 102;
     private const double OffsetSpan = 1000.0; // 옥타브마다 좌표를 옮기는 범위 (노이즈 칸 단위)

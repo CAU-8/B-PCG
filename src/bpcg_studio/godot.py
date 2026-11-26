@@ -38,6 +38,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from bpcg_studio.bundle import describe_bundle
 from bpcg_studio.csharp import CSharpError, dotnet
 from bpcg_studio.names import bare_name
 from bpcg_studio.paths import OUT, ROOT
@@ -51,6 +52,11 @@ BAKED = ENGINE / "baked"
 MARKER = "studio_run.json"
 GLOBE_DIR = "globe"  # 실행 폴더와 engine/baked 안의 지구본 폴더 이름
 CORRIDOR_MAYBE = ("caves.glb", "entrances.json")  # 실행에 따라 없을 수 있는 회랑 파일
+# engine/baked 로 복사해도 되는 파일 종류. 굽기는 자료 파일만 씁니다.
+# engine/ 은 Godot 프로젝트라 .cs·.gd·.gdextension 같은 파일이 섞여 들어가면 엔진이 코드로 읽어
+# 실행합니다. 남에게 받은 실행 폴더를 고를 수도 있으므로, 목록의 이름이 이 종류가 아니면 아무것도
+# 복사하지 않고 멈춥니다.
+BAKED_SUFFIXES = (".bin", ".json", ".glb", ".u8")
 IMPORT_TIMEOUT_S = 600
 VERSION_TIMEOUT_S = 60
 
@@ -118,7 +124,7 @@ def runtime_env(base: dict[str, str] | None = None) -> dict[str, str]:
 
     사용자가 이미 정한 값은 그대로 둡니다. .NET 은 옛 이름 COMPlus_* 도 읽는데 DOTNET_* 가 이기므로,
     COMPlus_* 로 정해 둔 것도 정한 것으로 봅니다. 윈도우는 환경 변수 이름의 대소문자를 가리지
-    않고 os.environ 도 이름을 대문자로 두므로, 윈도우에서는 대소문자를 무시하고 견줍니다. 그래야
+    않고 os.environ 도 이름을 대문자로 두므로, 윈도우에서는 대소문자를 무시하고 비교합니다. 그래야
     같은 변수가 두 번 들어가 사용자 값이 가려지지 않습니다.
     """
     env = dict(os.environ if base is None else base)
@@ -196,6 +202,11 @@ def corridor_files(corridor_dir: Path) -> list[str]:
     for n in names:
         if not bare_name(n):  # 경로·드라이브(D:x)·앞의 '.' 가 섞인 이름은 baked 밖을 가리킴
             raise GodotError(f"회랑 파일 이름이 올바르지 않습니다: {n!r}")
+        if not n.endswith(BAKED_SUFFIXES):
+            raise GodotError(
+                f"회랑 파일 {n!r} 은 굽기가 쓰는 종류({', '.join(BAKED_SUFFIXES)})가 아닙니다. "
+                f"engine/ 에 코드로 읽힐 수 있는 파일은 복사하지 않습니다 ({man_path})"
+            )
     if "manifest.json" not in names:
         names.append("manifest.json")
     return names
@@ -334,35 +345,93 @@ def install_corridor(corridor_dir: Path, baked_dir: Path = BAKED, run_key: str =
         "seed": man.get("seed"),
         "profile": man.get("profile"),
     }
-    marker["globe"] = install_globe(src.parent / GLOBE_DIR, dst / GLOBE_DIR)
+    # 실행의 지구본이 이 회랑과 다른 히어로로 구운 지구본이면 옮기지 않습니다
+    # (엔진의 지난 지구본도 지움).
+    # 옮기면 지구본 장면이 지금 회랑과 다른 자리나 다른 행성을 보여 줍니다.
+    note = globe_mismatch(man, src.parent / GLOBE_DIR)
+    marker["globe"] = install_globe(None if note else src.parent / GLOBE_DIR, dst / GLOBE_DIR)
+    if note:
+        marker["globe_note"] = note
     tmp = dst / (MARKER + ".part")
     tmp.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, dst / MARKER)
     return marker
 
 
-def install_globe(globe_dir: Path, dst: Path) -> bool:
+def globe_mismatch(corridor_manifest: dict, globe_dir: Path) -> str | None:
+    """실행의 지구본이 이 회랑과 같은 히어로로 구운 지구본인지 봅니다.
+
+    반환: 맞거나 알 수 없으면 None, 다르면 알림 글.
+
+    회랑 목차의 parent(구운 히어로의 표지)와 globe.json 의 hero_bundle(지구본과 함께 구운 히어로의
+    표지)을 비교합니다. 둘 중 하나라도 이 기록을 적기 전에 구운 파일이면 비교하지 않습니다.
+    """
+    gm = _read_json(Path(globe_dir) / "globe.json")
+    if gm is None or "hero_bundle" not in gm or "parent" not in corridor_manifest:
+        return None
+    if gm["hero_bundle"] == corridor_manifest["parent"]:
+        return None
+    return (
+        f"지구본은 넣지 않았습니다: 실행의 지구본(globe/)은 다른 히어로 "
+        f"[{describe_bundle(gm['hero_bundle'])}]와 함께 구웠고, 이 회랑은 히어로 "
+        f"[{describe_bundle(corridor_manifest['parent'])}]로 구웠습니다. 지구본도 보려면 "
+        "bpcg bake --hero <실행 폴더>/hero 로 다시 구운 뒤 다시 여세요"
+    )
+
+
+def install_globe(globe_dir: Path | None, dst: Path) -> bool:
     """실행의 지구본 폴더(globe/)를 engine/baked/globe 로 통째로 바꿉니다. 반환: 복사했는지.
 
-    실행에 지구본이 없으면(평면 히어로 등) 엔진의 지난 지구본을 지웁니다. 남겨 두면 지구본
-    장면이 지금 회랑과 상관없는 행성을 보여 주기 때문입니다.
+    실행에 지구본이 없으면(평면 히어로 등, globe_dir 이 None 이어도) 엔진의 지난 지구본을 지웁니다.
+    남겨 두면 지구본 장면이 지금 회랑과 상관없는 행성을 보여 주기 때문입니다.
     """
-    src = Path(globe_dir)
     dst = Path(dst)
     if dst.exists() and not (dst / "globe.json").is_file() and any(dst.iterdir()):
         raise GodotError(f"지구본 자리에 알 수 없는 파일이 있습니다: {dst}")
-    if not (src / "globe.json").is_file():
+    if globe_dir is None or not (Path(globe_dir) / "globe.json").is_file():
         if dst.exists():
             shutil.rmtree(dst)
         return False
+    src = Path(globe_dir)
+    names = globe_files(src)
+    missing = [n for n in names if not (src / n).is_file()]
+    if missing:
+        raise GodotError(f"지구본 파일이 없습니다: {', '.join(missing)} ({src})")
     tmp = dst.with_name(dst.name + ".part")
     if tmp.exists():
         shutil.rmtree(tmp)
-    shutil.copytree(src, tmp)
+    tmp.mkdir(parents=True)
+    # 폴더를 통째로 복사하지 않고 globe.json 이 적은 파일만 옮깁니다 (회랑과 같은 까닭).
+    for n in names:
+        shutil.copy2(src / n, tmp / n)
     if dst.exists():
         shutil.rmtree(dst)
     os.replace(tmp, dst)
     return True
+
+
+def globe_files(globe_dir: Path) -> list[str]:
+    """globe.json 이 적은 지구본 파일(필드·겹쳐 보기·꼭짓점 .bin) + globe.json.
+
+    이름이 경로를 품거나 .bin 이 아니면 GodotError.
+    """
+    path = Path(globe_dir) / "globe.json"
+    try:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise GodotError(f"지구본 목차를 읽지 못했습니다: {path} ({e})") from None
+    entries = list(meta.get("fields") or []) + list(meta.get("overlays") or [])
+    names = [str(e.get("file", "")) for e in entries if isinstance(e, dict)]
+    corners = meta.get("corners")
+    if isinstance(corners, dict) and corners.get("file"):
+        names.append(str(corners["file"]))
+    for n in names:
+        if not bare_name(n) or not n.endswith(".bin"):
+            raise GodotError(
+                f"지구본 파일 이름이 올바르지 않습니다: {n!r} ({path}). 이름 하나에 .bin 이어야 "
+                f"합니다"
+            )
+    return sorted(set(names)) + ["globe.json"]
 
 
 # ---------------------------------------------------------------- Godot 실행
@@ -514,10 +583,14 @@ class GodotRunner:
             if not found["ok"]:
                 raise GodotError(found["message"])
             godot = Path(found["path"])
+            # 지구본을 옮기지 않은 까닭 (실행의 지구본이 다른 히어로로 구운 지구본일 때).
+            # 끝 글에도 붙입니다.
+            globe_note = ""
             if corridor_dir is not None:
                 self._set("copying", f"{run_key} 의 회랑 파일을 engine/baked 로 복사합니다")
                 marker = install_corridor(corridor_dir, self.baked_dir, run_key)
-                self._set("copying", f"파일 {len(marker['files'])}개를 복사했습니다")
+                globe_note = f". {marker['globe_note']}" if marker.get("globe_note") else ""
+                self._set("copying", f"파일 {len(marker['files'])}개를 복사했습니다{globe_note}")
             self._set("building", "엔진 C# 을 빌드합니다 (dotnet build)")
             built = build_engine(self.engine_dir / ENGINE_PROJECT.name)
             if built["returncode"] != 0:
@@ -535,7 +608,10 @@ class GodotRunner:
             with self.lock:
                 self.pid = pid
             what = "편집기" if mode == "editor" else "보기"
-            self._set("launched", f"Godot {what} 창을 띄웠습니다 (pid {pid}, {found['version']})")
+            self._set(
+                "launched",
+                f"Godot {what} 창을 띄웠습니다 (pid {pid}, {found['version']}){globe_note}",
+            )
         except GodotError as e:
             detail = e.args[1] if len(e.args) > 1 else None
             self._set("error", str(e.args[0]), detail)

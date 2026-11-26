@@ -48,10 +48,15 @@ def test_layer_columns(request, level):
 
 @pytest.mark.parametrize("level", ["planet", "hero"])
 def test_surface_rock_is_rock_at_surface(request, level):
-    """지표 암석 = 그 칸 기둥에서 지표 바로 아래 높이의 암석 (점수표 rock_consistency 의 뜻)."""
+    """지표 암석 = 그 칸 기둥에서 바닥이 지표보다 낮은 첫 층의 암석 (점수표 rock_consistency 의 뜻).
+
+    생성기(Model.SurfaceRock)와 점수표(Scorecard.SurfaceRockSamples)처럼 지표 높이 그대로
+    읽습니다. 지표보다 1 cm 아래를 읽으면, 지표가 층 바닥보다 1 cm 안쪽으로 높은 칸에서
+    아래층 암석이 나옵니다.
+    """
     b = request.getfixturevalue(level)
     z = b["z_m"].astype(np.float64)
-    assert np.array_equal(rock_at(b, z - 0.01), b["surface_rock"].astype(np.int64))
+    assert np.array_equal(rock_at(b, z), b["surface_rock"].astype(np.int64))
 
 
 def test_planet_uses_all_templates(planet):

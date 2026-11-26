@@ -11,6 +11,11 @@
     <ProjectReference Include="../src/Bpcg/Bpcg.csproj" SetConfiguration="Configuration=Release" />
   </ItemGroup>
   <ItemGroup>
+    <!-- baked/ 는 굽기 결과(자료 파일)만 두는 폴더입니다. 스튜디오의 'Godot로 보기'는 고른 실행의 회랑·지구본 파일을
+         여기로 복사합니다. 남에게 받은 실행 폴더에 .cs 파일이 섞여 있어도 게임 코드로 컴파일되지 않게 뺍니다. -->
+    <Compile Remove="baked/**" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- 아래 두 런타임 설정은 이 프로젝트의 runtimeconfig.json 을 읽는 실행에만 들어갑니다. Godot 편집기 실행 파일로
          프로젝트를 돌리면(편집기, 명령줄에서 engine 폴더를 주어 실행, 스튜디오의 'Godot로 보기') Godot 가 자기 설치 폴더의
          GodotPlugins.runtimeconfig.json 으로 .NET 을 띄워 이 값을 읽지 않습니다 (엔진 안에서 재어 확인함). 스튜디오는

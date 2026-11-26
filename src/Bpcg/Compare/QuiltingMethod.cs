@@ -266,7 +266,7 @@ public static class QuiltingMethod
             new Param("exemplar", "lope", "예제 지형: lope, rabi 또는 .npz 경로 (키 z, dx)", Kind: "str"),
             new Param("patch_px", 48L, "붙이는 조각 한 변 (칸)", Kind: "int", Lo: 8, Hi: 512),
             new Param("overlap_px", 10L, "조각끼리 겹치는 폭 (칸)", Kind: "int", Lo: 1, Hi: 128),
-            new Param("candidates", 64L, "자리마다 견줘 볼 조각 후보 수 (많을수록 이음매가 덜 보이지만 느림)", Kind: "int", Lo: 1, Hi: 4096),
+            new Param("candidates", 64L, "자리마다 비교해 볼 조각 후보 수 (많을수록 이음매가 덜 보이지만 느림)", Kind: "int", Lo: 1, Hi: 4096),
             new Param("relative", true, "겹치는 부분의 평균 높이를 맞춰 붙이기", Kind: "bool"),
             new Param("heights", "exemplar", "높이: exemplar 는 예제 높이 그대로(최저 0), grid 는 grid.relief_m 으로 맞춤", Kind: "str", Choices: ["exemplar", "grid"]),
         ],

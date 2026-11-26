@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Bpcg.Core;
 using Xunit;
 
@@ -128,6 +129,88 @@ public sealed class ParallelismTests
                 expected += Hashing.HashUnit(13, i, k);
             }
             Compare.Bits(expected, sums[i], $"조각 {i}");
+        }
+    }
+
+    // .NET 의 Parallel 은 몸체의 예외를 AggregateException 으로 모아 던집니다. 그대로 두면 한 줄로 돌 때와
+    // 여러 줄로 돌 때의 예외 형이 달라, 부르는 쪽의 catch (ArgumentException) 이 스레드 수에 따라 다르게 동작합니다.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void HelpersRethrowTheBodyExceptionWhateverTheThreadCount(int threads)
+    {
+        static void Fail(int i) => throw new ArgumentException($"시험용 오류 {i}");
+        Parallelism.Configure(threads);
+        try
+        {
+            // 5,000 은 병렬 문턱(1,024)보다 커서, 실행 수가 2 이상이면 여러 범위로 나눠 돕니다.
+            ArgumentException e = Assert.Throws<ArgumentException>(() => Parallelism.For(0, 5000, i =>
+            {
+                if (i == 3210)
+                {
+                    Fail(i);
+                }
+            }));
+            Assert.Equal("시험용 오류 3210", e.Message);
+            e = Assert.Throws<ArgumentException>(() => Parallelism.ForChunks(0, 5000, 100, (a, _) =>
+            {
+                if (a == 3200)
+                {
+                    Fail(a);
+                }
+            }));
+            Assert.Equal("시험용 오류 3200", e.Message);
+            e = Assert.Throws<ArgumentException>(() => Parallelism.ForTasks(8, i =>
+            {
+                if (i == 5)
+                {
+                    Fail(i);
+                }
+            }));
+            Assert.Equal("시험용 오류 5", e.Message);
+            e = Assert.Throws<ArgumentException>(() => Parallelism.ForCoarse(0, 8, i =>
+            {
+                if (i == 6)
+                {
+                    Fail(i);
+                }
+            }));
+            Assert.Equal("시험용 오류 6", e.Message);
+            e = Assert.Throws<ArgumentException>(() => Parallelism.ForEach(Enumerable.Range(0, 5000).ToList(), i =>
+            {
+                if (i == 4321)
+                {
+                    Fail(i);
+                }
+            }));
+            Assert.Equal("시험용 오류 4321", e.Message);
+        }
+        finally
+        {
+            Parallelism.Configure(null);
+        }
+    }
+
+    // 여러 항목이 실패해도 모은 예외(AggregateException)가 아니라 몸체가 던진 예외 하나가 나갑니다.
+    // 어느 항목의 것인지는 정하지 않습니다(다른 범위가 먼저 실패하면 앞 범위는 돌지 않고 멈출 수 있음).
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void WhenManyItemsFailOneBodyExceptionIsReported(int threads)
+    {
+        Parallelism.Configure(threads);
+        try
+        {
+            ArgumentException e = Assert.Throws<ArgumentException>(() =>
+                Parallelism.For(0, 5000, i => throw new ArgumentException($"시험용 오류 {i}")));
+            Assert.StartsWith("시험용 오류 ", e.Message, StringComparison.Ordinal);
+            e = Assert.Throws<ArgumentException>(() =>
+                Parallelism.ForTasks(8, i => throw new ArgumentException($"시험용 오류 {i}")));
+            Assert.StartsWith("시험용 오류 ", e.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Parallelism.Configure(null);
         }
     }
 

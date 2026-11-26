@@ -11,8 +11,9 @@ uv run python tools/download_pilot.py            # 없는 파일만 받기 (처�
 uv run python tools/download_pilot.py --verify-only
 ```
 
-- 맞게 받았으면: 점검이 `맞음 (크기): 63개` 와 `검사 통과.` 로 끝납니다.
+- 맞게 받았으면: 점검이 `검사 통과.` 로 끝납니다. 스크립트로만 받았으면 그 위에 `맞음 (크기): 62개` 와 `없음 (손으로 받는 선택 자료, 문제 아님): 1개` 가 나옵니다. 없다고 나오는 1개는 AfriSAR zip(가봉 숲을 항공 레이더로 찍은 자료, NASA Earthdata 계정으로 손으로 받음)이고, 받아서 `external/afrisar/` 에 두면 `맞음 (크기): 63개` 가 됩니다(`manifest.json` 의 파일 63개).
 - 걸리는 시간: 점검은 1초 안. 받기는 인터넷 속도에 따라 다릅니다.
+- 이 스크립트는 표준 라이브러리만 씁니다. 받은 자료를 파이썬으로 읽는 패키지(rasterio, geopandas, xarray 등, `data` 묶음)는 기본 설치에 없습니다. 필요하면 `uv sync --inexact --group data` 로 더합니다. 맥은 macOS 15 이상이어야 합니다(rasterio 의 맥용 설치 파일이 macOS 15 용).
 
 ## 낯선 말
 
@@ -150,6 +151,7 @@ uv run python tools/download_pilot.py
 - 없는 파일만 받습니다. 이미 있고 크기가 `manifest.json` 과 같으면 건너뜁니다. 처음부터 받으면 약 4.5 GB 입니다.
 - curl 이 필요합니다 (macOS, Windows 10 이상, 대부분의 Linux 에 들어 있습니다). 표준 라이브러리만 쓰므로 패키지를 설치하기 전에도 Python 3.11 이상이면 `python tools/download_pilot.py` 로 돌릴 수 있습니다.
 - 받는 중에는 `<이름>.part` 로 쓰고, 다 받은 뒤에 원래 이름으로 바꿉니다. 중간에 끊기면 다시 실행하세요. `.part` 부터 이어받습니다.
+- 다 받은 파일은 크기와 sha256 이 `manifest.json` 과 같을 때만 원래 이름으로 바꿉니다. 크기만 같고 sha256 이 다르면(이어받는 사이에 원본이 바뀌어, 파일의 앞부분과 뒷부분이 서로 다른 판에서 온 경우 등) 받은 파일을 지우고 실패로 알립니다. 다시 실행하면 처음부터 받습니다. 이미 있는 파일은 크기만 보고, `--verify-hash` 를 붙이면 sha256 까지 봅니다.
 - GLO-90 타일이 HTTP 404 이면 바다만 있는 칸이라 타일이 없다고 보고 넘어갑니다. 다른 실패(연결 끊김, 403 등)는 모아서 마지막에 보여주고 1 로 끝납니다.
 - 파일럿 유역은 `configs/pilot_basins.csv` 를 그대로 씁니다. 그래서 OCTOPUS WFS 내용이 바뀌어도 모두 같은 타일을 받습니다.
 - AfriSAR 는 [ORNL DAAC 안내 페이지](https://daac.ornl.gov/AFRISAR/guides/Polarimetric_height_profile.html)에서 NASA Earthdata 계정으로 받아 `external/afrisar/` 에 zip 그대로 둡니다.
@@ -161,7 +163,7 @@ uv run python tools/download_pilot.py --reselect --write-manifest
 ```
 
 - `--reselect` 는 OCTOPUS 유역에서 40개를 다시 골라 `configs/pilot_basins.csv` 를 새로 씁니다. 지금 가진 OCTOPUS 파일로 다시 고르면 지금 목록과 똑같이 나옵니다.
-- `--write-manifest` 는 받은 파일의 크기와 sha256 으로 `manifest.json` 을 새로 씁니다. 원본이 바뀌어 크기가 달라진 파일을 받아들일 때도 씁니다.
+- `--write-manifest` 는 받은 파일의 크기와 sha256 으로 `manifest.json` 을 새로 씁니다. 원본이 바뀌어 크기나 sha256 이 달라진 파일을 받아들일 때도 씁니다(이때는 받은 파일을 `manifest.json` 과 비교하지 않습니다).
 - 두 파일(`configs/pilot_basins.csv`, `data/manifest.json`)을 함께 커밋합니다.
 
 ## 다른 디스크에 두기 (BPCG_DATA)

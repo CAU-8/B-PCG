@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Bpcg.Bake;
 using Bpcg.Core;
 using Xunit;
 
@@ -66,6 +67,35 @@ public sealed class RunsTests
             if (Directory.Exists(runDir))
             {
                 Directory.Delete(runDir, true);
+            }
+        }
+    }
+
+    // 같은 폴더에 묶음을 다시 쓰다가 멈추면, 옛 목차(시드·설정)와 새 배열이 섞인 묶음이 남아서는 안 됩니다.
+    [Fact]
+    public void RewritingABundleRemovesTheOldManifestBeforeTheArrays()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "bpcg-bundle-" + Guid.NewGuid());
+        try
+        {
+            CellGraph g = Graph.FlatGraph(4, 4, 100.0);
+            string manifest = Path.Combine(dir, Bundle.ManifestFile);
+            var first = new FieldSet { ["z_m"] = new double[16] };
+            Bundle.WriteBundle(dir, g, first);
+            Assert.True(File.Exists(manifest));
+
+            // 둘째 쓰기는 slope(이름순으로 먼저) 를 쓴 뒤 z_m 의 길이가 틀려 멈춥니다.
+            var second = new FieldSet { ["slope"] = new double[16], ["z_m"] = new double[3] };
+            Assert.Throws<ArgumentException>(() => Bundle.WriteBundle(dir, g, second));
+            Assert.True(File.Exists(Path.Combine(dir, "surface", "slope.npy")));
+            Assert.False(File.Exists(manifest));
+            Assert.Contains("manifest", Assert.ThrowsAny<Exception>(() => Bundle.ReadManifest(dir)).Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
             }
         }
     }

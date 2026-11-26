@@ -8,7 +8,17 @@
 
 **역할.** A = 행성 핵심(격자, 판, 지질, 기후, 지구 기준선, 점수표(만든 지형이 물리 법칙과 지구 통계에 맞는지 채점한 표)), B = 물·지형·땅속(물길, 솔버(지형 높이를 구하는 계산기), 히어로 유역(행성에서 골라 25 m 간격으로 다시 푼 강 유역 하나), 흙, 지하수, 동굴), C = 엔진·데모입니다. 솔버와 지질 모델은 두 사람이 함께 맡습니다.
 
-**코드 위치 읽는 법.** 1~5단계의 코드 위치(`core/cubesphere.py` 등)와 'numba로 옮기기'는 생성기를 C#으로 옮기기 전에 세운 계획의 Python 이름입니다([history.md](history.md)의 2026-10-03 줄). 지금 생성기 코드는 `src/Bpcg/` 아래의 C# 폴더에 있습니다(예: `core/cubesphere.py` → `src/Bpcg/Core/Cubesphere.cs`).
+**코드 위치 읽는 법.** 1~5단계의 코드 위치(`core/cubesphere.py` 등)와 'numba로 옮기기'는 생성기를 C#으로 옮기기 전에 세운 계획의 Python 이름입니다([history.md](history.md)의 2026-10-03 줄). 지금 생성기 코드는 `src/Bpcg/` 아래의 C# 폴더에 있고, 대부분 같은 이름으로 옮겼습니다(예: `core/cubesphere.py` → `src/Bpcg/Core/Cubesphere.cs`). 이름이 다르거나 코드가 없는 곳은 아래 표에 있습니다.
+
+| 계획의 위치 | 지금 코드 |
+|---|---|
+| `core/neighbors.py` | `src/Bpcg/Core/Cubesphere.cs`의 `Cubesphere.NeighborTable` |
+| `earth/etopo.py` | ETOPO(진짜 지구의 육지·해저 높이 지도) 읽기만 결과 그림 프로젝트에 있음(`src/Bpcg.Figures/Etopo.cs`, 고도 분포 그림용). 진짜 지구를 우리 격자에 옮겨 담는 코드(격자 위 지구)와, 비교하려고 노이즈(무작위 값을 매끈하게 겹쳐 만든 높이 무늬)만으로 따로 만든 행성은 없음 |
+| `analysis/compare_routing.py` | 없음. 미리 계산한 비교 결과도 `tests/fixtures/`에 없음 |
+| `landscape/steady_state.py` | `src/Bpcg/Landscape/Solver.cs` |
+| `landscape/deposition.py` | 따로 없음. `src/Bpcg/Landscape/Solver.cs` 안에서 `CellLaw.Update`가, 강이 나르는 흙이 많을수록 강을 더 가파르게 하는 퇴적 항(G-법칙)을 더함 |
+| `analysis/theta_pilot/` | 없음. `configs/learned/`에도 맞춘 값 파일이 없음 |
+| `analysis/hero_finder.py` | 생성기 안의 `src/Bpcg/Hero/Finder.cs` (`Finder.FindHero`) |
 
 ## 한눈에 보기
 
@@ -64,14 +74,14 @@ CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험) 초록은 자동 �
 | 할 일 | 왜 | 상태 | 확인 방법 |
 |---|---|---|---|
 | 루트 폴더 하나(`b-pcg`)로 통일, 명령 이름 `bpcg`(파이썬 패키지 `bpcg_studio`, C# 라이브러리 `Bpcg`) | 세 사람이 같은 이름과 경로로 명령을 돌림 | 끝 | `uv run pytest` |
-| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 6개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
+| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 5개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
 | 설치 스크립트(맥·리눅스 `setup.sh`, 윈도우 `setup.ps1`)와 점검 도구(`tools/doctor.py`) | 명령 하나로 설치하고, 빠진 항목을 점검함 | 끝(맥에서 시험, 윈도우·리눅스는 팀원 컴퓨터에서 첫 시험 필요) | `./scripts/setup.sh --check` |
 | 개발 규칙(`docs/conventions.md`), 협업 순서(`CONTRIBUTING.md`), PR 양식, CI 설정 | 규칙을 글로 정하고, 깨진 코드가 `main`에 들어가지 않게 함 | 끝 | GitHub에 올린 뒤 CI 초록 |
 | 파일럿 자료 4.5 GB와 `data/manifest.json`(크기·해시) | 3단계의 θ 파일럿(진짜 지구 자료로 강 규칙의 숫자를 처음 재 보는 일)에 씀. 크기·해시로 받은 파일이 온전한지 확인함 | 끝 | `uv run python tools/download_pilot.py --verify-only` |
 | 임시 폴더에 있던 분석 스크립트·그림·시험 자료를 `analysis/`, `docs/`, `tests/fixtures/`로 이전 | 가봉 분석 스크립트와 그림이 임시 폴더에만 있었음(설계도 10장) | 끝 | `analysis/README.md` |
 | Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) 프로젝트 뼈대(`engine/`)와 headless 연기 시험 | 엔진 담당(C)이 1주차부터 엔진 일을 시작함. 연기 시험은 화면 없이(headless) 엔진을 띄워 열리는지만 보는 짧은 시험 | 끝 | `uv run pytest -m godot` |
 | 첫 커밋, GitHub 저장소 만들기, main 보호 규칙 | `main`에 직접 올리는 실수를 막음(conventions 10절) | 저장소와 첫 커밋은 끝남([CAU-8/B-PCG](https://github.com/CAU-8/B-PCG)). 보호 규칙은 관리자 확인 필요 | CONTRIBUTING.md 끝 절 |
-| 코드 라이선스 정하기(데이터와 분리) | 결과물을 GitHub에 오픈소스로 공개해야 함(설계도 8장) | 남음(전원) | `LICENSE` 파일 |
+| 코드 라이선스 정하기(데이터와 분리) | 결과물을 GitHub에 오픈소스로 공개해야 함(설계도 8장) | 끝. MIT, 저작권자 `B-PCG contributors`. 옮겨 온 코드와 잘라 온 자료는 따로 적음 | `LICENSE`, `THIRD_PARTY_NOTICES.md` |
 | 팀원 두 명의 컴퓨터에서 설치 스크립트 실행 | 설치 스크립트를 아직 맥에서만 시험함 | 남음(팀원) | `tools/doctor.py` 결과를 PR에 붙임 |
 | 묶음 형식 초안(manifest + 필드 파일), 기호·단위 표 합의 | 묶음의 모양을 정함. 같은 기호(P0, κ, G, R, chi)가 저마다 두 뜻이었음(설계도 5장) | 묶음 형식은 코드와 문서에 있음(`src/Bpcg/Bake/Bundle.cs`, [pipeline.md](pipeline.md) 11장). 따로 두기로 한 `docs/bundle_format.md`는 만들지 않음. 기호·단위 표는 conventions 2·3절 | [pipeline.md](pipeline.md) 11장, conventions 2·3절 |
 | 기억에 기대는 수치의 원문 확인 나눠 맡기 | 원문을 확인하지 않은 수치(예: 내륙 배수 18~20%, 해양 비율 0.708)가 설계도에 있음 | 남음(전원) | 설계도 10장 할 일 |

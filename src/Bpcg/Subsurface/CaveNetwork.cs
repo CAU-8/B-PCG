@@ -24,10 +24,25 @@ public sealed record CaveNetworkParams(
 /// <param name="UpliftMPerYr">(N,) 땅이 솟는 속도 = 강이 파 내려가는 속도 [m/yr] (없으면 통로 굵기를 시간으로 막지 않음).</param>
 /// <param name="BedZ">(N,) 아래층이 놓인 지층의 층리면(지층이 쌓인 면) 높이 [m] (없으면 통로가 물 높이를 그대로 따라감).</param>
 /// <param name="DipSin">(N,) 그 층리면이 기운 각의 sin (없으면 0).</param>
-/// <param name="StreamLossM3PerYr">(N,) 지표의 개울이 그 칸에서 땅속으로 사라지는 물 [m³/yr]. 0 보다 큰 칸은 솎지 않고 싱크홀로 둡니다.</param>
+/// <param name="StreamLossM3PerYr">
+/// (N,) 지표의 개울이 그 칸에서 땅속으로 사라지는 물 [m³/yr]. 0 보다 큰 칸은 솎지 않고 싱크홀로 둡니다.
+/// 이 칸의 아래층은 '층이 있고 샘까지 길이 있는지(넘침 높이가 있는지, SpillHead)'만 봅니다 (히어로 단계의
+/// KarstStreams.DrainsToSpring 과 같은 판단).
+/// </param>
+/// <param name="GroundAtNodes">칸 번호 목록 → 그 칸 노드(graph.Pos) 자리의 지표 높이 [m]. 수직굴 꼭대기를 정합니다 (없으면 칸 높이 z).</param>
+/// <param name="StreamRouteLevel0">
+/// (N,) 개울이 사라지는 칸에서 샘까지 길을 찾을 때 쓰는 아래층 높이 [m] (Caves.RouteLevel0). 그린 아래층에, 지표에서 300 m 보다 깊어
+/// 굽지 않는 석회암의 아래 지하수면 높이를 더한 값입니다. 빗물이 모이는 싱크홀은 쓰지 않습니다 (없으면 levels 의 아래층).
+/// </param>
+/// <param name="SolubleFloorAt">
+/// (x, y, z) 자리마다 높이 z 아래로 이어지는 녹는 암석의 바닥 높이 [m]. 아래층 통로가 층리면을 따라 물 높이 아래로 내려가도 통로
+/// 바닥(가운데 선 − 반지름)이 이 높이 아래로 가지 않습니다. 통로의 꺾임을 다듬은 뒤의 자리에서 묻습니다. NaN 을 돌려준 자리와
+/// 주지 않은 경우는 막지 않습니다.
+/// </param>
 public sealed record CaveNetworkFields(
     double[]? DischargeM3PerYr = null, long[]? Receiver = null, double[]? UpliftMPerYr = null, double[]? BedZ = null,
-    double[]? DipSin = null, double[]? StreamLossM3PerYr = null);
+    double[]? DipSin = null, double[]? StreamLossM3PerYr = null, Func<int[], double[]>? GroundAtNodes = null,
+    double[]? StreamRouteLevel0 = null, Func<double[], double[], double[], double[]>? SolubleFloorAt = null);
 
 /// <summary>
 /// 통로 그물의 모양을 잰 값. 실제 동굴 지도 34개에서 잰 범위 (Collon 외 2017, 정정 2021): 마디에 이어진 가지 수의 평균 1.75~2.57
@@ -59,12 +74,19 @@ public sealed record CaveShape(
 /// 3. 통로 굵기는 두 한계 가운데 작은 쪽입니다 (Radius). 큰비 때의 물을 가득 채워 흘릴 수 있는 굵기, 그리고 통로가 물에 잠겨
 ///    있는 동안 벽이 녹아 물러난 거리.
 /// 4. 아래층 통로는 지층이 쌓인 면(층리면)을 따라갑니다. 층리면이 기울어 있으면 통로가 물 높이 아래로 내려갔다가 틈을 타고
-///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth).
+///    다시 올라오기를 되풀이해, 물에 잠긴 구간과 동굴 호수가 생깁니다 (LoopDepth 가 폭, SawtoothDepth 가 깊이). 녹는 암석의
+///    바닥 아래로는 내려가지 않습니다 (CaveNetworkFields.SolubleFloorAt).
 /// 길을 고르는 비교에는 더하기, 곱하기만 씁니다. 지수·로그 함수는 운영체제마다 끝자리가 달라 길이 달라질 수 있기 때문입니다.
 /// 굵기와 깊이(길을 고른 뒤의 모양)에만 거듭제곱을 씁니다.
 /// </remarks>
 public sealed class CaveNetwork
 {
+    /// <summary>
+    /// 수직굴 꼭대기를 노드 자리 지표보다 더 올리는 높이 [m]. 굽기의 프랙탈 디테일(보기용 잔무늬)이 지표를 올린 곳에서도
+    /// 구멍이 열리게 둡니다. laptop 프로필 시드 0 회랑에서 디테일이 더한 높이는 가장 큰 곳이 7.2 m 였습니다.
+    /// </summary>
+    public const double ShaftAboveGroundM = 10.0;
+
     /// <summary>
     /// 통로 반지름의 아래 한계 [m]. 동굴 메시는 2 m 칸으로 만듭니다. 반지름이 2 m 보다 작은 관은 칸 사이로 빠져
     /// 메시가 토막 나므로 이보다 가늘게 두지 않습니다. 지구의 작은 통로는 이보다 가는 것이 많습니다.
@@ -152,6 +174,13 @@ public sealed class CaveNetwork
     /// <summary>싱크홀이 지표의 개울이 사라지는 자리이면 참. Sinks 와 같은 순서.</summary>
     public bool[] SinkIsStream { get; private init; } = [];
 
+    /// <summary>
+    /// 개울이 땅속으로 사라지는 칸(StreamLossM3PerYr &gt; 0) 가운데, 아래에 샘까지 이어지는 동굴 층이 없어 싱크홀을 두지 못한 칸 수.
+    /// 이런 칸은 지표에서는 개울이 사라지지만 3D 회랑에는 구멍도 통로도 없습니다. 히어로 단계가 같은 판단(KarstStreams.DrainsToSpring)으로
+    /// 그런 자리에서는 개울을 사라지게 하지 않으므로 0 이어야 합니다. 0 이 아니면 히어로 단계와 굽기가 다른 동굴 층이나 샘을 본 것입니다.
+    /// </summary>
+    public int NStreamSinksWithoutCave { get; private init; }
+
     /// <summary>(K·N) 층 k 의 칸 c 를 지나는 물 [m³/yr] (index k·N + c). 통로가 없으면 0.</summary>
     public double[] Flow { get; private init; } = [];
 
@@ -179,7 +208,7 @@ public sealed class CaveNetwork
     /// <summary>물이 나오는 샘 수 (통로가 닿은 샘 칸, 층마다 따로 셈).</summary>
     public int NSprings { get; private init; }
 
-    /// <summary>그물의 모양을 잰 값 (Shape). 실제 동굴 지도에서 잰 범위와 견줍니다.</summary>
+    /// <summary>그물의 모양을 잰 값 (Shape). 실제 동굴 지도에서 잰 범위와 비교합니다.</summary>
     public CaveShape Shape { get; private init; } = new(0, 0, 0, 0.0, 0.0, 0.0);
 
     public int NSegments => SegRadius.Length;
@@ -263,11 +292,212 @@ public sealed class CaveNetwork
         return span < LoopMinM ? 0.0 : Math.Min(span, LoopMaxM);
     }
 
+    /// <summary>
+    /// 통로가 층리면을 따라 물 높이 아래로 내려간 깊이 [m] (sawtooth_depth, 샘 쪽을 자르기 전). 층리면은 폭 span [m] 간격으로
+    /// 겹겹이 있다고 봅니다. 통로는 한 면을 따라가다가, 그 면이 물 높이보다 폭만큼 깊어지면 세로 틈을 타고 위의 면으로 옮겨 탑니다.
+    /// 면이 물 높이 위로 올라가면 아래의 면으로 옮겨 탑니다. 그래서 깊이는 물길을 따라 0 에서 폭까지 톱니 꼴로 오르내립니다.
+    /// 칸마다 따로 (물 높이 − 층리면 높이) 를 폭으로 나눈 나머지를 쓰면, 그 값이 폭의 수십 배라 폭이 조금만 달라도 나머지가 크게
+    /// 바뀝니다. 그래서 하류 칸(샘 쪽 이웃)의 깊이 downstreamDepth 에 두 칸 사이에서 (물 높이 − 층리면 높이) 가 바뀐 만큼만 더하고,
+    /// 0 이상 폭 미만이 되도록 폭을 더하거나 뺍니다. 두 칸이 같은 면 위에 있으면 통로의 높이 차는 층리면의 높이 차와 같습니다.
+    /// aboveBed, downstreamAboveBed: 이 칸과 하류 칸에서 물 높이 − 층리면 높이 [m]. 하류 칸이 없거나(샘) 그 칸의 층리면을 모르면
+    /// (NaN) aboveBed 를 폭으로 나눈 나머지, 곧 물 높이 바로 아래의 면에서 시작합니다. 폭이 0 이거나 층리면을 모르면 0 (물 높이를 따라감).
+    /// 예: 폭 10 m. 샘 칸에서 물 높이가 층리면보다 123 m 위면 깊이는 123 − 120 = 3 m 입니다. 상류 칸에서 그 차가 127 m 면 7 m 이고,
+    /// 그다음 칸에서 135 m 면 7 + 8 = 15 m 로 폭을 넘으므로 위의 면으로 옮겨 타 5 m 입니다.
+    /// </summary>
+    public static double SawtoothDepth(double span, double aboveBed, double downstreamAboveBed, double downstreamDepth)
+    {
+        if (!(span > 0.0) || !double.IsFinite(aboveBed))
+        {
+            return 0.0;
+        }
+        double x = double.IsFinite(downstreamDepth) && double.IsFinite(downstreamAboveBed)
+            ? downstreamDepth + (aboveBed - downstreamAboveBed)
+            : aboveBed;
+        double depth = x - (span * Math.Floor(x / span));
+        // 반올림으로 span 과 같아진 값은 위의 면(깊이 0)으로 봅니다.
+        return depth < span ? depth : 0.0;
+    }
+
     /// <summary>잡음 값(대략 −1~1)을 저항으로 바꿉니다. 0 이하의 잡음은 잘 통하는 자리, 큰 잡음은 덜 통하는 자리입니다.</summary>
     public static double Resistance(double noise)
     {
         double t = Math.Min(Math.Max(0.5 + noise, 0.0), 1.0);
         return ResistanceMin + ((ResistanceMax - ResistanceMin) * t * t);
+    }
+
+    /// <summary>
+    /// 층마다 샘에서 거꾸로 닿는 칸 (reach): 그 칸의 물이 동굴 층을 타고 샘까지 갈 수 있으면 참입니다. 샘 칸에서 시작해 층이 있는
+    /// 이웃 칸으로 넓힙니다. 층이 없는 칸(NaN)은 지나지 못합니다.
+    /// 아래층(k = 0, 지금 물이 흐르는 층)은 물 높이가 샘 쪽으로 낮아지는 길만 셉니다. 물은 높은 데서 낮은 데로만 흐르기 때문입니다.
+    /// 위층은 옛 물길이라 따지지 않습니다.
+    /// 빗물이 모이는 싱크홀을 둘지 정할 때 씁니다(Build). 개울이 사라지는 싱크홀은 넘침 높이(SpillHead)로 봅니다.
+    /// levels·outlet: (K·N) 층 k 의 높이 [m] 와 샘 칸 (index k·N + c). 반환: (K·N).
+    /// 예: 샘 칸의 아래층이 100 m, 그 이웃이 100.05 m, 그다음 칸이 99 m 면 앞의 두 칸만 닿습니다. 99 m 칸의 물은 100.05 m 로 오르지 못합니다.
+    /// </summary>
+    public static bool[] Reach(CellGraph graph, double[] levels, bool[] outlet)
+    {
+        int n = graph.NCells;
+        if (n == 0 || levels.Length == 0 || levels.Length % n != 0 || outlet.Length != levels.Length)
+        {
+            throw new ArgumentException(
+                $"levels 와 outlet 은 (층 수 × {n},) 길이여야 합니다. 받은 길이: levels {levels.Length}, outlet {outlet.Length}");
+        }
+        int kN = levels.Length / n;
+        int[] nbr = graph.Nbr;
+        const int nSlots = CellGraph.NSlots;
+        bool[] reach = new bool[kN * n];
+        var queue = new Queue<int>();
+        for (int k = 0; k < kN; k++)
+        {
+            int off = k * n;
+            for (int c = 0; c < n; c++)
+            {
+                if (outlet[off + c] && double.IsFinite(levels[off + c]))
+                {
+                    reach[off + c] = true;
+                    queue.Enqueue(c);
+                }
+            }
+            while (queue.Count > 0)
+            {
+                int v = queue.Dequeue();
+                double lv = levels[off + v];
+                for (int s = 0; s < nSlots; s++)
+                {
+                    int u = nbr[(v * nSlots) + s];
+                    if (u < 0 || reach[off + u])
+                    {
+                        continue;
+                    }
+                    double lu = levels[off + u];
+                    if (!double.IsFinite(lu) || (k == 0 && lu < lv - LevelEps))
+                    {
+                        continue;
+                    }
+                    reach[off + u] = true;
+                    queue.Enqueue(u);
+                }
+            }
+        }
+        return reach;
+    }
+
+    /// <summary>
+    /// 넘침 높이 (spill_head) [m]: 칸의 물이 샘까지 빠지려면 차올라야 하는 가장 낮은 물 높이입니다.
+    /// 샘에서 시작해 이웃으로 넓히며, 이웃 칸으로 갈 때의 높이는 max(지금 칸의 넘침 높이, 이웃 칸의 층 높이)입니다(가장 높은 자리가
+    /// 가장 낮은 길을 찾는 다익스트라). 층 높이가 샘 쪽으로 낮아지는 길이 있는 칸은 넘침 높이가 그 칸의 층 높이와 같습니다.
+    /// 사방이 더 높은 층으로 막힌 곳은 가장 낮은 넘는 자리까지 물이 차오른다고 봅니다. 물에 잠긴 통로는 이 높이 아래에서
+    /// 오르내릴 수 있습니다(물 높이 아래로 내려갔다 올라오는 통로, LoopDepth 와 같은 까닭).
+    /// 히어로 단계(KarstStreams.DrainsToSpring)와 굽기(개울이 사라지는 싱크홀의 길, Build)가 이 함수로 같은 판단을 합니다.
+    /// level: (N,) 층 높이 [m] (없으면 NaN, 지나지 못함). outlet: (N,) 샘 칸. 반환: (N,) [m]. 샘까지 이어지지 않는 칸은 +∞.
+    /// 예: 층 높이가 350.4 m 인 칸에서 샘까지 가는 모든 길이 351.15 m 인 칸을 지나야 하면, 넘침 높이는 351.15 m 입니다.
+    /// </summary>
+    public static double[] SpillHead(CellGraph graph, double[] level, bool[] outlet)
+    {
+        int n = graph.NCells;
+        if (level.Length != n || outlet.Length != n)
+        {
+            throw new ArgumentException($"level 과 outlet 은 칸 수 ({n},) 와 같은 길이여야 합니다. 받은 길이: {level.Length}, {outlet.Length}");
+        }
+        int[] nbr = graph.Nbr;
+        const int nSlots = CellGraph.NSlots;
+        double[] head = new double[n];
+        Array.Fill(head, double.PositiveInfinity);
+        var pq = new PriorityQueue<int, (double Head, int Cell)>();
+        for (int c = 0; c < n; c++)
+        {
+            if (outlet[c] && double.IsFinite(level[c]))
+            {
+                head[c] = level[c];
+                pq.Enqueue(c, (level[c], c));
+            }
+        }
+        while (pq.TryDequeue(out int v, out (double Head, int Cell) pr))
+        {
+            if (pr.Head > head[v])
+            {
+                continue;
+            }
+            for (int s = 0; s < nSlots; s++)
+            {
+                int u = nbr[(v * nSlots) + s];
+                if (u < 0 || !double.IsFinite(level[u]))
+                {
+                    continue;
+                }
+                double h = Math.Max(pr.Head, level[u]);
+                if (h < head[u])
+                {
+                    head[u] = h;
+                    pq.Enqueue(u, (h, u));
+                }
+            }
+        }
+        return head;
+    }
+
+    /// <summary>
+    /// 강가 샘 (bank_springs): 아래층(지금 물이 흐르는 층)의 물은 그 물 높이를 정한 큰 물(강·호수·바다)로 빠집니다.
+    /// 아래층이 있는 칸이 수면이 그 층 높이 이하인 물 칸이거나, 둘레 여덟 칸에 그런 물 칸이 있으면 샘입니다. 통로는 물 높이에서
+    /// 저항이 가장 작은 끝으로 빠지고, 샘의 자리가 지하수면을 정한다는 관찰을 따랐습니다(Audra &amp; Palmer 2011).
+    /// 수면이 그 층보다 높은 물 칸(지하수면보다 높이 떠 있는 개울)은 그 자리가 샘이 아닙니다. 동굴의 물이 위로 솟지 못하기 때문입니다.
+    /// 물가의 샘은 수면이 가장 낮은 이웃 물 칸으로 잇습니다(같으면 번호가 작은 칸).
+    /// 히어로 단계(KarstStreams.DrainsToSpring)와 굽기(HeroVolume)가 이 함수로 같은 샘을 씁니다.
+    /// level0: (N,) 아래층 높이 [m] (없으면 NaN). isWater: (N,) 수면이 있는 물 칸. waterLevel: (N,) 수면 [m].
+    /// skip: (N,) 다른 까닭으로 이미 샘인 칸(산비탈 밖으로 열리는 입구). 이 칸은 다시 보지 않습니다. 없으면 null.
+    /// 반환: Spring (N,) 샘 칸, BankTo (N,) 물가의 샘이 잇는 물 칸 (물 칸 자신이 샘이거나 샘이 아니면 −1).
+    /// 예: 아래층이 120.3 m 인 칸 옆에 수면 120.0 m 인 강 칸과 118.5 m 인 강 칸이 있으면, 그 칸은 샘이고 118.5 m 칸으로 잇습니다.
+    /// 아래층이 350 m 인 칸에 수면 520 m 인 개울이 흐르면 그 칸은 샘이 아닙니다.
+    /// </summary>
+    public static (bool[] Spring, int[] BankTo) BankSprings(
+        CellGraph graph, double[] level0, bool[] isWater, double[] waterLevel, bool[]? skip = null)
+    {
+        int n = graph.NCells;
+        if (level0.Length != n || isWater.Length != n || waterLevel.Length != n || (skip is not null && skip.Length != n))
+        {
+            throw new ArgumentException(
+                $"level0, isWater, waterLevel, skip 은 칸 수 ({n},) 와 같은 길이여야 합니다. 받은 길이: {level0.Length}, "
+                + $"{isWater.Length}, {waterLevel.Length}, {skip?.Length.ToString() ?? "없음"}");
+        }
+        int[] nbr = graph.Nbr;
+        const int nSlots = CellGraph.NSlots;
+        bool[] spring = new bool[n];
+        int[] bankTo = new int[n];
+        Array.Fill(bankTo, -1);
+        for (int c = 0; c < n; c++)
+        {
+            double lv = level0[c];
+            if ((skip is not null && skip[c]) || !double.IsFinite(lv))
+            {
+                continue;
+            }
+            // 물 칸은 수면이 그 층 높이 이하일 때 그 자리가 샘입니다. 수면이 더 높은 물 칸(지하수면보다 높이 떠 있는 개울)으로는
+            // 동굴의 물이 솟지 못하므로, 다른 칸처럼 둘레의 물 칸을 봅니다.
+            if (isWater[c] && waterLevel[c] <= lv + LevelEps)
+            {
+                spring[c] = true;
+                continue;
+            }
+            int best = -1;
+            for (int s = 0; s < nSlots; s++)
+            {
+                int nb = nbr[(c * nSlots) + s];
+                if (nb < 0 || !isWater[nb] || !(waterLevel[nb] <= lv + LevelEps))
+                {
+                    continue;
+                }
+                if (best < 0 || waterLevel[nb] < waterLevel[best] || (waterLevel[nb] == waterLevel[best] && nb < best))
+                {
+                    best = nb;
+                }
+            }
+            if (best >= 0)
+            {
+                spring[c] = true;
+                bankTo[c] = best;
+            }
+        }
+        return (spring, bankTo);
     }
 
     /// <summary>
@@ -310,7 +540,7 @@ public sealed class CaveNetwork
         {
             ("DischargeM3PerYr", more.DischargeM3PerYr?.Length), ("Receiver", more.Receiver?.Length),
             ("UpliftMPerYr", more.UpliftMPerYr?.Length), ("BedZ", more.BedZ?.Length), ("DipSin", more.DipSin?.Length),
-            ("StreamLossM3PerYr", more.StreamLossM3PerYr?.Length),
+            ("StreamLossM3PerYr", more.StreamLossM3PerYr?.Length), ("StreamRouteLevel0", more.StreamRouteLevel0?.Length),
         })
         {
             if (len is int l && l != n)
@@ -329,45 +559,38 @@ public sealed class CaveNetwork
         double[]? streamLoss = more.StreamLossM3PerYr;
 
         // --- 1. 층마다 샘에서 거꾸로 닿는 칸. 아래층은 물 높이가 샘 쪽으로 낮아지는 길만 셉니다 (위층은 옛 물길이라 따지지 않음).
-        bool[] reach = new bool[kN * n];
-        var queue = new Queue<int>();
-        for (int k = 0; k < kN; k++)
+        bool[] reach = Reach(graph, levels, outlet);
+        // 개울이 사라지는 칸의 길: 아래층을 StreamRouteLevel0 으로 바꾼 높이(routeLevels)와, 그 높이로 잰 넘침 높이(routeHead, SpillHead).
+        // 그린 아래층이 있는 칸에서는 두 높이가 같으므로, 빗물 싱크홀의 길과 통로의 높이는 바뀌지 않습니다.
+        double[] routeLevels = levels;
+        if (more.StreamRouteLevel0 is double[] route0 && streamLoss is not null)
         {
-            int off = k * n;
+            routeLevels = (double[])levels.Clone();
             for (int c = 0; c < n; c++)
             {
-                if (outlet[off + c] && double.IsFinite(levels[off + c]))
+                if (double.IsFinite(levels[c]))
                 {
-                    reach[off + c] = true;
-                    queue.Enqueue(c);
-                }
-            }
-            while (queue.Count > 0)
-            {
-                int v = queue.Dequeue();
-                double lv = levels[off + v];
-                for (int s = 0; s < nSlots; s++)
-                {
-                    int u = nbr[(v * nSlots) + s];
-                    if (u < 0 || reach[off + u])
+                    // Caves.RouteLevel0 은 묶음과 같은 정밀도(32비트 실수)로 반올림한 아래층을 돌려줍니다. 메모리에서 바로 만든
+                    // 히어로(묶음 파일을 거치지 않음)의 아래층은 64비트라 끝자리가 다를 수 있으므로, 32비트로 맞춰 비교하고
+                    // 그린 아래층의 값은 그대로 둡니다.
+                    if ((float)levels[c] != (float)route0[c])
                     {
-                        continue;
+                        throw new ArgumentException(
+                            $"more.StreamRouteLevel0 은 아래층이 있는 칸에서 아래층 높이와 같아야 합니다. 칸 {c}: 아래층 {levels[c]}, 받은 값 {route0[c]}");
                     }
-                    double lu = levels[off + u];
-                    if (!double.IsFinite(lu) || (k == 0 && lu < lv - LevelEps))
-                    {
-                        continue;
-                    }
-                    reach[off + u] = true;
-                    queue.Enqueue(u);
+                    continue;
                 }
+                routeLevels[c] = route0[c];
             }
         }
+        double[]? routeHead = streamLoss is null ? null : SpillHead(graph, routeLevels[..n], outlet[..n]);
 
         // --- 2. 싱크홀: 석회암 지표에서 빗물이 모이고, 아래에 샘까지 길이 닿는 동굴 층이 있는 칸.
         //        개울이 사라지는 칸은 솎지 않고 모두 둡니다. 그 둘레 sink_spacing_m 안의 다른 후보는 뺍니다.
+        //        개울이 사라지는 칸은 히어로 단계가 같은 판단으로 골랐으므로, 샘까지 닿지 않는 칸(streamWithoutCave)은 없어야 합니다.
         var forced = new List<int>();
         var candidates = new List<int>();
+        int streamWithoutCave = 0;
         for (int c = 0; c < n; c++)
         {
             if (streamLoss is not null && streamLoss[c] > 0.0)
@@ -375,6 +598,10 @@ public sealed class CaveNetwork
                 if (FeedsAnyLevel(c))
                 {
                     forced.Add(c);
+                }
+                else
+                {
+                    streamWithoutCave++;
                 }
             }
             else if (sinkAllowed[c] && drainageAreaM2[c] >= p.SinkMinAreaM2 && FeedsAnyLevel(c))
@@ -485,6 +712,12 @@ public sealed class CaveNetwork
                 {
                     continue;
                 }
+                // 싱크홀의 길은 그린 층에서 물 높이가 낮아지는 쪽으로만 갑니다. 개울이 사라지는 싱크홀에 그런 길이 없으면(아래층에서
+                // reach 가 거짓), 굽지 않는 깊은 석회암도 지나고(StreamRouteLevel0) 물 높이가 그 싱크홀의 넘침 높이를 넘지 않는 칸이면
+                // 오르내리는 길을 찾습니다(SpillHead). 그린 층 안의 길을 먼저 써야 회랑에 보이는 통로가 많습니다.
+                bool streamPath = k == 0 && sinkStream[i] && !reach[off + s];
+                double[] lvl = streamPath ? routeLevels : levels;
+                double headLimit = streamPath ? routeHead![s] + LevelEps : double.PositiveInfinity;
                 search++;
                 pq.Clear();
                 cost[s] = 0.0;
@@ -503,18 +736,24 @@ public sealed class CaveNetwork
                         found = v;
                         break;
                     }
-                    double lv = levels[off + v];
+                    double lv = lvl[off + v];
                     for (int slot = 0; slot < nSlots; slot++)
                     {
                         int u = nbr[(v * nSlots) + slot];
-                        if (u < 0 || !reach[off + u])
+                        if (streamPath)
                         {
-                            continue;
+                            if (u < 0 || !(lvl[off + u] <= headLimit))
+                            {
+                                continue;
+                            }
                         }
-                        // 싱크홀에서 샘 쪽으로 가는 길이라, 아래층에서는 물 높이가 높아지는 칸으로 가지 않습니다.
-                        if (downhillOnly && levels[off + u] > lv + LevelEps)
+                        else
                         {
-                            continue;
+                            // 싱크홀에서 샘 쪽으로 가는 길이라, 아래층에서는 물 높이가 높아지는 칸으로 가지 않습니다.
+                            if (u < 0 || !reach[off + u] || (downhillOnly && levels[off + u] > lv + LevelEps))
+                            {
+                                continue;
+                            }
                         }
                         double next = pr.Cost + (dist[(v * nSlots) + slot] * 0.5 * (resist[v] + resist[u]));
                         if (stamp[u] != search || next < cost[u] || (next == cost[u] && v < pred[u]))
@@ -596,7 +835,8 @@ public sealed class CaveNetwork
             }
         }
 
-        // --- 6. 통로 굵기와 가운데 선의 높이
+        // --- 6. 통로 굵기와 가운데 선의 높이. 높이는 routeLevels 로 읽습니다: 그린 아래층이 있는 칸은 아래층과 같고, 개울 싱크홀의
+        //        길이 지나는 깊은 칸(아래층이 없음)은 그 아래 지하수면입니다.
         double[] radius = new double[kN * n];
         double[] axis = new double[kN * n];
         Array.Fill(axis, double.NaN);
@@ -611,7 +851,7 @@ public sealed class CaveNetwork
                     continue;
                 }
                 radius[off + c] = Radius(flow[off + c], more.UpliftMPerYr is null ? 0.0 : more.UpliftMPerYr[c], p);
-                axis[off + c] = levels[off + c] + (k == 0 ? StreamLift * radius[off + c] : 0.0);
+                axis[off + c] = routeLevels[off + c] + (k == 0 ? StreamLift * radius[off + c] : 0.0);
                 nSprings += parent[off + c] < 0 ? 1 : 0;
             }
         }
@@ -660,17 +900,48 @@ public sealed class CaveNetwork
                     fromSink[q] = Math.Max(fromSink[q], fromSink[c] + Step(c, q));
                 }
             }
+            // 층리면을 따라 물 높이 아래로 내려간 깊이 (샘 쪽을 자르기 전). 하류 칸의 깊이에 이어 붙이므로(SawtoothDepth), 샘까지의
+            // 길이처럼 하류 칸부터 채웁니다. 폭은 칸마다 다를 수 있지만, 같은 면 위의 두 칸 사이에서는 통로가 면을 그대로 따라갑니다.
+            double[] span = new double[n];
+            double[] saw = new double[n];
             foreach (int c in cells)
             {
-                double span = LoopDepth(toSpring[c] + fromSink[c], more.DipSin is null ? 0.0 : more.DipSin[c]);
-                double drop = 0.0;
-                if (span > 0.0 && double.IsFinite(more.BedZ[c]))
+                span[c] = LoopDepth(toSpring[c] + fromSink[c], more.DipSin is null ? 0.0 : more.DipSin[c]);
+            }
+            Array.Clear(done);
+            foreach (int c0 in cells)
+            {
+                chain.Clear();
+                int c = c0;
+                while (c >= 0 && !done[c])
                 {
-                    // 물 높이 바로 아래의 층리면까지의 깊이: 층리면이 span 간격으로 놓였다고 보고, 물 높이에서 가장 가까운 아래쪽 면.
-                    double t = (levels[c] - more.BedZ[c]) / span;
-                    drop = (t - Math.Floor(t)) * span;
-                    // 샘에서는 물이 지표로 나와야 하므로, 샘에 가까울수록 얕게 둡니다 (샘까지 거리 × SpringRiseSlope 보다 깊지 않게).
-                    drop = Math.Min(drop, SpringRiseSlope * toSpring[c]);
+                    chain.Add(c);
+                    c = parent[c];
+                }
+                for (int t = chain.Count - 1; t >= 0; t--)
+                {
+                    int a = chain[t];
+                    int q = parent[a];
+                    // 개울 싱크홀의 길이 지나는 깊은 칸(아래층을 그리지 않은 칸)은 층리면이 없어(BedZ 가 NaN) 깊이가 0 입니다.
+                    double above = routeLevels[a] - more.BedZ[a];
+                    double aboveDown = q >= 0 ? routeLevels[q] - more.BedZ[q] : double.NaN;
+                    saw[a] = SawtoothDepth(span[a], above, aboveDown, q >= 0 ? saw[q] : double.NaN);
+                    done[a] = true;
+                }
+            }
+            // 층리면은 녹는 암석 아래에도 이어지지만 동굴은 녹는 암석 안에만 생깁니다. 그래서 통로 바닥(가운데 선 − 반지름)이 녹는
+            // 암석의 바닥 아래로 가지 않게 깊이를 줄입니다. 바닥 높이는 꺾임을 다듬은 뒤 통로가 실제로 지나는 자리(xy)에서 묻습니다.
+            double[]? floor = more.SolubleFloorAt?.Invoke(
+                cells.ConvertAll(c => xy[c * 2]).ToArray(), cells.ConvertAll(c => xy[(c * 2) + 1]).ToArray(),
+                cells.ConvertAll(c => routeLevels[c]).ToArray());
+            for (int t = 0; t < cells.Count; t++)
+            {
+                int c = cells[t];
+                // 샘에서는 물이 지표로 나와야 하므로, 샘에 가까울수록 얕게 둡니다 (샘까지 거리 × SpringRiseSlope 보다 깊지 않게).
+                double drop = Math.Min(saw[c], SpringRiseSlope * toSpring[c]);
+                if (floor is not null && !double.IsNaN(floor[t]))
+                {
+                    drop = Math.Min(drop, Math.Max(axis[c] - radius[c] - floor[t], 0.0));
                 }
                 axis[c] -= drop;
                 meanLoop += drop;
@@ -720,13 +991,19 @@ public sealed class CaveNetwork
                 {
                     lowerM += len;
                     // 천장(가운데 선 + 반지름)이 양 끝 모두 물 높이 아래면 그 조각은 물에 다 잠겼습니다.
-                    if (az + r <= levels[c] && bz + r <= levels[q])
+                    if (az + r <= routeLevels[c] && bz + r <= routeLevels[q])
                     {
                         floodedM += len;
                     }
                 }
             }
         }
+        // 수직굴은 칸의 노드(흔든 자리, pos)에 섭니다. 그 자리의 지표는 칸 중심 높이 z 와 다를 수 있어서(노드는 칸 중심에서
+        // 반 칸까지 떨어짐), 꼭대기를 z 로 잡으면 지표에 닿지 못하고 땅속에서 끝나는 수직굴이 생깁니다. 그래서 노드 자리의
+        // 지표 높이(GroundAtNodes)와 z 가운데 높은 쪽에서 시작합니다. 굽기의 프랙탈 디테일이 지표를 더 올릴 수 있어
+        // ShaftAboveGroundM 만큼 더 올립니다. 지표 위로 나온 부분은 바위가 없어 아무것도 그리지 않습니다.
+        var shaftSinks = new List<int>();
+        var shaftBottom = new List<double>();
         for (int i = 0; i < sinks.Length; i++)
         {
             int s = sinks[i];
@@ -738,14 +1015,21 @@ public sealed class CaveNetwork
                     bottom = Math.Min(bottom, axis[(k * n) + s]);
                 }
             }
-            if (!double.IsFinite(bottom))
+            if (double.IsFinite(bottom))
             {
-                continue;
+                shaftSinks.Add(i);
+                shaftBottom.Add(bottom);
             }
+        }
+        double[]? ground = more.GroundAtNodes?.Invoke(shaftSinks.ConvertAll(i => sinks[i]).ToArray());
+        for (int q = 0; q < shaftSinks.Count; q++)
+        {
+            int i = shaftSinks[q];
+            int s = sinks[i];
             double r = Radius(sinkQ[i], more.UpliftMPerYr is null ? 0.0 : more.UpliftMPerYr[s], p);
-            // 수직굴은 지표 위 반지름만큼에서 시작해 지표를 뚫고, 가장 낮은 층의 통로까지 내려갑니다.
-            segA.AddRange([pos[s * 3], pos[(s * 3) + 1], z[s] + r]);
-            segB.AddRange([pos[s * 3], pos[(s * 3) + 1], bottom]);
+            double top = ground is null || !double.IsFinite(ground[q]) ? z[s] : Math.Max(z[s], ground[q]) + ShaftAboveGroundM;
+            segA.AddRange([pos[s * 3], pos[(s * 3) + 1], top + r]);
+            segB.AddRange([pos[s * 3], pos[(s * 3) + 1], shaftBottom[q]]);
             segR.Add(r);
             segShaft.Add(true);
         }
@@ -761,8 +1045,8 @@ public sealed class CaveNetwork
             {
                 continue;
             }
-            double water = levels[c] - (axis[c] - radius[c]);
-            double air = (axis[c] + radius[c]) - levels[c];
+            double water = routeLevels[c] - (axis[c] - radius[c]);
+            double air = (axis[c] + radius[c]) - routeLevels[c];
             lakeLike[c] = water >= LakeMinWaterM && air >= LakeMinAirM;
         }
         bool[] counted = new bool[n];
@@ -781,7 +1065,7 @@ public sealed class CaveNetwork
             while (stackL.Count > 0)
             {
                 int c = stackL.Pop();
-                double water = levels[c] - (axis[c] - radius[c]);
+                double water = routeLevels[c] - (axis[c] - radius[c]);
                 if (water > bestWater || (water == bestWater && c < best))
                 {
                     bestWater = water;
@@ -802,7 +1086,7 @@ public sealed class CaveNetwork
         lakeCells.Sort();
         foreach (int c in lakeCells)
         {
-            lakeXyz.AddRange([xy[c * 2], xy[(c * 2) + 1], levels[c]]);
+            lakeXyz.AddRange([xy[c * 2], xy[(c * 2) + 1], routeLevels[c]]);
         }
         CaveShape shape = MeasureShape(n, kN, parent, flow, xy);
         return new CaveNetwork
@@ -816,6 +1100,7 @@ public sealed class CaveNetwork
             Sinks = sinks,
             SinkDischarge = sinkQ,
             SinkIsStream = sinkStream,
+            NStreamSinksWithoutCave = streamWithoutCave,
             Lakes = lakeCells.ToArray(),
             LakeXyz = lakeXyz.ToArray(),
             Flow = flow,
@@ -830,9 +1115,16 @@ public sealed class CaveNetwork
         };
 
         // 칸 c 의 물이 층 k 로 들어갈 수 있는지: 그 층이 있고, 샘까지 길이 닿고, 샘 칸이 아니고, 지표에서 충분히 깊을 때.
+        // 개울이 사라지는 칸의 아래층은 '그 층이 있고 샘까지 길이 있는지(넘침 높이가 있는지)'만 봅니다. 히어로 단계가 같은 판단(KarstStreams.DrainsToSpring)으로
+        // 개울을 사라지게 했고, 깊이(SinkMinDepthM)는 히어로 칸 높이로 이미 재었기 때문입니다. 굽기의 지표(칸 중심 높이)로 다시 재면
+        // 판단이 갈릴 수 있습니다. 그 칸이 샘이면 물은 수직굴로 내려가 그 자리에서 나옵니다.
         bool Feeds(int c, int k)
         {
             int i = (k * n) + c;
+            if (k == 0 && streamLoss is not null && streamLoss[c] > 0.0)
+            {
+                return double.IsFinite(levels[i]) && double.IsFinite(routeHead![c]);
+            }
             return double.IsFinite(levels[i]) && reach[i] && !outlet[i] && z[c] - levels[i] >= SinkMinDepthM;
         }
 

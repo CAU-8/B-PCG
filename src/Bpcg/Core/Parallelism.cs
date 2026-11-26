@@ -53,22 +53,78 @@ public static class Parallelism
         // 성능·효율 코어가 섞인 CPU 에서도 늦게 끝나는 범위가 전체를 붙잡지 않게 합니다.
         int workers = degree ?? Environment.ProcessorCount;
         int rangeSize = Math.Max(1, (count + (workers * 8) - 1) / (workers * 8));
-        Parallel.ForEach(Partitioner.Create(fromInclusive, toExclusive, rangeSize), options, range =>
+        var first = new FirstError();
+        RunUnwrapped(first, () => Parallel.ForEach(Partitioner.Create(fromInclusive, toExclusive, rangeSize), options, range =>
         {
             int previous = Nesting.Value;
             Nesting.Value = previous + 1;
+            int i = range.Item1;
             try
             {
-                for (int i = range.Item1; i < range.Item2; i++)
+                for (; i < range.Item2; i++)
                 {
                     body(i);
                 }
+            }
+            catch (Exception e)
+            {
+                first.Record(i, e);
+                throw;
             }
             finally
             {
                 Nesting.Value = previous;
             }
-        });
+        }));
+    }
+
+    /// <summary>
+    /// 병렬 반복에서 난 예외 가운데 번호가 가장 작은 항목의 예외 하나를 기억합니다.
+    /// .NET 의 Parallel 은 몸체의 예외를 AggregateException 으로 모아 던집니다. 그대로 두면 한 줄로 돌 때
+    /// (원래 예외)와 여러 줄로 돌 때(AggregateException)의 예외 형이 달라, 부르는 쪽의 catch 가 스레드 수에 따라
+    /// 다르게 동작합니다. 그래서 원래 예외를 다시 던집니다.
+    /// 여러 항목이 실패하면, 실제로 돈 항목 가운데 번호가 가장 작은 것의 오류가 나갑니다. 한 범위가 실패하면
+    /// 아직 시작하지 않은 범위는 돌지 않으므로, 한 줄로 돌 때 먼저 났을 오류와 다른 항목의 오류일 수 있습니다.
+    /// </summary>
+    private sealed class FirstError
+    {
+        private readonly object _gate = new();
+        private long _index = long.MaxValue;
+        private Exception? _error;
+
+        public void Record(long index, Exception e)
+        {
+            lock (_gate)
+            {
+                if (index < _index)
+                {
+                    _index = index;
+                    _error = e;
+                }
+            }
+        }
+
+        public void Rethrow()
+        {
+            if (_error is not null)
+            {
+                ExceptionDispatchInfo.Capture(_error).Throw();
+            }
+        }
+    }
+
+    // loop 가 AggregateException 을 던지면 first 가 기억한 원래 예외를 다시 던집니다 (스택 추적 유지).
+    private static void RunUnwrapped(FirstError first, Action loop)
+    {
+        try
+        {
+            loop();
+        }
+        catch (AggregateException)
+        {
+            first.Rethrow();
+            throw;
+        }
     }
 
     private static int EnterNested()
@@ -123,7 +179,19 @@ public static class Parallelism
         {
             options.MaxDegreeOfParallelism = max;
         }
-        Parallel.For(0, chunks, options, RunChunk);
+        var first = new FirstError();
+        RunUnwrapped(first, () => Parallel.For(0, chunks, options, chunk =>
+        {
+            try
+            {
+                RunChunk(chunk);
+            }
+            catch (Exception e)
+            {
+                first.Record(chunk, e);
+                throw;
+            }
+        }));
     }
 
     /// <summary>
@@ -148,7 +216,8 @@ public static class Parallelism
         {
             options.MaxDegreeOfParallelism = max;
         }
-        Parallel.For(0, count, options, i =>
+        var first = new FirstError();
+        RunUnwrapped(first, () => Parallel.For(0, count, options, i =>
         {
             int previous = Nesting.Value;
             Nesting.Value = previous + 1;
@@ -156,11 +225,16 @@ public static class Parallelism
             {
                 body(i);
             }
+            catch (Exception e)
+            {
+                first.Record(i, e);
+                throw;
+            }
             finally
             {
                 Nesting.Value = previous;
             }
-        });
+        }));
     }
 
     /// <summary>독립 항목을 결정적인 쓰기 구역으로 나눠 처리합니다.</summary>
@@ -183,11 +257,20 @@ public static class Parallelism
         {
             options.MaxDegreeOfParallelism = max;
         }
-        Parallel.ForEach(source, options, EnterNested, (item, _, previous) =>
+        var first = new FirstError();
+        RunUnwrapped(first, () => Parallel.ForEach(source, options, EnterNested, (item, _, index, previous) =>
         {
-            body(item);
+            try
+            {
+                body(item);
+            }
+            catch (Exception e)
+            {
+                first.Record(index, e);
+                throw;
+            }
             return previous;
-        }, LeaveNested);
+        }, LeaveNested));
     }
 
     /// <summary>
@@ -211,11 +294,20 @@ public static class Parallelism
         {
             options.MaxDegreeOfParallelism = max;
         }
-        Parallel.For(fromInclusive, toExclusive, options, EnterNested, (i, _, previous) =>
+        var first = new FirstError();
+        RunUnwrapped(first, () => Parallel.For(fromInclusive, toExclusive, options, EnterNested, (i, _, previous) =>
         {
-            body(i);
+            try
+            {
+                body(i);
+            }
+            catch (Exception e)
+            {
+                first.Record(i, e);
+                throw;
+            }
             return previous;
-        }, LeaveNested);
+        }, LeaveNested));
     }
 
     /// <summary>

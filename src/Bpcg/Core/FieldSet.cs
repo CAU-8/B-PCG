@@ -29,9 +29,17 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
         set => _data[name] = value;
     }
 
-    /// <summary>원소 형을 정해 읽습니다.</summary>
-    public T[] Get<T>(string name) => this[name] as T[]
-        ?? throw new InvalidCastException($"필드 '{name}' 의 원소 형이 {typeof(T).Name} 이 아닙니다: {this[name].GetType().Name}");
+    /// <summary>
+    /// 원소 형을 정해 읽습니다. 형은 정확히 같아야 합니다. `as T[]` 만 쓰면 .NET 런타임이 크기가 같은 부호 있는·없는 정수 배열을
+    /// 서로 받아 줘서(sbyte[] 를 byte[] 로), int8 필드의 −1 을 255 로 읽게 됩니다.
+    /// </summary>
+    public T[] Get<T>(string name)
+    {
+        Array a = this[name];
+        return a.GetType().GetElementType() == typeof(T)
+            ? (T[])a
+            : throw new InvalidCastException($"필드 '{name}' 의 원소 형이 {typeof(T).Name} 이 아닙니다: {a.GetType().Name}");
+    }
 
     /// <summary>np.asarray(fields[name], dtype=np.float64): double[] 는 그대로, float[] 는 정확히 넓힌 새 배열.</summary>
     public double[] GetFloat64(string name) => ToFloat64(this[name]);
@@ -86,21 +94,70 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
 
     // 기본 수 형끼리는 원소마다 상자(GetValue·SetValue)를 만들지 않고 바꿉니다. 값은 ConvertScalar 와 같습니다:
     // 실수 → 정수는 0 쪽으로 자르고(유한하지 않으면 long.MinValue) 감싸고, 불리언은 0/1, 정수는 long 을 거쳐 감쌉니다.
-    private static Array? CastFast(Array a, Type t) => a switch
+    //
+    // 원소 형은 a.GetType() 으로 정확히 가립니다. .NET 런타임에서는 크기가 같은 부호 있는·없는 정수 배열이 서로의 형으로도
+    // 판정됩니다(sbyte[] 는 `is byte[]` 가 참, int[] 는 `is uint[]` 가 참). 그래서 `a switch { byte[] x => … }` 로 고르면
+    // sbyte[] 의 −1 을 255 로 읽습니다.
+    private static Array? CastFast(Array a, Type t)
     {
-        double[] d => FromReal(d.Length, i => d[i], t, i => d[i] != 0.0),
-        float[] f => FromReal(f.Length, i => f[i], t, i => f[i] != 0.0f),
-        bool[] b => FromInteger(b.Length, i => b[i] ? 1L : 0L, t),
-        byte[] x => FromInteger(x.Length, i => x[i], t),
-        sbyte[] x => FromInteger(x.Length, i => x[i], t),
-        short[] x => FromInteger(x.Length, i => x[i], t),
-        ushort[] x => FromInteger(x.Length, i => x[i], t),
-        int[] x => FromInteger(x.Length, i => x[i], t),
-        uint[] x => FromInteger(x.Length, i => x[i], t),
-        long[] x => FromInteger(x.Length, i => x[i], t),
-        ulong[] x => FromInteger(x.Length, i => unchecked((long)x[i]), t),
-        _ => null,
-    };
+        Type s = a.GetType().GetElementType()!;
+        if (s == typeof(double))
+        {
+            double[] d = (double[])a;
+            return FromReal(d.Length, i => d[i], t, i => d[i] != 0.0);
+        }
+        if (s == typeof(float))
+        {
+            float[] f = (float[])a;
+            return FromReal(f.Length, i => f[i], t, i => f[i] != 0.0f);
+        }
+        if (s == typeof(bool))
+        {
+            bool[] b = (bool[])a;
+            return FromInteger(b.Length, i => b[i] ? 1L : 0L, t);
+        }
+        if (s == typeof(byte))
+        {
+            byte[] x = (byte[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(sbyte))
+        {
+            sbyte[] x = (sbyte[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(short))
+        {
+            short[] x = (short[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(ushort))
+        {
+            ushort[] x = (ushort[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(int))
+        {
+            int[] x = (int[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(uint))
+        {
+            uint[] x = (uint[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(long))
+        {
+            long[] x = (long[])a;
+            return FromInteger(x.Length, i => x[i], t);
+        }
+        if (s == typeof(ulong))
+        {
+            ulong[] x = (ulong[])a;
+            return FromInteger(x.Length, i => unchecked((long)x[i]), t);
+        }
+        return null;
+    }
 
     private static Array? FromReal(int n, Func<int, double> get, Type t, Func<int, bool> nonZero)
     {
@@ -229,22 +286,58 @@ public sealed class FieldSet : IEnumerable<KeyValuePair<string, Array>>
     public static Array CastToField(string name, Array a) => CastTo(a, Fields.ElementType(Fields.All[name].Dtype));
 
     /// <summary>np.asarray(a)[idx]: 1차원 배열에서 idx 칸을 모읍니다 (원소 형 유지).</summary>
-    public static Array Take(Array a, long[] idx) => a switch
+    public static Array Take(Array a, long[] idx)
     {
         // 기본 수 형은 원소마다 상자(GetValue·SetValue)를 만들지 않고 바로 모읍니다.
-        double[] x => TakeTyped(x, idx),
-        float[] x => TakeTyped(x, idx),
-        bool[] x => TakeTyped(x, idx),
-        byte[] x => TakeTyped(x, idx),
-        sbyte[] x => TakeTyped(x, idx),
-        short[] x => TakeTyped(x, idx),
-        ushort[] x => TakeTyped(x, idx),
-        int[] x => TakeTyped(x, idx),
-        uint[] x => TakeTyped(x, idx),
-        long[] x => TakeTyped(x, idx),
-        ulong[] x => TakeTyped(x, idx),
-        _ => TakeBoxed(a, idx),
-    };
+        // 원소 형은 CastFast 와 같은 까닭으로 a.GetType() 으로 정확히 가립니다. `is byte[]` 로 고르면 sbyte[] 가
+        // byte[] 로 나가 '원소 형 유지'가 깨집니다.
+        Type s = a.GetType().GetElementType()!;
+        if (s == typeof(double))
+        {
+            return TakeTyped((double[])a, idx);
+        }
+        if (s == typeof(float))
+        {
+            return TakeTyped((float[])a, idx);
+        }
+        if (s == typeof(bool))
+        {
+            return TakeTyped((bool[])a, idx);
+        }
+        if (s == typeof(byte))
+        {
+            return TakeTyped((byte[])a, idx);
+        }
+        if (s == typeof(sbyte))
+        {
+            return TakeTyped((sbyte[])a, idx);
+        }
+        if (s == typeof(short))
+        {
+            return TakeTyped((short[])a, idx);
+        }
+        if (s == typeof(ushort))
+        {
+            return TakeTyped((ushort[])a, idx);
+        }
+        if (s == typeof(int))
+        {
+            return TakeTyped((int[])a, idx);
+        }
+        if (s == typeof(uint))
+        {
+            return TakeTyped((uint[])a, idx);
+        }
+        if (s == typeof(long))
+        {
+            return TakeTyped((long[])a, idx);
+        }
+        if (s == typeof(ulong))
+        {
+            return TakeTyped((ulong[])a, idx);
+        }
+        return TakeBoxed(a, idx);
+    }
 
     private static T[] TakeTyped<T>(T[] a, long[] idx)
     {

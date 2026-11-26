@@ -14,6 +14,12 @@ public sealed record HeroSite(
     OrderedDictionary<string, double> Parts, double LatDeg, double LonDeg);
 
 /// <summary>
+/// 행성에 히어로 유역을 놓을 자리가 없을 때 던집니다 (후보 칸이 하나도 없거나, 고른 칸에서 물이 빠질 출구를 정하지 못함).
+/// <c>Runs.All</c> 은 이 예외일 때만 평면 히어로로 바꿉니다. 설정 값 오류 같은 다른 예외는 그대로 올라갑니다.
+/// </summary>
+public sealed class NoHeroSiteException(string message) : ArgumentException(message);
+
+/// <summary>
 /// 히어로 후보 찾기 (src/bpcg/hero/finder.py, docs/pipeline.md 9장).
 /// </summary>
 public static class Finder
@@ -27,6 +33,7 @@ public static class Finder
     };
 
     public const double MaxLatDeg = 55.0;
+    /// <summary>후보 칸 둘레에서 건조한 땅의 비율을 재는 반지름 (m). 설정 <c>hero.dry_radius_m</c> 이 없을 때의 값(지구 크기 기준)입니다.</summary>
     public const double DryRadiusM = 200_000.0;
     public const double DryAridityIndex = 1.0;
     public const double NormalizePercentile = 99.0;
@@ -205,11 +212,32 @@ public static class Finder
         double latMax = NpMath.Radians(MaxLatDeg);
         // 호수 칸은 물에 잠긴 땅이라 히어로 중심으로 쓰지 않습니다.
         bool[]? lake = planet.Fields.Contains("is_lake") ? planet.Fields.Get<bool>("is_lake") : null;
+        // 물이 빠져나가지 못하는 분지 바닥(받는 칸이 자기 자신인 육지 칸)도 뺍니다. 히어로는 중심 칸의 물이 흘러 나가는
+        // 쪽에 출구를 두는데, 이런 칸에는 그 방향이 없습니다.
+        bool[] sink = DrainlessLand(planet);
         bool[] o = new bool[g.NCells];
         Parallelism.For(0, o.Length, c =>
         {
-            o[c] = !ocean[c] && !(lake is not null && lake[c]) && Math.Abs(lat[c]) <= latMax && dOcean[c] > margin;
+            o[c] = !ocean[c] && !(lake is not null && lake[c]) && !sink[c] && Math.Abs(lat[c]) <= latMax && dOcean[c] > margin;
         });
+        return o;
+    }
+
+    // 받는 칸(receiver)이 자기 자신인 육지 칸: 넘치지 못하는 호수 바닥과 마른 분지 바닥. 받는 칸 필드가 없으면 모두 false.
+    private static bool[] DrainlessLand(PlanetState planet)
+    {
+        int n = planet.Graph.NCells;
+        bool[] o = new bool[n];
+        if (!planet.Fields.Contains("receiver"))
+        {
+            return o;
+        }
+        long[] rcv = (long[])FieldSet.CastTo(planet.Fields["receiver"], typeof(long));
+        bool[] ocean = planet.Fields.Get<bool>("is_ocean");
+        for (int c = 0; c < n; c++)
+        {
+            o[c] = !ocean[c] && rcv[c] == c;
+        }
         return o;
     }
 
@@ -259,7 +287,12 @@ public static class Finder
             {
                 isDry[c] = !ocean[c] && p[c] < DryAridityIndex * pet[c];
             });
-            double[] dry = DryFraction(g, isDry, idx, DryRadiusM);
+            double dryRadius = cfg.FOr("hero.dry_radius_m", DryRadiusM);
+            if (!(dryRadius > 0.0))
+            {
+                throw new ArgumentException($"hero.dry_radius_m({dryRadius} m)는 0 보다 커야 합니다. 후보 칸 둘레에서 건조한 땅의 비율을 재는 반지름입니다.");
+            }
+            double[] dry = DryFraction(g, isDry, idx, dryRadius);
             for (int k = 0; k < idx.Length; k++)
             {
                 parts["carbonate"][idx[k]] = carb[k];
@@ -428,6 +461,10 @@ public static class Finder
         {
             why = "호수 위입니다";
         }
+        else if (DrainlessLand(planet)[cell])
+        {
+            why = "물이 빠져나가지 못하는 분지의 바닥입니다 (히어로 출구를 둘 방향이 없음)";
+        }
         else if (Math.Abs(SiteFromCell(planet, cell, cfg).LatDeg) > MaxLatDeg)
         {
             why = $"위도 {MaxLatDeg:F0}° 를 넘는 곳입니다 (히어로는 위도 {MaxLatDeg:F0}° 안에만 둡니다)";
@@ -465,7 +502,7 @@ public static class Finder
         }
         if (Array.IndexOf(cand, true) < 0)
         {
-            throw new ArgumentException(
+            throw new NoHeroSiteException(
                 "히어로 후보 칸이 없습니다 (육지, |위도| ≤ 55°, 바다에서 히어로 반대각선 + L0 칸 2개 넘게 떨어진 칸이 하나도 없음)");
         }
         int best = 0;

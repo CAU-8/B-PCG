@@ -26,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 
 스크립트가 하는 일은 세 가지입니다.
 
-- uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구)가 없으면 먼저 설치하고, uv로 파이썬 3.13과 패키지를 설치합니다. 파이썬은 스튜디오(매개변수를 바꿔 행성을 다시 만들고, 결과를 지도로 보는 브라우저 도구), 시험, 분석에 씁니다.
+- uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구)가 없으면 먼저 설치합니다. GitHub에서 uv 압축 파일을 받아, 스크립트에 적어 둔 SHA-256(받은 파일이 원본과 같은지 보는 지문)과 같을 때만 풉니다. 그다음 uv로 파이썬 3.13과 기본 패키지를 설치합니다. 기본 패키지는 스튜디오(매개변수를 바꿔 행성을 다시 만들고, 결과를 지도로 보는 브라우저 도구)와 시험에 쓰는 패키지입니다. 분석 도구는 아래 옵션으로 더합니다.
 - **.NET 10 SDK**가 있는지 확인합니다. 생성기와 엔진이 C#이라 꼭 있어야 합니다. 스크립트는 SDK를 설치하지 않고, 없으면 설치 명령을 알려 줍니다(맥 `brew install --cask dotnet-sdk`, 윈도우 `winget install --id Microsoft.DotNet.SDK.10 -e`).
 - 끝나면 환경을 점검합니다(2단계와 같음).
 
@@ -36,9 +36,10 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 |---|---|
 | `--godot` | Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) 4.7.2의 .NET 버전을 `.tools/godot-net/`에 받습니다. 엔진을 맡은 사람은 꼭 받습니다 |
 | `--data` | 진짜 지구 자료 약 4.5 GB를 받습니다. 생성기 규칙의 숫자를 지구 자료로 맞추거나 비교하는 사람만 필요합니다. 끊겨도 다시 실행하면 이어 받습니다 |
-| `--analysis` | 비교·분석 도구 두 개를 더합니다. pyflwdir는 높이 지도에서 물길 방향과 물이 모이는 양을 계산하고, landlab은 땅 겉의 변화를 계산하는 도구 모음입니다(둘 다 MIT 라이선스) |
-| `--gpl` | 비교용 프로그램 두 개를 더합니다. fastscapelib은 땅이 솟고 강이 깎는 과정을 시간 순서로 계산하고, TopoToolbox는 높이 지도에서 물길과 강 가파름을 계산합니다. 둘 다 GPL 라이선스라 생성기 코드에서는 부르지 않고 `analysis/`에서만 씁니다. Linux ARM64에서는 설치할 수 없습니다 |
-| `--notebook` | JupyterLab을 더합니다 |
+| `--analysis` | 비교·분석 도구를 더합니다. pyflwdir는 높이 지도에서 물길 방향과 물이 모이는 양을 계산하고, landlab은 땅 겉의 변화를 계산하는 도구 모음입니다(둘 다 MIT 라이선스). 지금은 이 두 도구를 부르는 코드가 저장소에 없고, 계획한 비교에 쓰려고 설치만 합니다. `analysis/` 스크립트가 쓰는 numba(파이썬 함수를 기계어로 바꿔 빠르게 돌리는 도구)와 h5py(HDF5 파일을 읽는 도구)도 함께 깝니다. Intel Mac에서는 설치할 수 없습니다 |
+| `--gpl` | 비교용 프로그램 두 개를 더합니다. fastscapelib은 땅이 솟고 강이 깎는 과정을 시간 순서로 계산하고, TopoToolbox는 높이 지도에서 물길과 강 가파름을 계산합니다. 둘 다 GPL 라이선스라 생성기 코드에서는 부르지 않고, 부를 때는 `analysis/`에서만 부릅니다. 지금은 부르는 코드가 저장소에 없고, 계획한 비교에 쓰려고 설치만 합니다. Linux ARM64에서는 설치할 수 없습니다 |
+| `--notebook` | JupyterLab을 더합니다. Intel Mac에서는 설치할 수 없습니다 |
+| `--all` | `--analysis`, `--gpl`, `--notebook`, `--godot`에 data 묶음(진짜 지구 자료를 읽는 rasterio, geopandas, xarray 등)까지 한꺼번에 설치합니다. 자료 받기(`--data`)는 하지 않습니다 |
 | `--check` | 설치하지 않고 점검만 합니다 |
 
 ### 2. 환경 점검
@@ -59,9 +60,9 @@ uv run bpcg all --profile tiny
 
 tiny 프로필(몇 초 만에 끝나도록 크기와 해상도를 줄인 설정)로 행성 하나를 처음부터 끝까지 만듭니다. 순서는 행성 → 강 유역 하나 → 걸어 다닐 띠 → 지구본입니다.
 
-- 맞게 돌았으면 마지막 줄이 `[전체] 끝: 1.5 s → …/out/earth`처럼 나옵니다. `out/earth/` 아래에 `planet`, `hero`, `corridor`, `globe` 폴더가 생깁니다.
-- 걸리는 시간: 명령 전체 약 3초(맥북 에어 M3). 처음에는 C# 빌드가 먼저 돌아 더 걸립니다.
-- 노트북 기본 크기인 laptop 프로필(`uv run bpcg all --profile laptop`)은 약 50~90초 걸리고, 메모리를 최대 약 3.4 GB 씁니다(`/usr/bin/time -l`의 peak memory footprint). 맥북 에어 M3(메모리 16 GB)에서 다른 프로그램이 함께 돌던 상태로 네 번 잰 값입니다(2026-10-27에 71.7초와 91.3초, 2026-11-12에 52.7초와 50.8초. 메모리는 10-27에 잰 값).
+- 맞게 돌았으면 마지막 줄이 `[전체] 끝: 1.2 s → …/out/earth`처럼 나옵니다(맥북 에어 M3, 2026-11-26). `out/earth/` 아래에 `planet`, `hero`, `corridor`, `globe` 폴더가 생깁니다.
+- 걸리는 시간: 명령 전체 약 3초(맥북 에어 M3). 마지막 줄의 시간에 C# 빌드를 확인하는 시간이 더해집니다. 처음에는 C# 빌드가 먼저 돌아 더 걸립니다.
+- 노트북 기본 크기인 laptop 프로필(`uv run bpcg all --profile laptop`)은 시드 하나에 52~77초 걸리고, 메모리를 최대 2.4~2.6 GB 씁니다(`/usr/bin/time -l`의 peak memory footprint). 맥북 에어 M3(8코어, 메모리 16 GB)에서 시드 열 개(0~7, 15, 1030)를 하나씩 돌려 잰 값입니다(2026-11-26, 다른 프로그램이 함께 돌던 상태).
 
 ### 4. 결과 보기
 
@@ -77,9 +78,9 @@ uv run bpcg studio
 ```bash
 uv run bpcg --help                # 명령과 옵션 목록
 uv run bpcg compare run           # 기존 지형 생성 방법과 같은 시드로 비교 (docs/compare.md)
-dotnet build Bpcg.slnx            # C# 빌드 (생성기, 명령줄, 엔진, 시험)
+dotnet build Bpcg.slnx            # C# 빌드 (생성기, 명령줄, 결과 그림, 엔진, 시험)
 dotnet test --solution Bpcg.slnx  # C# 시험 (golden 파일과 비트까지 같은지 등)
-uv run pytest -m "not slow"       # 파이썬 시험 (C# 결과 파일, 스튜디오)
+uv run pytest -m "not slow"       # 파이썬 빠른 시험 (C# 결과 파일, 스튜디오). 전부는 uv run pytest
 uv run ruff format . && uv run ruff check .
 .tools/godot-net/Godot_mono.app/Contents/MacOS/Godot --path engine -e   # 엔진 편집기 (맥)
 ```
@@ -87,7 +88,7 @@ uv run ruff format . && uv run ruff check .
 - 시드는 같은 행성을 다시 만들 때 쓰는 출발 번호입니다. 시드가 같으면 같은 행성이 나옵니다.
     - 같은 운영체제와 같은 종류의 CPU에서는 결과 파일이 바이트까지 같습니다(맥 Apple Silicon에서 스레드 수를 바꿔 가며 확인).
     - 운영체제가 다르면 지수·로그 계산의 마지막 자리가 달라, 값이 아주 조금 다를 수 있습니다. 운영체제끼리 결과를 맞대어 본 적은 없습니다.
-- `compare run`은 지형 생성 리뷰 논문(Galin 외 2019)이 꼽은 기존 방법 10개와 B-PCG를 같은 시드로 돌려, 같은 지표로 비교합니다.
+- `compare run`은 지형 생성 리뷰 논문(Galin 외 2019)이 나눈 세 갈래(무작위 수식, 침식 모의, 실제 지형 조각 잇기)에서 우리가 고른 기존 방법 10개와 B-PCG를 같은 시드로 돌려, 같은 지표로 비교합니다.
 - golden 파일은 옛 Python 생성기의 결과를 정답으로 저장해 두고, 새 결과가 비트까지 같은지 비교하는 시험 자료입니다(`tests/golden/`).
 
 ---
@@ -122,14 +123,19 @@ flowchart LR
 
 ## 지원 환경
 
-| 운영체제 | 지원 | 비고 |
-|---|---|---|
-| macOS 15 이상, Apple Silicon | 됨 | 개발 맥에서 시험함 |
-| Windows 10/11 x64 | 됨 | CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험)에서 돌림. 팀원 컴퓨터에서 첫 시험이 필요함 |
-| Linux x86_64(glibc 2.28 이상) | 됨 | CI에서 돌림 |
-| Windows ARM64 | x64 파이썬을 에뮬레이션으로 씀 | 시험하지 않음 |
-| Linux ARM64 | 기본 패키지만 | 분석용 GPL 도구(fastscapelib, TopoToolbox)는 설치할 수 없음 |
-| Intel Mac, macOS 14 이하 | 안 됨 | 분석에 쓰는 파이썬 패키지 numba와 rasterio의 설치 파일이 없음 |
+파이썬 패키지는 묶음마다 설치 파일(wheel, 운영체제와 CPU 종류마다 미리 빌드해 올려 둔 패키지 파일)이 나온 운영체제가 다릅니다. 그래서 운영체제마다 쓸 수 있는 옵션이 다릅니다.
+
+| 운영체제 | 기본 설치 | 옵션 | 시험한 곳 |
+|---|---|---|---|
+| Apple Silicon Mac | macOS 12 이상 | `--analysis`는 macOS 14 이상, `--gpl`과 data 묶음은 macOS 15 이상 | 개발 맥에서 설치함 |
+| Intel Mac | macOS 10.15 이상 | `--analysis`, `--notebook`은 안 됨(numba 등의 Intel Mac용 설치 파일이 없음). `--gpl`과 data 묶음은 macOS 15 이상 | 시험하지 않음 |
+| Windows 10/11 x64 | 됨 | 모두 됨 | CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험)에서 돌림. 팀원 컴퓨터에서 첫 시험이 필요함 |
+| Linux x86_64(glibc 2.28 이상) | 됨 | 모두 됨 | CI에서 돌림 |
+| Windows ARM64 | 됨(x64 파이썬을 에뮬레이션으로 씀) | 모두 됨 | 시험하지 않음 |
+| Linux ARM64(glibc 2.28 이상) | 됨 | `--gpl`은 안 됨(fastscapelib, TopoToolbox의 설치 파일이 없음) | 시험하지 않음 |
+
+- '시험하지 않음'인 칸은 uv가 그 운영체제에서 설치 파일을 고르는 과정만 흉내 내 확인했습니다(`uv sync --locked --no-build --dry-run --python-platform <플랫폼>`, 2026-11-26).
+- 이 표는 파이썬 패키지만 봅니다. 생성기와 엔진에 필요한 .NET 10 SDK와 Godot이 그 운영체제에서 도는지는 따로 확인해야 합니다.
 
 파이썬은 3.13으로 고정합니다. 이유는 [docs/conventions.md](docs/conventions.md) 11절에 있습니다.
 
@@ -146,10 +152,10 @@ flowchart LR
 | `configs/` | 행성 값(`planets/`), 크기·해상도 설정(`profiles/`), 지구 자료로 맞춘 값(`learned/`), 방법 비교 설정(`compare/`). C#과 스튜디오가 같은 파일을 읽습니다 |
 | `docs/` | 규칙, 설계도, 공식, 안내서, 지난 사정 기록 |
 | `analysis/` | 한 번 돌리는 연구 스크립트(파이썬) |
-| `tools/`, `scripts/` | 자료 받기·환경 점검, 설치 스크립트 |
+| `tools/`, `scripts/` | 자료 받기·환경 점검·계산 속도 비교(`tools/ComputeBench`), 설치 스크립트 |
 | `data/`, `out/` | 받은 자료와 생성 결과. git에 올리지 않습니다. [data/README.md](data/README.md) |
 
-맨 위의 `Bpcg.slnx`(C# 프로젝트 목록), `Directory.Build.props`(C# 공통 설정), `global.json`(.NET SDK 버전)은 C# 프로젝트 다섯(생성기, 명령줄, 결과 그림, 엔진, 시험)이 같이 씁니다. `CLAUDE.md`(Claude와 팀원이 따르는 작업·글쓰기 규칙)와 `Humanize.md`(말투 규칙)도 맨 위에 있습니다.
+맨 위의 `Bpcg.slnx`(C# 프로젝트 목록)에는 C# 프로젝트 다섯(생성기, 명령줄, 결과 그림, 엔진, 시험)이 들어 있습니다. `Directory.Build.props`(C# 공통 설정)와 `global.json`(.NET SDK 버전)은 이 다섯과, 목록 밖의 여섯째 프로젝트 `tools/ComputeBench`가 같이 씁니다. `tools/ComputeBench`는 같은 칸별 계산을 CPU와 GPU에서 돌려 걸린 시간을 비교하는 개발 도구이고, CI는 이 프로젝트를 빌드하지 않습니다. `CLAUDE.md`(Claude와 팀원이 따르는 작업·글쓰기 규칙)와 `Humanize.md`(말투 규칙)도 맨 위에 있습니다.
 
 ## 문서
 
@@ -167,9 +173,12 @@ flowchart LR
 | [글쓰기 안내서](docs/writing.md) | 문서와 화면 글의 틀, 크기 비유 표 |
 | [생성 계산 명세](docs/pipeline.md) | 단계마다 공식과 함수의 약속 |
 | [설계도](docs/design/blueprint.md) | 무엇을 왜 이렇게 만들기로 했나 (설계의 원본) |
+| [결정 기록](docs/design/decision_log.md) | 설계를 정하며 검토한 안과 버린 안을 대화 순서대로 (설계도와 다르면 설계도를 따름) |
 | [개발 단계](docs/roadmap.md) | 할 일과 마감 |
+| [앞으로 도입할 기술](docs/future_tech.md) | 지금 한계마다 들여올 기술, 합격 기준, 기술마다 지금 상태 |
 | [방법 비교](docs/compare.md) | 기존 지형 생성 방법과 같은 시드로 견주기 |
 | [엔진](engine/README.md) | Godot 조작키와 파일 형식 |
+| [지구본 장면](engine/GLOBE.md) | Godot에서 행성 전체를 돌려 보는 장면의 조작, 레이어, 파일 형식 |
 | [분석 스크립트](analysis/README.md) | 진짜 지구 자료로 하는 분석 |
 | [프로젝트 기록](docs/history.md) | 지운 코드, 다시 올린 PR, 결정을 기다리는 일 같은 지난 사정 |
 | [C# 포팅 기록](docs/csharp_port.md) | Python 생성기를 C#으로 옮긴 과정과 대조 결과 |
@@ -177,4 +186,11 @@ flowchart LR
 
 ## 라이선스
 
-코드 라이선스는 아직 정하지 않았습니다. 자료의 출처와 꼭 붙여야 하는 문구는 [data/README.md](data/README.md)에 있습니다.
+코드와 문서(그림과 로고 포함)는 MIT 라이선스입니다([LICENSE](LICENSE)). MIT는 저작권 문구와 라이선스 글을 함께 남기면 누구나 쓰고, 고치고, 다시 나눠 주고, 팔 수 있게 허락하는 라이선스입니다. 저작권자는 `B-PCG contributors`, 곧 이 저장소에 코드와 문서를 쓴 모든 사람입니다.
+
+두 종류의 파일은 원래 조건을 따릅니다. 파일 목록과 라이선스 원문은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 있습니다.
+
+- numpy·scipy·matplotlib·CPython에서 옮겨 온 함수와 색표: 원래 라이선스(BSD-3-Clause 등)의 저작권 문구를 함께 남깁니다.
+- 진짜 지구 자료에서 잘라 온 시험 자료와 표: 예를 들어 `configs/pilot_basins.csv`는 OCTOPUS(강 모래로 잰 유역의 침식 속도 모음)에서 고른 행이라, 상업적으로 쓰지 못할 수 있습니다.
+
+받는 자료의 출처와 꼭 붙여야 하는 문구는 [data/README.md](data/README.md)에 있습니다.

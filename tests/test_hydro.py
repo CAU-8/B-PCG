@@ -68,12 +68,19 @@ def test_discharge_is_accumulated_runoff_plus_inflow(bundle):
 
 
 def test_sediment_flux_is_accumulated_uplift(bundle):
-    """정상상태에서 퇴적물 플럭스 = 상류 Σ A·U (솔버가 실제로 쓴 융기, 질량 보존)."""
+    """정상상태에서 퇴적물 플럭스 = 상류 Σ A·U (솔버가 실제로 쓴 융기, 질량 보존).
+
+    가라앉는 칸(U < 0, 판이 갈라지는 대륙)은 흙을 내지 않고 받아 가둡니다. 그래서 Σ A·U 가
+    음수인 칸이 생기고, 솔버는 그 칸의 플럭스를 0 으로 둡니다 (Solver.cs 와
+    Pipeline.RerouteAfterFans 의 max(Σ A·U, 0)).
+    """
     rcv, nr = _non_root(bundle)
     src = bundle.graph.area * bundle["uplift_m_per_yr"].astype(np.float64)
-    qs = accumulate(rcv, src)
+    acc = accumulate(rcv, src)
+    qs = np.maximum(acc, 0.0)
     assert np.allclose(bundle["sediment_flux_m3_per_yr"], qs, rtol=1e-6, atol=1.0)
-    assert bundle["sediment_flux_m3_per_yr"][~nr].sum() == pytest.approx(src.sum(), rel=1e-6)
+    # 바다·출구 칸에 닿는 흙의 합 = 모든 칸이 낸 흙 − 가라앉는 칸이 가둔 흙 (음수가 된 출구는 0).
+    assert bundle["sediment_flux_m3_per_yr"][~nr].sum() == pytest.approx(qs[~nr].sum(), rel=1e-6)
 
 
 def test_river_cells_carry_threshold_discharge(bundle):

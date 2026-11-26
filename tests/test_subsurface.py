@@ -63,10 +63,11 @@ def test_water_table(bundle, cfg):
     assert (wt[~land] == 0).all()
     assert np.allclose(wt[lake], f["water_level_m"][lake], atol=1e-3)  # 호수에서는 수면
     # 아래 지하수면(막는 층 아래 녹는 암석의 물 높이)은 맨 위 지하수면보다 높지 않고,
-    # 물 칸에서는 같음
+    # 바다·호수 칸에서는 같음. 강 칸은 같지 않을 수 있습니다: 석회암 지하수면보다 높이 떠 있는
+    # 작은 개울 아래에서는 아래 지하수면이 석회암 지하수면입니다(docs/pipeline.md 8.3·8.5).
     lower = f["water_table_lower_m"].astype(np.float64)
     assert np.isfinite(lower).all() and (lower <= wt + 1e-3).all()
-    wet = lake | f["is_river"] | ~land
+    wet = lake | ~land
     assert np.allclose(lower[wet], wt[wet], atol=1e-3)
 
 
@@ -116,13 +117,15 @@ def _neighbor_gradients(b, values: np.ndarray) -> np.ndarray:
     return np.concatenate(out)
 
 
-def test_lower_caves_lie_flat_in_platform_karst(hero, cfg):
-    # 탄산염 탁상지(층이 수평)에서는 석회암 지하수면이 강 높이에 거의 평평하고,
-    # 아래층 동굴도 그렇습니다.
+def test_lower_caves_lie_flat_in_platform_karst(karst_hero, cfg):
+    # 석회암 지하수면은 가까운 강 높이에 거의 평평하고, 아래층 동굴도 그렇습니다.
     # 지구 카르스트의 지하수면 기울기는 0.001~0.005 입니다(설정 groundwater.karst_gradient).
-    c0 = hero["cave_level_0_m"].astype(np.float64)
-    assert np.isfinite(c0).any(), "tiny 히어로에는 아래층 동굴이 있어야 합니다"
-    g = _neighbor_gradients(hero, c0)
+    c0 = karst_hero["cave_level_0_m"].astype(np.float64)
+    assert np.isfinite(c0).any(), (
+        f"tiny 시드 {karst_hero.manifest['seed']} 히어로 유역에 아래층 동굴이 없어 시험이 아무것도 "
+        "확인하지 않습니다. tests/conftest.py 의 KARST_SEED 를 아래층 동굴이 있는 시드로 바꾸세요"
+    )
+    g = _neighbor_gradients(karst_hero, c0)
     grad = float(cfg["groundwater"]["karst_gradient"])
     assert np.percentile(g, 90) <= 5 * grad, np.percentile(g, [50, 90, 99])
 

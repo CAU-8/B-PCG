@@ -363,7 +363,7 @@ public static class Resample
         });
     }
 
-    private static void CheckUnit(double[] unit)
+    internal static void CheckUnit(double[] unit)
     {
         if (unit.Length % 3 != 0)
         {

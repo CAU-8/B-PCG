@@ -7,6 +7,7 @@ using Bpcg.Core;
 using Bpcg.Geology;
 using Bpcg.IO;
 using Bpcg.Numerics;
+using Bpcg.Planet;
 
 namespace Bpcg.Bake;
 
@@ -409,61 +410,37 @@ public static class Globe
         };
     }
 
-    /// <summary>실행 폴더의 corridor/manifest.json 또는 hero/manifest.json 에서 히어로 자리를 찾습니다 (hero_from_run).</summary>
-    public static OrderedDictionary<string, object?>? HeroFromRun(string runDir)
+    /// <summary>
+    /// 히어로 묶음 목차(manifest.json)에서 지구본에 표시할 히어로 자리를 찾습니다. 행성 위 자리가 없는 평면 히어로면 null.
+    /// </summary>
+    /// <remarks>
+    /// 실행 폴더의 corridor/manifest.json 은 읽지 않습니다. bake --out 으로 회랑을 다른 곳에 구우면, 실행 폴더에는 다른 히어로로
+    /// 구운 지난 회랑이 남아 있을 수 있기 때문입니다. 회랑 목차의 hero_center_unit 도 이 묶음의 site.center_unit 을 옮긴 값이라
+    /// 표시 자리는 같습니다.
+    /// </remarks>
+    public static OrderedDictionary<string, object?>? HeroFromBundle(OrderedDictionary<string, object?> heroManifest)
     {
-        string cor = Path.Combine(runDir, "corridor", "manifest.json");
-        if (File.Exists(cor))
+        var meta = heroManifest.GetValueOrDefault("meta") as OrderedDictionary<string, object?> ?? [];
+        var site = meta.GetValueOrDefault("site") as OrderedDictionary<string, object?> ?? [];
+        if (site.GetValueOrDefault("center_unit") is null)
         {
-            var m = (OrderedDictionary<string, object?>)PyJson.Loads(File.ReadAllText(cor))!;
-            var site = m.GetValueOrDefault("site") as OrderedDictionary<string, object?> ?? [];
-            if (site.GetValueOrDefault("hero_center_unit") is not null)
-            {
-                var h = m.GetValueOrDefault("hero") as OrderedDictionary<string, object?> ?? [];
-                object? size = null;
-                if (h.GetValueOrDefault("shape") is List<object?> sh && sh.Count > 0 && h.GetValueOrDefault("spacing_m") is not null)
-                {
-                    size = sh.Max(v => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture)) * ToD(h["spacing_m"]);
-                }
-                return new OrderedDictionary<string, object?>
-                {
-                    ["unit"] = site["hero_center_unit"],
-                    ["lat_deg"] = site.GetValueOrDefault("hero_lat_deg"),
-                    ["lon_deg"] = site.GetValueOrDefault("hero_lon_deg"),
-                    ["size_m"] = size,
-                    ["seed"] = m.GetValueOrDefault("seed"),
-                    ["config_digest"] = m.GetValueOrDefault("config_digest"),
-                    ["source"] = cor,
-                };
-            }
+            return null;
         }
-        string heroPath = Path.Combine(runDir, "hero", "manifest.json");
-        if (File.Exists(heroPath))
+        var g = heroManifest.GetValueOrDefault("graph") as OrderedDictionary<string, object?> ?? [];
+        object? size = null;
+        if (g.GetValueOrDefault("shape") is List<object?> sh && sh.Count > 0 && g.GetValueOrDefault("spacing_m") is not null)
         {
-            var m = (OrderedDictionary<string, object?>)PyJson.Loads(File.ReadAllText(heroPath))!;
-            var meta = m.GetValueOrDefault("meta") as OrderedDictionary<string, object?> ?? [];
-            var site = meta.GetValueOrDefault("site") as OrderedDictionary<string, object?> ?? [];
-            if (site.GetValueOrDefault("center_unit") is not null)
-            {
-                var g = m.GetValueOrDefault("graph") as OrderedDictionary<string, object?> ?? [];
-                object? size = null;
-                if (g.GetValueOrDefault("shape") is List<object?> sh && sh.Count > 0 && g.GetValueOrDefault("spacing_m") is not null)
-                {
-                    size = sh.Max(v => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture)) * ToD(g["spacing_m"]);
-                }
-                return new OrderedDictionary<string, object?>
-                {
-                    ["unit"] = site["center_unit"],
-                    ["lat_deg"] = site.GetValueOrDefault("lat_deg"),
-                    ["lon_deg"] = site.GetValueOrDefault("lon_deg"),
-                    ["size_m"] = size,
-                    ["seed"] = m.GetValueOrDefault("seed"),
-                    ["config_digest"] = m.GetValueOrDefault("config_digest"),
-                    ["source"] = heroPath,
-                };
-            }
+            size = sh.Max(v => Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture)) * ToD(g["spacing_m"]);
         }
-        return null;
+        return new OrderedDictionary<string, object?>
+        {
+            ["unit"] = site["center_unit"],
+            ["lat_deg"] = site.GetValueOrDefault("lat_deg"),
+            ["lon_deg"] = site.GetValueOrDefault("lon_deg"),
+            ["size_m"] = size,
+            ["seed"] = heroManifest.GetValueOrDefault("seed"),
+            ["config_digest"] = heroManifest.GetValueOrDefault("config_digest"),
+        };
     }
 
     /// <summary>L0 칸 값 → 지구본 칸 값 (_Resampler).</summary>
@@ -1042,6 +1019,20 @@ public static class Globe
             }
             output.Add((e, arr));
         }
+        if (fields.Contains("biome"))
+        {
+            byte[] bio = (byte[])FieldSet.CastTo(fields["biome"], typeof(byte));
+            var cats = Enumerable.Range(0, Biomes.Count)
+                .Select(k => (k, Biomes.Names[k], new[] { (int)Biomes.ColorRgb[k * 3], Biomes.ColorRgb[(k * 3) + 1], Biomes.ColorRgb[(k * 3) + 2] }))
+                .ToArray();
+            (OrderedDictionary<string, object?> e, Array arr) = Categorical(
+                "biome", rs.Pick(bio), "biome", cats, AreaFraction(bio.Select(v => (long)v).ToArray(), area, Biomes.Count), baseFmt);
+            foreach (OrderedDictionary<string, object?> c in ((List<object?>)e["categories"]!).Cast<OrderedDictionary<string, object?>>())
+            {
+                c["key"] = Biomes.Keys[(long)c["id"]!];
+            }
+            output.Add((e, arr));
+        }
         if (fields.Contains("template_id"))
         {
             output.Add(LandCategorical("geology_template", (long[])FieldSet.CastTo(fields["template_id"], typeof(long)), "template_id",
@@ -1225,10 +1216,15 @@ public static class Globe
         + "노트북 메모리가 모자라고, 엔진이 레이어 하나의 텍스처를 만드는 데도 몇 분이 걸립니다. L0 만큼 곱게 보려면 L0 면당 칸 수"
         + "(laptop 512)면 충분합니다.";
 
-    /// <summary>행성 상태를 지구본 파일로 굽습니다 (bake_globe). 반환: globe.json 내용.</summary>
+    /// <summary>
+    /// 행성 상태를 지구본 파일로 굽습니다 (bake_globe). 반환: globe.json 내용.
+    /// parent 는 구운 행성 묶음의 표지, heroBundle 은 함께 구운 히어로 묶음의 표지입니다(<see cref="RunFolder.BundleId"/>).
+    /// 둘 다 globe.json 에 적고(parent, hero_bundle), heroBundle 이 이 행성에서 만든 히어로가 아니면 히어로 자리를 표시하지 않습니다.
+    /// </summary>
     public static OrderedDictionary<string, object?> BakeGlobe(
         PlanetState planetState, Config? cfg, string outDir, int faceRes = DefaultFaceRes, OrderedDictionary<string, object?>? hero = null,
-        Action<string>? log = null, OrderedDictionary<string, object?>? faceBasis = null, string? engineDir = null)
+        Action<string>? log = null, OrderedDictionary<string, object?>? faceBasis = null, string? engineDir = null,
+        OrderedDictionary<string, object?>? parent = null, OrderedDictionary<string, object?>? heroBundle = null)
     {
         long tAll = Stopwatch.GetTimestamp();
         CellGraph graph = planetState.Graph;
@@ -1274,14 +1270,27 @@ public static class Globe
         {
             e["shape"] = shape;
         }
-        if (hero is not null && cfg is not null && hero.GetValueOrDefault("seed") is not null)
+        if (heroBundle is not null && parent is not null)
         {
+            // 히어로 묶음이 적은 행성 표지가 이 행성이 아니면, 다른 행성의 자리를 이 행성 위에 찍게 됩니다.
+            // 그때는 표시도 기록(hero_bundle)도 빼서, 이 지구본과 함께 구운 히어로가 없다고 적습니다.
+            if (!RunFolder.SameBundle(heroBundle.GetValueOrDefault("parent"), parent))
+            {
+                log?.Invoke($"[지구본] 히어로 묶음이 이 행성({RunFolder.Describe(parent)})에서 만든 묶음이 아니라 자리를 표시하지 않습니다: "
+                    + $"히어로 {RunFolder.Describe(heroBundle)}");
+                hero = null;
+                heroBundle = null;
+            }
+        }
+        else if (hero is not null && cfg is not null && hero.GetValueOrDefault("seed") is not null)
+        {
+            // 어느 행성에서 만들었는지 적기 전의 히어로 묶음: 시드만 비교합니다.
             if (Convert.ToInt64(hero["seed"], System.Globalization.CultureInfo.InvariantCulture) != cfg.I("planet.seed"))
             {
                 log?.Invoke($"[지구본] 히어로 시드 {hero["seed"]} 가 행성 시드와 달라 표시하지 않습니다");
                 hero = null;
             }
-            else if (hero.GetValueOrDefault("config_digest") is string hd && hd != cfg.Digest())
+            else if (hero.GetValueOrDefault("config_digest") is string hd && hd != (parent?.GetValueOrDefault("config_digest") as string ?? cfg.Digest()))
             {
                 log?.Invoke("[지구본] 경고: 히어로 설정 해시가 행성과 다릅니다 (위치는 그대로 씁니다)");
             }
@@ -1290,6 +1299,7 @@ public static class Globe
 
         t = Stopwatch.GetTimestamp();
         var sizes = new OrderedDictionary<string, object?>();
+        Bundle.InvalidateIndex(outDir, GlobeJson);
         foreach ((OrderedDictionary<string, object?> e, Array arr) in entries.Concat(ovEntries).Zip(arrays.Concat(ovArrays)))
         {
             string file = (string)e["file"]!;
@@ -1326,9 +1336,12 @@ public static class Globe
             ["format_version"] = (long)FormatVersion,
             ["bpcg_version"] = Package.Version,
             ["git_commit"] = Bundle.GitCommit(),
+            ["git_dirty"] = Bundle.GitDirty(),
             ["config_digest"] = cfg?.Digest(),
             ["seed"] = cfg is null ? null : cfg.I("planet.seed"),
             ["profile"] = cfg?.Sec("profile").Get("name"),
+            ["parent"] = parent,
+            ["hero_bundle"] = heroBundle,
             ["title"] = "행성 지구본",
             ["description"] = "생성한 행성 전체를 지구본처럼 돌려 보기 위한 자료입니다. 큐브스피어 면 6개를 "
                 + $"면마다 {res}×{res} 칸으로 나눠 칸마다 지형·판·기후·물·지질·동굴 값을 담았습니다. "

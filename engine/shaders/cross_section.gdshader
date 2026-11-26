@@ -32,6 +32,18 @@ uniform vec3 color_low : source_color = vec3(0.45, 0.36, 0.26);
 uniform vec3 color_high : source_color = vec3(0.78, 0.70, 0.55);
 // 층마다 밝기를 조금씩 흔드는 정도 (0 이면 두 색만 번갈아 씁니다).
 uniform float band_jitter : hint_range(0.0, 0.5) = 0.15;
+// 지금 그리는 회랑 높이맵 (값 + surface_height_origin.y = 엔진 Y). 땅속 층 깊이를 그린 면 대신 이 높이에서 잽니다.
+// 먼 조각은 칸을 건너뛴 거친 메시로 그려 그린 면이 실제 지표보다 몇 m 높거나 낮을 수 있고, 그 높이로 층을 고르면
+// 더 깊은 층의 색이 칠해지기 때문입니다. has_surface_height 가 false 면 그린 면의 높이를 씁니다.
+uniform bool has_surface_height = false;
+uniform sampler2D surface_height_tex : filter_linear, repeat_disable;
+// 높이맵 격자: 0번 표본의 (X, Y, Z), 간격 (m), (열 수, 행 수)
+uniform vec3 surface_height_origin = vec3(0.0);
+uniform float surface_height_spacing_m = 1.0;
+uniform vec2 surface_height_size = vec2(1.0);
+// 치마(지형 가장자리에서 아래로 내린 벽)는 그린 높이로 층을 고릅니다. 벽의 아래쪽은 실제로 지표 아래라서
+// 깊이에 따라 층 색이 바뀌어야 하기 때문입니다. HeightmapTerrain.MeshNode 가 치마 노드에만 켭니다.
+instance uniform bool is_skirt = false;
 
 const vec3 GRASS = vec3(0.095, 0.17, 0.04);   // sRGB (0.34, 0.45, 0.22) 의 선형값
 const vec3 BARE = vec3(0.21, 0.19, 0.16);     // sRGB (0.50, 0.48, 0.44)
@@ -49,6 +61,15 @@ vec3 natural_color(float elevation_m, float up) {
 	float steep = smoothstep(0.82, 0.68, up);
 	vec3 c = mix(GRASS, BARE, steep);
 	return mix(c, SNOW, smoothstep(3600.0, 4000.0, elevation_m) * (1.0 - 0.6 * steep));
+}
+
+// 층 깊이를 잴 기준 높이 (엔진 Y): (x, z) 의 지표 높이. 높이맵이 없거나 치마면 그린 면의 높이 p.y.
+float surface_y(vec3 p) {
+	if (!has_surface_height || is_skirt) {
+		return p.y;
+	}
+	vec2 uv = ((p.xz - surface_height_origin.xz) / surface_height_spacing_m + 0.5) / surface_height_size;
+	return texture(surface_height_tex, uv).r + surface_height_origin.y;
 }
 
 void vertex() {
@@ -81,18 +102,18 @@ void fragment() {
 		float up = abs(normalize(world_normal).y);
 		base = natural_color(p.y + y_offset_m, up);
 		if (strata_covers(p.xz)) {
-			float layer0 = max((strata_top_y(p.xz) - p.y) / strata_spacing.y, 0.0);
+			float layer0 = max((strata_top_y(p.xz) - surface_y(p)) / strata_spacing.y, 0.0);
 			float id0 = strata_id(p.xz, layer0);
-			// 흙·충적층 아래 10 m (5층) 안의 첫 기반암 (1..10)
-			float bed = -1.0;
-			for (int k = 0; k < 5; k++) {
-				float id = strata_id(p.xz, layer0 + float(k));
-				if (id > 0.5 && id < 10.5) {
-					bed = id;
-					break;
-				}
-			}
 			if (color_mode == 2) {
+				// 흙·충적층 아래 10 m (5층) 안의 첫 기반암 (1..10). 지질도에서만 찾습니다 (화소마다 3D 텍스처를 5번 읽음).
+				float bed = -1.0;
+				for (int k = 0; k < 5; k++) {
+					float id = strata_id(p.xz, layer0 + float(k));
+					if (id > 0.5 && id < 10.5) {
+						bed = id;
+						break;
+					}
+				}
 				base = strata_color(bed >= 0.0 ? bed : id0);
 			} else if (id0 > 10.5 && id0 < 11.5) {
 				base = mix(GRASS, BARE, smoothstep(0.80, 0.60, up) * 0.6);

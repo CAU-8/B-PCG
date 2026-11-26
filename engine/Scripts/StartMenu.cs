@@ -16,7 +16,9 @@ namespace Bpcg.Engine;
 /// '만들기'를 누르면 Bpcg 라이브러리의 <see cref="Runs.All"/> (행성 → 히어로 → 회랑 굽기 → 지구본)을 주 스레드 밖에서
 /// 돌려 user://runs/&lt;날짜-시각&gt;-&lt;프로필&gt;-s&lt;시드&gt;/ 에 씁니다. 기록 줄은 화면 아래에 쌓이고, 단계 표
 /// (<see cref="StageProgress"/>)로 진행률을 셉니다. 끝나면 <see cref="BakedPaths.RuntimeDir"/> 를 그 실행의 회랑 폴더로 두고
-/// 회랑 장면으로 갑니다. 명령줄에 <c>-- --baked-dir=&lt;폴더&gt;</c> 를 주면 이 화면을 건너뛰고 바로 회랑 장면을 엽니다.
+/// 회랑 장면으로 갑니다. 명령줄에 <c>-- --baked-dir=&lt;폴더&gt;</c> 를 주면 처음 한 번만 이 화면을 건너뛰고 바로 회랑 장면을
+/// 엽니다. 명령줄 옵션(건너뛰기, --generate 등)은 이 실행에서 처음 화면이 처음 열릴 때만 따르므로, 회랑에서 N 으로
+/// 돌아오면 이 화면이 그대로 뜹니다 (<see cref="TakeCommandLine"/>).
 /// </remarks>
 public partial class StartMenu : Control
 {
@@ -54,11 +56,30 @@ public partial class StartMenu : Control
     /// <summary>생성이 도는 중인지.</summary>
     public bool IsGenerating => _task is not null && !_task.IsCompleted;
 
+    /// <summary>이 실행(프로세스)에서 명령줄 옵션을 이미 따랐는지.</summary>
+    public static bool CommandLineUsed { get; private set; }
+
+    /// <summary>
+    /// 명령줄 옵션을 아직 따르지 않았으면 true 를 돌려주고, 따른 것으로 표시합니다. 처음 화면은 처음 열릴 때만 명령줄을
+    /// 따릅니다. 그러지 않으면 --baked-dir 로 띄운 회랑에서 N 을 눌러도 곧바로 회랑으로 돌아가고, --generate 로 띄운
+    /// 실행은 처음 화면에 올 때마다 생성을 다시 시작합니다.
+    /// </summary>
+    public static bool TakeCommandLine()
+    {
+        if (CommandLineUsed)
+        {
+            return false;
+        }
+        CommandLineUsed = true;
+        return true;
+    }
+
     public override void _Ready()
     {
-        if (BakedPaths.CommandLineDir() is not null)
+        bool firstOpen = TakeCommandLine();
+        if (firstOpen && BakedPaths.CommandLineDir() is not null)
         {
-            // 명령줄로 굽기 폴더를 받았으면 처음 화면을 건너뜁니다 (예전 engine/ 과 같은 실행 방법).
+            // 명령줄로 굽기 폴더를 받았으면 처음 한 번은 이 화면을 건너뜁니다 (예전 engine/ 과 같은 실행 방법).
             Callable.From(() => GetTree().ChangeSceneToFile(CorridorScene)).CallDeferred();
             return;
         }
@@ -71,7 +92,10 @@ public partial class StartMenu : Control
         }
         FillOptions();
         RefreshRuns();
-        ApplyCommandLine();
+        if (firstOpen)
+        {
+            ApplyCommandLine();
+        }
     }
 
     /// <summary>
@@ -396,7 +420,7 @@ public partial class StartMenu : Control
             Step = 1,
             Value = 0,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            TooltipText = "같은 시드면 어느 컴퓨터에서든 같은 행성이 나옵니다. 다른 행성을 보려면 번호를 바꾸세요",
+            TooltipText = "같은 시드면 같은 행성이 나옵니다(운영체제와 CPU 종류가 같은 컴퓨터끼리). 다른 행성을 보려면 번호를 바꾸세요",
         };
         grid.AddChild(_seed);
 

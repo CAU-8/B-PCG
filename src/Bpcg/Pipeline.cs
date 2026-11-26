@@ -70,10 +70,16 @@ public static class Pipeline
 {
     public const int SolverLogEvery = 10;
 
-    /// <summary>닫힌 호수 아래 물길에서, 솔버가 쓴 유량보다 이 몫 넘게 줄어든 칸에 '정상상태 아님'을 답니다 (0.01 = 100 가운데 1).</summary>
+    /// <summary>
+    /// 선상지·둑·호수·땅속으로 사라지는 개울 때문에 지나는 물이나 흙의 양이 솔버가 쓴 값보다 이 몫 넘게 바뀐 칸에 '정상상태 아님'을
+    /// 답니다 (0.01 = 100 가운데 1).
+    /// </summary>
     public const double LostFlowTolerance = 0.01;
 
     private static double Seconds(long t0) => Stopwatch.GetElapsedTime(t0).TotalSeconds;
+
+    // 지나는 양이 솔버가 쓴 값에서 LostFlowTolerance 넘게 바뀌었는지 (둘 다 0 이면 바뀌지 않음).
+    private static bool FlowChanged(double now, double solver) => Math.Abs(now - solver) > LostFlowTolerance * Math.Abs(solver);
 
     internal static void Say(Action<string>? log, string msg) => log?.Invoke(msg);
 
@@ -150,20 +156,33 @@ public static class Pipeline
         CellGraph? heroGraph = null, IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? diag = null) =>
         Scorecard.Build(planetFields, planetGraph, heroFields, heroGraph, diag, cfg);
 
-    /// <summary>점수표 요약: n_items, n_judged, n_failed, failed (scorecard_summary).</summary>
+    /// <summary>
+    /// 점수표 요약 (scorecard_summary): n_items, n_judged, n_failed, failed, n_errors, errors. errors 는 계산이 예외로 끝난
+    /// 항목(종류와 상관없이)이고, 그 가운데 check·self 는 failed 에도 들어 있습니다.
+    /// </summary>
     public static OrderedDictionary<string, object?> ScorecardSummary(OrderedDictionary<string, object?> card)
     {
         var judged = card.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["pass"] is not null).ToList();
         var failed = judged.Where(kv => ((OrderedDictionary<string, object?>)kv.Value!)["pass"] is false)
             .Select(kv => kv.Key).OrderBy(k => k, PyJson.CodePointComparer.Instance).Cast<object?>().ToList();
+        var errors = Scorecard.ComputeErrors(card).OrderBy(k => k, PyJson.CodePointComparer.Instance).Cast<object?>().ToList();
         return new OrderedDictionary<string, object?>
         {
             ["n_items"] = (long)card.Count,
             ["n_judged"] = (long)judged.Count,
             ["n_failed"] = (long)failed.Count,
             ["failed"] = failed,
+            ["n_errors"] = (long)errors.Count,
+            ["errors"] = errors,
         };
     }
+
+    /// <summary>
+    /// 기록 줄 끝에 붙이는 점수표 결과: "불합격 없음, 계산 실패 없음". 스튜디오 경고(progress.py WARNINGS)가 '계산 실패 N개'를
+    /// 찾습니다.
+    /// </summary>
+    public static string ScorecardLogText(OrderedDictionary<string, object?> summary) =>
+        $"불합격 {LogText.Failed((List<object?>)summary["failed"]!)}, 계산 실패 {LogText.Failed((List<object?>)summary["errors"]!)}";
 
     /// <summary>
     /// 지표를 고친 뒤의 물길 (receiver, 하류가 먼저 오는 순서). 고친 칸(fan), 출구, 옛 수신 셀이 더는 낮지 않은 칸만
@@ -360,9 +379,10 @@ public static class Pipeline
                 touched[c] = fan[c] || dam[c] || valleyFill[c] || hollow[c] || pitFilled[c];
             }
             double[] zBed = z;
+            // 물 깊이가 lakes.min_depth_m 에 못 미치는 넘치지 못하는 호수는 마른 분지(소금 평지)로 셉니다. 작은 웅덩이 메우기와 같은 문턱입니다.
             balance = LakeBalance.Solve(
                 graph, z, isOutlet, rGw, p, Vector(pet, n, "pet"), inflow,
-                outlet => RerouteReceivers(graph, zBed, outlet, res.Receiver, touched, cfg));
+                outlet => RerouteReceivers(graph, zBed, outlet, res.Receiver, touched, cfg), lakeSettings.MinDepthM);
             if (Array.IndexOf(balance.Sink, true) >= 0)
             {
                 routeOutlet = new bool[n];
@@ -403,9 +423,13 @@ public static class Pipeline
             {
                 bool changed = rcv[c] != res.Receiver[c];
                 nRerouted += changed ? 1 : 0;
-                notSteady[c] |= changed;
-                // 닫힌 호수가 물을 가둔 아래쪽 옛 물길: 솔버가 쓴 물의 양보다 줄어든 칸은 솔버의 균형에서 벗어납니다.
-                notSteady[c] |= balance is not null && q[c] < (1.0 - LostFlowTolerance) * res.Discharge[c];
+                // 솔버가 경사를 정할 때 쓴 값이 뒤에서 바뀐 칸은 솔버의 균형(정상상태)에서 벗어납니다. 물을 보낼 칸이 바뀐 칸,
+                // 물을 받는 칸의 높이가 바뀐 칸(낮춘 호수 바닥이나 흙으로 메운 칸으로 흘러드는 칸), 지나는 물이나 흙의 양이
+                // 1% 넘게 바뀐 칸(닫힌 호수가 물을 가둔 아래쪽 옛 물길, 선상지·둑이 물길을 돌려 물이 불어난 칸)입니다.
+                notSteady[c] |= changed
+                    || z[rcv[c]] != res.Z[rcv[c]]
+                    || FlowChanged(q[c], res.Discharge[c])
+                    || FlowChanged(qs[c], res.SedimentFlux[c]);
             }
         }
         else
@@ -420,10 +444,14 @@ public static class Pipeline
         sec["fans"] = Seconds(t);
         string basinText = causes is null
             ? ""
-            : $"(가라앉는 땅 {LogText.N(basins.NTectonic)}개, 얼음이 긁은 땅 {LogText.N(basins.NGlacial)}개)";
+            : $"(가라앉는 땅 {LogText.N(basins.NTectonic)}개, 얼음이 긁은 땅 {LogText.N(basins.NGlacial)}개, "
+                + $"바닥이 바다 아래로 내려가지 않게 같은 비율로 얕게 누른 웅덩이 {LogText.N(basins.NSqueezed)}개)";
         string balanceText = balance is null
             ? ""
-            : $", 넘치지 못하는 호수 {LogText.N(balance.NClosed)}개, 마른 분지 {LogText.N(balance.NDry)}개";
+            : $", 넘치지 못하는 호수 {LogText.N(balance.NClosed)}개, 마른 분지 {LogText.N(balance.NDry)}개"
+                + $"(이 가운데 물 깊이가 {lakeSettings!.MinDepthM:G} m에 못 미친 호수 {LogText.N(balance.NShallow)}개), "
+                + $"호수 물수지: 웅덩이 바닥 {LogText.N(balance.NPits)}곳, 턱을 넘긴 물 {LogText.N(balance.NSpills)}번, "
+                + $"합친 호수 {LogText.N(balance.NMerges)}번";
         Say(log, $"[3단계] 선상지 {apexes.Count}개, 흙을 쌓아 올린 칸 {LogText.N(fan.Count(b => b))}개, 산사태 둑 {dams.Count}개"
             + $"(이 가운데 흙이 다 메우지 못한 둑 {damResult.Diag["n_lakes"]}개), 흙이 메운 칸 {LogText.N(valleyFill.Count(b => b))}개, "
             + $"낮춘 칸 {LogText.N(hollow.Count(b => b))}개{basinText}, 메운 작은 웅덩이 {LogText.N(nPitsFilled)}개{balanceText}, "
@@ -503,54 +531,126 @@ public static class Pipeline
 
         // --- 석회암 땅에서 땅속으로 사라지는 개울 (히어로 유역만): 지하수면보다 높이 떠 있는 작은 개울은 물을 잃고, 그 물은
         //     큰 강가에서 다시 솟습니다. 유량이 바뀌므로 강·호수를 다시 정합니다. 지형은 그대로라 물이 준 골짜기는 마른 골짜기로 남습니다.
-        t = Stopwatch.GetTimestamp();
-        KarstStreamResult? karst = null;
+        //     사라진 물은 아래층 동굴을 타고 샘까지 가야 합니다(굽기가 그 길에 통로를 둡니다). 그래서 흙·지하수면·동굴 층을 만든 뒤
+        //     샘까지 갈 수 없는 칸(KarstStreams.DrainsToSpring 이 거짓)에서 개울이 사라졌으면, 그런 칸을 모두 막고 네 계산을 다시
+        //     합니다. 막는 칸은 늘기만 하므로 끝나지만, KarstStreams.MaxCaveRounds 번에서 멈춥니다.
+        double[] qSolver = q;
+        FieldSet wbSolver = wb;
+        double[]? made = null;
         if (!sphere)
         {
-            double[] made = new double[n];
+            made = new double[n];
             for (int c = 0; c < n; c++)
             {
                 made[c] = (graph.Area[c] * rEff[c]) + (inflow is null ? 0.0 : inflow[c]);
             }
-            karst = KarstStreams.Apply(
-                graph, z, rcv, order, made, q, wb.Get<bool>("is_river"), wb.Get<bool>("is_lake"), ocean,
-                wb.Get<double>("water_level_m"), rock, u, columns, cfg);
-            if (karst is not null)
+        }
+        bool[]? noSink = null;
+        int nKept = 0;
+        int caveRounds = 0;
+        int[] stray = [];
+        double secKarst = 0.0;
+        double secSoil = 0.0;
+        double secGw = 0.0;
+        double secCaves = 0.0;
+        KarstStreamResult? karst;
+        FieldSet soil;
+        bool[] isLake;
+        bool[] isRiver;
+        double[] zGw;
+        double[] zGwLower;
+        double[] baseLevel;
+        OrderedDictionary<string, object?> gwDiag;
+        FieldSet caves;
+        while (true)
+        {
+            caveRounds++;
+            t = Stopwatch.GetTimestamp();
+            karst = null;
+            stray = [];
+            q = qSolver;
+            wb = wbSolver;
+            if (made is not null)
             {
-                for (int c = 0; c < n; c++)
+                karst = KarstStreams.Apply(
+                    graph, z, rcv, order, made, qSolver, wbSolver.Get<bool>("is_river"), wbSolver.Get<bool>("is_lake"), ocean,
+                    wbSolver.Get<double>("water_level_m"), rock, u, columns, cfg, noSink);
+                if (karst is not null)
                 {
-                    // 솔버가 쓴 물의 양에서 벗어난 칸 (사라진 아래쪽의 마른 골짜기, 솟은 아래쪽의 불어난 강).
-                    notSteady[c] |= Math.Abs(karst.Discharge[c] - q[c]) > LostFlowTolerance * q[c];
+                    q = karst.Discharge;
+                    wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr, closedLevel: balance?.Level);
                 }
-                q = karst.Discharge;
-                wb = Water.WaterBodies(graph, z, rcv, order, q, ocean, cfg, valleyZ: zr, closedLevel: balance?.Level);
+            }
+            secKarst += Seconds(t);
+
+            // --- 흙과 충적층
+            t = Stopwatch.GetTimestamp();
+            soil = Soil.SoilAndAlluvium(z, slope, res.SCritSurface, u, temp, p, q, qs, fanRaise, rock, cfg, ocean, graph);
+            secSoil += Seconds(t);
+
+            // --- 지하수면
+            t = Stopwatch.GetTimestamp();
+            isLake = wb.Get<bool>("is_lake");
+            isRiver = wb.Get<bool>("is_river");
+            bool[] isWater = new bool[n];
+            for (int c = 0; c < n; c++)
+            {
+                isWater[c] = ocean[c] || isLake[c] || isRiver[c];
+            }
+            (zGw, zGwLower, baseLevel, gwDiag) = Groundwater.WaterTable(
+                graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean,
+                karstBase: karst?.Big);
+            secGw += Seconds(t);
+
+            // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
+            t = Stopwatch.GetTimestamp();
+            // 위층 높이 = 기준 물의 수면 + k·f_k·골짜기 깊이. 히어로에서는 수면(baseLevel)을 가장 가까운 큰 물(karst.Big)에서
+            // 가져오므로, 골짜기 깊이도 같은 큰 물의 값을 씁니다. 필드 valley_depth_m 은 가장 가까운 강(크기와 상관없음)의
+            // 값이라, 그대로 쓰면 수면과 골짜기 깊이가 서로 다른 강에서 와서 '마른 옛 강 높이'가 가까운 개울보다 낮아집니다.
+            double[] valleyDepth = wb.Get<double>("valley_depth_m");
+            if (karst?.Big is bool[] bigWater && Array.IndexOf(bigWater, true) >= 0)
+            {
+                (_, _, valleyDepth) = Distance.NearestSourceValues(graph, bigWater, valleyDepth);
+            }
+            caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, valleyDepth, columns, cfg);
+            secCaves += Seconds(t);
+
+            if (karst is null)
+            {
+                break;
+            }
+            // --- 사라지는 자리마다 아래층 동굴로 샘까지 갈 수 있는지 (굽기와 같은 판단). 길은 지표에서 300 m 보다 깊어
+            //     굽지 않는 석회암도 지날 수 있습니다(Caves.RouteLevel0).
+            t = Stopwatch.GetTimestamp();
+            double[] level0 = caves.Get<double>("cave_level_0_m");
+            double[] route0 = Caves.RouteLevel0(level0, zGwLower, z, columns, cfg.F("groundwater.max_depth_m"));
+            bool[] drains = KarstStreams.DrainsToSpring(graph, level0, route0, z, isWater, wb.Get<double>("water_level_m"));
+            stray = KarstStreams.WithoutSpring(karst.Exchange, drains);
+            secKarst += Seconds(t);
+            if (stray.Length == 0 || caveRounds >= KarstStreams.MaxCaveRounds)
+            {
+                break;
+            }
+            // 샘까지 갈 수 없는 칸을 모두 막습니다. 막은 개울은 아래로 흘러 샘까지 닿는 첫 떠 있는 칸에서 사라집니다.
+            noSink ??= new bool[n];
+            for (int c = 0; c < n; c++)
+            {
+                noSink[c] |= !drains[c];
+            }
+            nKept += stray.Length;
+        }
+        if (karst is not null)
+        {
+            for (int c = 0; c < n; c++)
+            {
+                // 솔버가 쓴 물의 양에서 벗어난 칸 (사라진 아래쪽의 마른 골짜기, 솟은 아래쪽의 불어난 강).
+                notSteady[c] |= FlowChanged(karst.Discharge[c], qSolver[c]);
             }
         }
-        sec["karst_streams"] = Seconds(t);
-
-        // --- 흙과 충적층
-        t = Stopwatch.GetTimestamp();
-        FieldSet soil = Soil.SoilAndAlluvium(z, slope, res.SCritSurface, u, temp, p, q, qs, fanRaise, rock, cfg, ocean, graph);
-        sec["soil"] = Seconds(t);
-
-        // --- 지하수면
-        t = Stopwatch.GetTimestamp();
-        bool[] isLake = wb.Get<bool>("is_lake");
-        bool[] isRiver = wb.Get<bool>("is_river");
-        bool[] isWater = new bool[n];
-        for (int c = 0; c < n; c++)
-        {
-            isWater[c] = ocean[c] || isLake[c] || isRiver[c];
-        }
-        (double[] zGw, double[] zGwLower, double[] baseLevel, OrderedDictionary<string, object?> gwDiag) = Groundwater.WaterTable(
-            graph, z, wb.Get<double>("water_level_m"), isWater, rock, slope, rGw, aUp, columns, cfg, isOcean: ocean,
-            karstBase: karst?.Big);
-        sec["groundwater"] = Seconds(t);
-
-        // --- 동굴 층 (녹는 암석 안의 물 높이인 아래 지하수면에 맞춤)
-        t = Stopwatch.GetTimestamp();
-        FieldSet caves = Caves.CaveLevels(graph, z, zGwLower, baseLevel, wb.Get<double>("valley_depth_m"), columns, cfg);
-        sec["caves"] = Seconds(t);
+        sec["karst_streams"] = secKarst;
+        sec["soil"] = secSoil;
+        sec["groundwater"] = secGw;
+        sec["caves"] = secCaves;
 
         t = Stopwatch.GetTimestamp();
         List<long[]> rivers = Network.RiverSegments(rcv, order, isRiver);
@@ -569,6 +669,7 @@ public static class Pipeline
         output["fan"] = fan;
         output["dam"] = dam;
         output["temperature_c"] = temp;
+        output["biome"] = Biomes.Classify(temp, p, ocean, cfg);
         if (causes is not null)
         {
             output["glaciated"] = basins.Ice;
@@ -640,6 +741,12 @@ public static class Pipeline
                 ["n_closed_lakes"] = balance is null ? null : (long)balance.NClosed,
                 ["n_dry_basins"] = balance is null ? null : (long)balance.NDry,
                 ["n_closed_lake_cells"] = balance is null ? null : (long)balance.Closed.Count(b => b),
+                ["n_basins_squeezed"] = (long)basins.NSqueezed,
+                ["n_closed_lakes_too_shallow"] = balance is null ? null : (long)balance.NShallow,
+                ["n_lake_pits"] = balance is null ? null : (long)balance.NPits,
+                ["n_lake_spills"] = balance is null ? null : (long)balance.NSpills,
+                ["n_lake_merges"] = balance is null ? null : (long)balance.NMerges,
+                ["lake_balance_residual"] = balance is null ? null : LakeBalance.Residual(balance),
             },
             ["water"] = new OrderedDictionary<string, object?>
             {
@@ -653,24 +760,38 @@ public static class Pipeline
                 ["n_sinks"] = karst is null ? 0L : (long)karst.NSinks,
                 ["n_springs"] = karst is null ? 0L : (long)karst.NSprings,
                 ["lost_m3_per_yr"] = karst is null ? 0.0 : karst.LostM3PerYr,
-                ["passes"] = karst is null ? 0L : (long)karst.Passes,
+                ["risen_m3_per_yr"] = karst is null ? 0.0 : karst.RisenM3PerYr,
+                ["n_kept_without_spring"] = (long)nKept,
+                ["n_without_spring"] = (long)stray.Length,
+                ["cave_rounds"] = (long)caveRounds,
+                ["n_loops_cut"] = karst is null ? 0L : (long)karst.NLoopsCut,
             },
             ["caves"] = cavesDiag,
             ["z_land_max_m"] = anyLand ? zLandMax : double.NaN,
         };
         string caveText = string.Join("·", caveCells.Select((kv, k) => $"{LogText.CaveLevel(k)} {LogText.N((long)kv.Value!)}칸"));
+        string keptText = (nKept > 0 ? $", 동굴로 샘까지 물이 빠지지 않아 개울을 사라지게 하지 않은 자리 {LogText.N(nKept)}곳" : "")
+            + (stray.Length > 0
+                ? $", 동굴 층을 {KarstStreams.MaxCaveRounds}번 만들어도 샘까지 물이 빠지지 않는 자리 {LogText.N(stray.Length)}곳"
+                : "");
         string karstText = karst is null
-            ? ""
-            : $"땅속으로 사라지는 개울 {LogText.N(karst.NSinks)}곳(모두 {karst.LostM3PerYr / Constants.SecondsPerYear:F1} m³/s, 다시 솟는 샘 {LogText.N(karst.NSprings)}곳), ";
+            ? (nKept > 0 ? $"땅속으로 사라지는 개울 0곳({keptText[2..]}), " : "")
+            : $"땅속으로 사라지는 개울 {LogText.N(karst.NSinks)}곳(모두 {karst.LostM3PerYr / Constants.SecondsPerYear:F1} m³/s, 다시 솟는 샘 {LogText.N(karst.NSprings)}곳"
+                + keptText + "), ";
         Say(log, $"[4단계] 강 칸 {LogText.N(isRiver.Count(b => b))}개(강 구간 {LogText.N(rivers.Count)}개), 호수 칸 {LogText.N(isLake.Count(b => b))}개, "
             + $"{karstText}동굴 {caveText}, 2~4단계 {(double)sec["total"]!:F2} s");
         return new StageResult(output, rivers, apexes, res, diag);
     }
 
-    /// <summary>L0 에서 쓰는 설정 (l0_config): landscape.deposition_g_l0 가 있으면 deposition_g 를 바꿉니다.</summary>
+    /// <summary>
+    /// L0 에서 쓰는 설정 (l0_config): landscape.deposition_g_l0 가 있으면 deposition_g 를 그 값으로 바꿉니다. 그 키가 없거나
+    /// 비어 있으면, 또는 landscape 절이 없으면 받은 설정을 그대로 돌려줍니다. 점수표(Scorecard.Build)는 히어로만 셀 때도 이 함수를
+    /// 부르므로, 합격선만 담은 작은 설정에서도 멈추면 안 됩니다. 두 번 거쳐도 결과는 같습니다. 행성 점수표의 설정은
+    /// GeneratePlanet 에서 한 번, Scorecard.Build 에서 또 한 번 이 함수를 거칩니다.
+    /// </summary>
     public static Config L0Config(Config cfg)
     {
-        if (!cfg.Sec("landscape").Contains("deposition_g_l0"))
+        if (!cfg.Contains("landscape") || !cfg.Sec("landscape").Contains("deposition_g_l0"))
         {
             return cfg;
         }
@@ -728,7 +849,12 @@ public static class Pipeline
             ["reduced_cells"] = reduced,
             ["seconds"] = Seconds(t),
         };
-        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: 첫 풀이의 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
+        // 첫 풀이가 반복 상한에 닿아 멈추면, 융기를 줄일 칸을 덜 풀렸을 수 있는 지형으로 고른 셈입니다. 최종 풀이의 수렴과 따로 알립니다
+        // (스튜디오 progress.py 의 WARNINGS 가 '첫 풀이 … 수렴 못 함' 을 읽습니다).
+        string firstPass = res.Converged
+            ? $"첫 풀이 반복 {res.Iterations}번, 수렴함"
+            : $"첫 풀이 반복 {res.Iterations}번, 반복 상한까지 수렴 못 함";
+        Say(log, $"[2단계] 지각 세기 한계 {zLim:F0} m: {firstPass}, 첫 풀이의 평균 지표 최고 {(double)diag["first_pass_z_mean_max_m"]!:F0} m, "
             + $"융기를 줄인 칸 {LogText.N(reduced)}개, {(double)diag["seconds"]!:F1} s");
         return (u2, res.Z, diag);
     }
@@ -763,6 +889,9 @@ public static class Pipeline
         (FieldSet geoFields, LayerColumns columns, OrderedDictionary<string, object?> geoDiag) =
             Model.GenerateGeology(fields, cfg, l0.Unit());
         fields.Update(geoFields);
+        // 지각 세기 한계(2단계)가 uplift_m_per_yr 를 줄인 값으로 바꾸기 전에, 판이 준 융기를 따로 남깁니다. 지질 기둥의 습곡 변위가
+        // 이 값으로 정해졌으므로, 히어로도 이 값으로 같은 지층을 다시 만듭니다(Refine.HeroColumns).
+        fields["uplift_tectonic_m_per_yr"] = (double[])fields.GetFloat64("uplift_m_per_yr").Clone();
         sec["geology"] = Seconds(t);
         string[] templateNames = ["탄산염 탁상지", "습곡충상대", "기반암 + 화산호"];
         string counts = string.Join(", ", ((List<object?>)geoDiag["template_counts"]!).Select((v, k) =>
@@ -784,20 +913,31 @@ public static class Pipeline
         fields.Update(st.Fields);
         st.Diag["strength_limit"] = limitDiag;
         sec["stages"] = Seconds(t);
+        // 광상 가능성 값: 판과 물길이 다 정해진 뒤에 셈합니다. 판의 값(화산호까지 거리 등)이 있어야 하므로 행성 단계에만 있습니다.
+        fields.Update(Prospects.Compute(l0, fields, cfgL0));
+        // 바다 필드: 바다와 물길, 기온이 다 정해진 뒤에 셈합니다. 구면 격자에서 방향을 재므로 행성 단계에만 있습니다.
+        t = Stopwatch.GetTimestamp();
+        fields.Update(SeaFields.Compute(l0, fields, cfgL0));
+        sec["sea"] = Seconds(t);
         Fields.CheckFields(fields.Names);
 
         t = Stopwatch.GetTimestamp();
         var sd = (OrderedDictionary<string, object?>)st.Diag["solver"]!;
+        var planetDiag = new Dictionary<string, object?> { ["converged"] = sd["converged"], ["iterations"] = sd["iterations"] };
+        if (limitDiag.TryGetValue("first_pass_converged", out object? fpc))
+        {
+            planetDiag["first_pass_converged"] = fpc;
+            planetDiag["first_pass_iterations"] = limitDiag["first_pass_iterations"];
+        }
+        // 점수표의 법칙 검사(law_consistency)는 솔버가 푼 설정으로 다시 계산해야 맞습니다. L0 은 cfgL0
+        // (landscape.deposition_g 를 deposition_g_l0 으로 바꾼 설정)로 풀었으므로 같은 설정을 넘깁니다.
         OrderedDictionary<string, object?> card = Score(
-            cfg, planetFields: fields, planetGraph: l0,
-            diag: new Dictionary<string, IReadOnlyDictionary<string, object?>>
-            {
-                ["planet"] = new Dictionary<string, object?> { ["converged"] = sd["converged"], ["iterations"] = sd["iterations"] },
-            });
+            cfgL0, planetFields: fields, planetGraph: l0,
+            diag: new Dictionary<string, IReadOnlyDictionary<string, object?>> { ["planet"] = planetDiag });
         sec["scorecard"] = Seconds(t);
         sec["total"] = Seconds(tAll);
         OrderedDictionary<string, object?> summary = ScorecardSummary(card);
-        Say(log, $"[점수표] 항목 {summary["n_items"]}개 가운데 합격·불합격을 가리는 것 {summary["n_judged"]}개, 불합격 {LogText.Failed((List<object?>)summary["failed"]!)}");
+        Say(log, $"[점수표] 항목 {summary["n_items"]}개 가운데 합격·불합격을 가리는 것 {summary["n_judged"]}개, {ScorecardLogText(summary)}");
         Say(log, $"[행성] 끝: {(double)sec["total"]!:F2} s");
 
         object? plateInfo = coarseInfo.TryGetValue("plates", out object? pi) ? pi : new OrderedDictionary<string, object?>();

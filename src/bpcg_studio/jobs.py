@@ -11,7 +11,7 @@
 → (그림을 켰고 평면 히어로가 아니면) [dotnet, Bpcg.Cli.dll, figures, results, <실행 폴더>].
 기록 줄은 스레드에서 한 줄씩 읽어 progress.ProgressTracker 에 넣습니다. 한 번에 한 실행만 돕니다
 (같은 서버 안에서는 잠금 하나로 검사와 등록을 함께 하고, 같은 out/ 을 보는 다른 스튜디오 서버가
-돌리는 실행은 job.json 의 server_pid 로 알아봅니다).
+돌리는 실행은 job.json 의 server_pid 와 server_start(그 서버 프로세스의 시작 시각)로 알아봅니다).
 
 실행 목록은 out/studio/* 와, out/* 중 planet/ 이나 hero/ 에 manifest.json 이 있는 폴더(읽기 전용,
 예: out/earth_v2)를 함께 보여 줍니다. 바깥 폴더 이름은 한글·공백도 받고, 경로 구분자·':'·앞의
@@ -19,6 +19,8 @@
 """
 
 import collections
+import contextlib
+import functools
 import json
 import math
 import os
@@ -33,7 +35,7 @@ from typing import Any
 
 from bpcg_studio.bundle import write_json
 from bpcg_studio.config import Config, checked_overrides, load_config
-from bpcg_studio.csharp import CLI_DLL, CSharpError, build_command, cli_command
+from bpcg_studio.csharp import CSharpError, build_command, cli_command
 from bpcg_studio.names import run_folder_name
 from bpcg_studio.params import planet_names, profile_names
 from bpcg_studio.paths import OUT, ROOT
@@ -97,7 +99,7 @@ def validate_request(req: dict) -> dict:
         )
     try:
         seed = int(req.get("seed", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise JobError("시드는 정수여야 합니다", details={"seed": "정수여야 합니다"}) from None
     if not 0 <= seed <= SEED_MAX:
         raise JobError(f"시드는 0..{SEED_MAX} 이어야 합니다", details={"seed": "범위 밖"})
@@ -135,7 +137,8 @@ def domain_errors(cfg: Config, changed: set[str] | None = None) -> dict[str, str
     """형식은 맞지만 파이프라인이 받지 않는 영역 값 {키: 오류}.
 
     히어로 한 변·칸 간격(bpcg_studio.hero.hero_grid_size = C# Domain.HeroGridSize: 간격 > 0,
-    한 변 ≥ 3·간격, 칸 수 상한)과 회랑 길이·폭·복셀 간격(> 0)을 실행 전에 봅니다.
+    한 변 ≥ 3·간격, 칸 수 상한)과 회랑 길이·폭·복셀 간격(> 0, 길이·폭 ≥ 복셀 간격 =
+    C# Corridor.SizeSettings)을 실행 전에 봅니다.
     그대로 돌리면 행성 단계를 다 돈 뒤에야 히어로에서 멈추고, 그 오류가 '히어로 자리를
     찾지 못함' 으로 잘못 보입니다.
     changed: 사용자가 바꾼 키 (오류를 그 키에 붙임).
@@ -159,6 +162,18 @@ def domain_errors(cfg: Config, changed: set[str] | None = None) -> dict[str, str
             errors[f"profile.corridor.{name}"] = (
                 f"profile.corridor.{name} 은 0 보다 커야 합니다: {v!r}"
             )
+    if cor is not None and not any(
+        f"profile.corridor.{n}" in errors for n in ("length_m", "width_m", "voxel_m")
+    ):
+        voxel = cor.get("voxel_m")
+        for name, noun, josa in (("length_m", "길이", "가"), ("width_m", "폭", "이")):
+            v = cor.get(name)
+            if voxel is not None and v is not None and float(v) < float(voxel):
+                errors[f"profile.corridor.{name}"] = (
+                    f"회랑 {noun}(profile.corridor.{name} {v:g} m){josa} 높이맵의 "
+                    f"표본 간격(voxel_m {voxel:g} m)보다 짧아, 높이맵이 그 방향에 표본 한 줄만 "
+                    f"가집니다. {name} 을 {voxel:g} m 이상으로 늘리거나 voxel_m 을 줄이세요."
+                )
     return errors
 
 
@@ -244,6 +259,107 @@ def pid_alive(pid: Any) -> bool:
     except OSError:
         return False
     return True
+
+
+def process_start_mark(pid: Any) -> str | None:
+    """운영체제가 적어 둔 프로세스 pid 의 시작 시각 (운영체제마다 형식이 다른 글자). 모르면 None.
+
+    pid 는 프로세스가 끝나면 다른 프로세스가 다시 받을 수 있습니다. 그래서 job.json 에 pid 와
+    이 값을 함께 적어 두고, 나중에 둘 다 같을 때만 같은 스튜디오 서버로 봅니다. 값은 같은
+    프로세스면 언제 읽어도 같습니다.
+
+    - Linux: /proc/<pid>/stat 의 22번째 값 (부팅 뒤 프로세스가 시작한 때, 클록 틱)
+    - macOS: sysctl kern.proc.pid.<pid> 의 p_starttime (초, 마이크로초)
+    - Windows: GetProcessTimes 의 만든 시각 (FILETIME, 100 ns 단위)
+    """
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    try:
+        if sys.platform.startswith("linux"):
+            return _linux_start_mark(pid)
+        if sys.platform == "darwin":
+            return _darwin_start_mark(pid)
+        if sys.platform == "win32":
+            return _windows_start_mark(pid)
+    except (OSError, ValueError, AttributeError):
+        return None
+    return None
+
+
+def _linux_start_mark(pid: int) -> str | None:
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    # 2번째 값(실행 파일 이름)은 괄호 안에 빈칸이나 괄호가 들어갈 수 있어, 마지막 ')' 뒤만 나눕니다.
+    # 그 뒤의 첫 값이 3번째 값이므로 22번째 값은 [19] 입니다.
+    rest = text.rsplit(")", 1)[-1].split()
+    return f"linux:{rest[19]}" if len(rest) > 19 else None
+
+
+def _darwin_start_mark(pid: int) -> str | None:
+    import ctypes
+    import struct
+
+    libc = ctypes.CDLL(None)
+    mib = (ctypes.c_int * 4)(1, 14, 1, pid)  # CTL_KERN, KERN_PROC, KERN_PROC_PID, pid
+    buf = ctypes.create_string_buffer(1024)  # struct kinfo_proc (64비트 macOS 648 B) 보다 넉넉히
+    size = ctypes.c_size_t(len(buf))
+    if libc.sysctl(mib, 4, buf, ctypes.byref(size), None, ctypes.c_size_t(0)) != 0:
+        return None
+    if size.value < 16:  # 그런 pid 가 없으면 0 B 를 돌려줌
+        return None
+    # kinfo_proc 의 맨 앞 kp_proc.p_starttime: struct timeval (tv_sec 8 B, tv_usec 4 B)
+    sec, usec = struct.unpack_from("=qi", buf, 0)
+    return f"darwin:{sec}.{usec:06d}" if sec > 0 else None
+
+
+def _windows_start_mark(pid: int) -> str | None:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None
+    try:
+        created, exited, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        ok = kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(exited),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        )
+        if not ok:
+            return None
+        return f"win32:{(created.dwHighDateTime << 32) | created.dwLowDateTime}"
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+@functools.cache
+def own_start_mark() -> str | None:
+    """이 스튜디오 서버 프로세스의 시작 시각 표시 (job.json 의 server_start)."""
+    return process_start_mark(os.getpid())
+
+
+def server_alive(info: dict) -> bool:
+    """job.json 을 쓴 스튜디오 서버(server_pid)가 아직 돌고 있으면 True.
+
+    pid 만 보면, 서버가 꺼진 뒤 같은 pid 를 다시 받은 다른 프로세스를 서버로 잘못 봅니다. 그러면 그
+    실행이 '도는 중' 으로 굳고 새 실행도 막힙니다. 그래서 job.json 의 server_start 가 지금 그 pid 의
+    시작 시각과 다르면 다른 프로세스로 봅니다. server_start 가 없는 예전 job.json 이나, 시작 시각을
+    읽지 못하는 경우에는 pid 만 봅니다.
+    """
+    pid = info.get("server_pid")
+    if not pid_alive(pid):
+        return False
+    mark = info.get("server_start")
+    if not isinstance(mark, str) or not mark:
+        return True
+    now = process_start_mark(pid)
+    return now is None or now == mark
 
 
 def _now_iso(t: float | None = None) -> str:
@@ -332,6 +448,7 @@ class Job:
         st.pop("log", None)
         st["cost"] = self.cost
         st["server_pid"] = os.getpid()
+        st["server_start"] = own_start_mark()
         tries = SAVE_TRIES if force else 1
         for k in range(tries):
             try:
@@ -425,7 +542,7 @@ class JobManager:
         return scale_weights(latest[0], latest[1], cost or {})
 
     def _foreign_active(self) -> dict | None:
-        """같은 out/ 을 보는 다른 스튜디오 서버(살아 있는 pid)가 돌리는 실행의 job.json."""
+        """같은 out/ 을 보는 다른 스튜디오 서버(server_alive 가 참)가 돌리는 실행의 job.json."""
         if not self.studio_dir.is_dir():
             return None
         me = os.getpid()
@@ -435,8 +552,7 @@ class JobManager:
             info = _read_json(d / JOB_FILE)
             if not info or info.get("status") not in ACTIVE:
                 continue
-            pid = info.get("server_pid")
-            if pid != me and pid_alive(pid):
+            if info.get("server_pid") != me and server_alive(info):
                 return info
         return None
 
@@ -502,9 +618,15 @@ class JobManager:
                     raise JobError(f"이미 도는 실행이 있습니다: {other.id}", status=409)
             job_id = self._new_id(spec)
             run_dir = self.studio_dir / job_id
+            # 명령을 먼저 만듭니다. dotnet 이 없거나 값을 명령 글자로 못 바꾸면 빈 실행 폴더를
+            # 남기지 않고 멈춥니다.
+            try:
+                commands = self.commands_for(spec, run_dir)
+            except ValueError as e:
+                raise JobError(f"실행 명령을 만들지 못했습니다: {e}", status=400) from None
             run_dir.mkdir(parents=True, exist_ok=False)
             job = Job(job_id, run_dir, spec, tracker, cost=cost)
-            job.commands = self.commands_for(spec, run_dir)
+            job.commands = commands
             self.jobs[job_id] = job
         job.save(force=True)  # 실패해도 실행 스레드가 다시 씁니다
         try:
@@ -529,6 +651,20 @@ class JobManager:
         if proc is not None and proc.poll() is None:
             proc.terminate()
         return job
+
+    def stop_all(self) -> int:
+        """도는 실행을 모두 취소합니다 (스튜디오 서버를 끌 때). 반환: 취소한 실행 수.
+
+        자식 프로세스(C# 콘솔)는 서버와 따로 돌아서, 그냥 두면 서버가 꺼진 뒤에도 코어를 다
+        쓰며 결과를 씁니다. 다음에 서버를 켜면 그 실행은 '서버가 꺼져서 멈췄습니다'로 보이는데,
+        실제로는 아직 도는 상태가 됩니다.
+        """
+        with self.lock:
+            active = [j.id for j in self.jobs.values() if j.status in ACTIVE]
+        for job_id in active:
+            with contextlib.suppress(JobError):
+                self.cancel(job_id)
+        return len(active)
 
     def get(self, job_id: str) -> Job | None:
         with self.lock:
@@ -563,15 +699,15 @@ class JobManager:
                         state, error = "cancelled", "사용자가 취소했습니다"
                         break
                     if rc != 0:
-                        what = (
-                            "C# 빌드"
-                            if cmd[1] == "build"
-                            else "파이프라인"
-                            if cmd[1] == str(CLI_DLL)
-                            else "그림 스크립트"
-                        )
+                        # 그림 명령도 C# 콘솔(같은 DLL)의 figures 이므로 세 번째 낱말로 구분합니다.
+                        if cmd[1] == "build":
+                            what = "C# 빌드가"
+                        elif len(cmd) > 2 and cmd[2] == "figures":
+                            what = "결과 그림 그리기가"
+                        else:
+                            what = "생성 파이프라인이"
                         tail = " / ".join(list(job.log)[-3:])
-                        state, error = "failed", f"{what}이 종료 코드 {rc} 로 멈췄습니다: {tail}"
+                        state, error = "failed", f"{what} 종료 코드 {rc} 로 멈췄습니다: {tail}"
                         break
         except Exception as e:  # 실행 스레드가 죽으면 실행이 '도는 중' 으로 굳으므로 모두 받음
             state, error = "failed", f"실행하지 못했습니다: {type(e).__name__}: {e}"
@@ -625,9 +761,9 @@ class JobManager:
     def _mark_interrupted(self) -> None:
         """서버가 꺼질 때 돌던 실행은 '멈춤(서버 꺼짐)' 으로 적어 둡니다.
 
-        job.json 의 server_pid 가 살아 있는 다른 프로세스이면 다른 스튜디오 서버가 아직 돌리는
-        실행이므로 건드리지 않습니다. 저장된 진행 상태(도는 단계, 남은 시간)도 함께 멈춤으로
-        고칩니다.
+        job.json 의 server_pid·server_start 가 살아 있는 다른 스튜디오 서버를 가리키면(server_alive)
+        그 서버가 아직 돌리는 실행이므로 건드리지 않습니다. 저장된 진행 상태(도는 단계, 남은 시간)도
+        함께 멈춤으로 고칩니다.
         """
         if not self.studio_dir.is_dir():
             return
@@ -637,8 +773,7 @@ class JobManager:
             info = _read_json(path)
             if not info or info.get("status") not in ACTIVE:
                 continue
-            pid = info.get("server_pid")
-            if pid != me and pid_alive(pid):
+            if info.get("server_pid") != me and server_alive(info):
                 continue
             try:
                 finished = path.stat().st_mtime

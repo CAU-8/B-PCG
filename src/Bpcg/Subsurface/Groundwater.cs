@@ -220,11 +220,12 @@ public static class Groundwater
         double karstGrad = cfg.F("groundwater.karst_gradient");
         double maxDepth = cfg.F("groundwater.max_depth_m");
         if (!(fR >= 0.0 && fR <= 1.0 && alpha > 0.0 && beta >= 0.0 && fMin >= 0.0 && rockM >= 0.0
-            && drainArea >= 0.0 && passes >= 0 && karstGrad >= 0.0 && maxDepth >= 0.0
+            && drainArea >= 0.0 && passes >= 0 && karstGrad > 0.0 && maxDepth >= 0.0
             && double.IsFinite(logKSurf) && double.IsFinite(aquitardLogK)))
         {
             throw new ArgumentException(
-                "groundwater 설정은 0 ≤ recharge_fraction ≤ 1, fan_alpha_m > 0, 나머지 길이·면적·기울기·횟수는 0 이상, "
+                "groundwater 설정은 0 ≤ recharge_fraction ≤ 1, fan_alpha_m > 0, karst_gradient > 0 (동굴 통로 굵기 식이 이 기울기로 "
+                + "나눕니다), 나머지 길이·면적·기울기·횟수는 0 이상, "
                 + "log10 투수율 두 값은 유한해야 합니다. 받은 값: "
                 + $"recharge_fraction {fR}, fan_alpha_m {alpha}, fan_beta {beta}, fan_min_m {fMin}, rock_aquifer_m {rockM}, "
                 + $"drain_area_m2 {drainArea}, drain_passes {passes}, karst_gradient {karstGrad}, max_depth_m {maxDepth}, "
@@ -253,10 +254,14 @@ public static class Groundwater
         bool[] karst = new bool[n];
         bool[] karstOpen = new bool[n];
         double[] aqTop = new double[n];
+        // 아래 지하수면을 따로 두지 않는 칸은 기준이 된 물 칸뿐입니다. karstBase 가 있으면 작은 개울은 기준이 아니므로
+        // 다른 땅처럼 석회암 지하수면을 받습니다. 그러지 않으면 석회암 지하수면보다 높이 떠 있는 개울 칸에서만 아래
+        // 지하수면이 개울 수면으로 튀어 올라, 둘레와 수백 m 차이 나는 물기둥이 생기고 그 옆 동굴이 물에 잠깁니다.
+        bool[] isBase = karstBase ?? water;
         Parallelism.For(0, n, c =>
         {
             aqTop[c] = AquitardTop(columns, c, zz[c], aquitardLogK);
-            karst[c] = !water[c] && double.IsFinite(zKarst[c]) && Rocks.Soluble[karstRock[c]] && zKarst[c] < zz[c];
+            karst[c] = !isBase[c] && double.IsFinite(zKarst[c]) && Rocks.Soluble[karstRock[c]] && zKarst[c] < zz[c];
             // 지표에서 그 높이까지 막는 층이 없으면 빗물이 녹는 암석으로 바로 빠져, 맨 위 지하수면도 그 높이입니다.
             karstOpen[c] = karst[c] && aqTop[c] < zKarst[c];
         });

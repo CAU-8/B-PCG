@@ -102,13 +102,14 @@ PR 양식의 확인 목록을 채웁니다. 리뷰어가 무엇을 왜 바꿨는
 - 시험이 있는가. 허용 오차(얼마나 틀려도 통과로 볼지)에 근거가 적혀 있는가
 - 함수 설명 주석(C# `///`, 파이썬 docstring)에 단위가 있는가(m, yr, m/yr …)
 - 절대 경로, `System.Random`·전역 난수, GPL 라이선스 패키지 import가 없는가
+- 다른 프로젝트의 코드나 진짜 지구 자료를 넣었다면 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 적었는가([docs/conventions.md](docs/conventions.md) 9절)
 - 문서와 화면 글이 [CLAUDE.md](CLAUDE.md)와 [Humanize.md](Humanize.md)의 기준을 따르는가
 - [설계도](docs/design/blueprint.md)와 어긋나지 않는가. 어긋나면 설계도를 먼저 고칠지 이야기합니다
 
 ## 패키지를 더할 때
 
 ```bash
-uv add <패키지> --group <dev|data|mesh|analysis|gpl|notebook>   # 파이썬
+uv add <패키지> --group <dev|data|analysis|gpl|notebook>   # 파이썬
 dotnet add <프로젝트> package <패키지>                            # C#
 ```
 
@@ -125,6 +126,8 @@ dotnet add <프로젝트> package <패키지>                            # C#
 - 저장소: [CAU-8/B-PCG](https://github.com/CAU-8/B-PCG) (공개).
 - Settings → Branches → `main` 보호 규칙:
     - PR 필수, 승인 1명
-    - 상태 검사 `lint`, `test`, `csharp` 필수
+    - 상태 검사 필수: `린트 (ruff)`, `C# 빌드·대조 시험`, `테스트 (ubuntu-latest)`, `테스트 (windows-latest)`, `테스트 (macos-15)`
+        - 설정 화면에는 `.github/workflows/ci.yml`의 작업 id(`lint`, `csharp`, `test`) 대신, 작업마다 붙인 이름(`name`)이 검사 이름으로 나옵니다. `test`는 운영체제마다 검사가 하나씩 생겨 셋입니다.
+        - `엔진 연기 시험 (Godot 4.7.2 .NET)`(작업 id `engine`)도 PR마다 돌지만 필수 목록에는 없습니다.
     - 새 커밋이 올라오면 지난 승인을 무효로
 - Settings → General → Pull Requests: squash merge만 켜고, "Automatically delete head branches"를 켭니다.

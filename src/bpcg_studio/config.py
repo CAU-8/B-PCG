@@ -80,9 +80,36 @@ class Config(Section):
         return Config(data)
 
     def digest(self) -> str:
-        """설정 내용의 짧은 해시 (결과 manifest 에 기록)."""
-        raw = json.dumps(self._data, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        """설정 해시: 목차(manifest.json)의 config_digest 와 같은 값 (C# Config.Digest).
+
+        결과 파일을 바꾸지 않는 키(DIGEST_IGNORED_KEYS)를 빼고, 그래서 비게 된 절도 뺀 뒤
+        키를 정렬한 JSON 의 SHA-256 앞 12자를 씁니다.
+        """
+        data = self.as_dict()
+        for dotted in DIGEST_IGNORED_KEYS:
+            _remove_dotted(data, dotted.split("."))
+        raw = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()[:12]
+
+
+# 결과 파일을 바꾸지 않는 설정 키. 설정 해시에서 뺍니다 (C# Config.DigestIgnoredKeys 와 같은 목록).
+# 스레드 수는 계산을 몇 갈래로 나눌지만 정하고, 스레드 수가 달라도 결과 파일은 바이트까지 같습니다.
+DIGEST_IGNORED_KEYS = ("profile.compute.numba_threads",)
+
+
+def _remove_dotted(node: dict[str, Any], parts: list[str]) -> None:
+    """점 경로 키 하나를 지웁니다. 없으면 그대로 둡니다.
+
+    키를 지워 비게 된 절은 위로 올라가며 지웁니다.
+    """
+    if len(parts) == 1:
+        node.pop(parts[0], None)
+        return
+    sub = node.get(parts[0])
+    if isinstance(sub, dict):
+        _remove_dotted(sub, parts[1:])
+        if not sub:
+            del node[parts[0]]
 
 
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
@@ -195,10 +222,15 @@ def _coerce(key: str, old: Any, new: Any) -> Any:
             if old and len(new) != len(old):
                 raise ValueError(f"'{key}' 는 원소 {len(old)}개 리스트여야 합니다: {new!r}")
             if not old:
+                # 기본값이 빈 리스트인 키(지금은 hero.site_lat_lon_deg 하나)는 원소 형을 비교할
+                # 기준이 없습니다. C# 쪽도 수 리스트만 읽으므로 유한한 수만 받습니다.
+                # null·글자·표가 섞이면 실행 명령을 만들다 멈추고 빈 실행 폴더만 남기 때문입니다.
+                out = []
                 for i, v in enumerate(new):
-                    if isinstance(v, float):
-                        _finite(f"{key}[{i}]", v)
-                return list(new)
+                    if isinstance(v, bool) or not isinstance(v, int | float):
+                        raise ValueError(f"'{key}[{i}]' 는 수여야 합니다: {v!r}")
+                    out.append(_finite(f"{key}[{i}]", float(v)) if isinstance(v, float) else v)
+                return out
             pairs = enumerate(zip(old, new, strict=True))
             return [_coerce(f"{key}[{i}]", o, v) for i, (o, v) in pairs]
     raise ValueError(f"'{key}' 는 {_kind(old)} 값이어야 합니다: {new!r} (지금 값: {old!r})")

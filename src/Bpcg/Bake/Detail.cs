@@ -11,6 +11,12 @@ using Bpcg.Volume;
 namespace Bpcg.Bake;
 
 /// <summary>
+/// 더할 파장 띠에 이 격자의 주파수 칸이 하나도 없을 때 던집니다 (회랑 간격이 거칠거나 띠가 좁음). 굽기는 이 경우에만
+/// 프랙탈 디테일을 건너뛰고, 다른 오류는 그대로 올려 굽기를 멈춥니다.
+/// </summary>
+public sealed class EmptyDetailBandException(string message) : ArgumentException(message);
+
+/// <summary>
 /// 회랑 지표의 프랙탈 디테일 (src/bpcg/bake/detail.py). 보기용 디테일이며 솔버 결과가 아닙니다.
 /// 2차원 배열은 (ny, nx) 행 우선입니다.
 /// </summary>
@@ -118,7 +124,7 @@ public static class Detail
         (double kLo, double kHi) = BandLimits(dx, minWavelengthM, maxWavelengthM);
         if (kHi <= kLo)
         {
-            throw new ArgumentException($"간격 {IO.PyFormat.General(dx)} m 격자로는 {IO.PyFormat.General(maxWavelengthM)} m 보다 짧은 파장을 그릴 수 없습니다");
+            throw new EmptyDetailBandException($"간격 {IO.PyFormat.General(dx)} m 격자로는 {IO.PyFormat.General(maxWavelengthM)} m 보다 짧은 파장을 그릴 수 없습니다");
         }
         double padLen = padM ?? (PadWavelengths * maxWavelengthM);
         int p = Math.Min(Math.Max((int)Math.Ceiling(padLen / dx), 0), PadMaxCells);
@@ -157,7 +163,7 @@ public static class Detail
         double var = NpReduce.Sum(terms) / nAll;
         if (!(var > 0.0))
         {
-            throw new ArgumentException(
+            throw new EmptyDetailBandException(
                 $"[{IO.PyFormat.General(1.0 / kHi, 3)}, {IO.PyFormat.General(1.0 / kLo, 3)}] m 띠에 이 격자({nyP}×{nxP}, {IO.PyFormat.General(dx)} m)의 FFT 칸이 없습니다. min_wavelength_m 과 max_wavelength_m 사이를 넓히세요");
         }
         double sigma = Math.Sqrt(var);

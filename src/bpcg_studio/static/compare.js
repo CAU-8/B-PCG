@@ -199,8 +199,14 @@ function showElevation() {
   $("elev-legend").innerHTML = gradientLegend(st.data.elevation_colors, lo, hi, "고도 [m]");
 }
 
+// 색 글자를 style 속성에 그대로 넣으면, 남이 만든 비교 결과 파일(compare.json)에 섞인 글이 화면 코드로 실행될 수 있습니다.
+// 그래서 '#' 뒤 16진수 6자리(예: #1f77b4) 꼴만 씁니다. 굽기·비교 코드가 쓰는 색은 모두 이 꼴입니다.
+function safeColor(c) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(c)) ? String(c) : "#808080";
+}
 function gradientLegend(colors, lo, hi, unit) {
-  return `<span>${esc(unit)}</span><div class="bar" style="background:linear-gradient(90deg,${colors.join(",")})"></div>`
+  const stops = (Array.isArray(colors) ? colors : []).map(safeColor);
+  return `<span>${esc(unit)}</span><div class="bar" style="background:linear-gradient(90deg,${stops.join(",")})"></div>`
     + `<div class="ends"><span>${fmt(lo)}</span><span>${fmt(hi)}</span></div>`;
 }
 
@@ -280,7 +286,7 @@ function stageLegend(s) {
   if (lg.colors) return gradientLegend(lg.colors, lg.vmin, lg.vmax, s.unit || "값");
   if (lg.swatches) {
     const names = { 1: "1", 2: "2", 3: "3" };
-    return Object.entries(lg.swatches).map(([k, c]) => `<span class="sw"><i style="background:${esc(c)}"></i>${esc(names[k] || k)}</span>`).join("")
+    return Object.entries(lg.swatches).map(([k, c]) => `<span class="sw"><i style="background:${safeColor(c)}"></i>${esc(names[k] || k)}</span>`).join("")
       + '<span class="hint">회색 음영은 최종 고도</span>';
   }
   if (lg.categorical) return '<span>번호마다 다른 색 (회색 = 없음)</span>';

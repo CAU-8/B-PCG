@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Bpcg.Compare;
+using Bpcg.Core;
 using Bpcg.IO;
 using Xunit;
 
@@ -178,6 +179,26 @@ public sealed class CompareToolTests : IDisposable
         CompareRunner.ApplyParamOverrides(cfg, [new("grid.n", 48L), new("fbm.octaves", 3L)]);
         Assert.Equal(48, cfg.Grid.N);
         Assert.Equal(3, cfg.Instances[0].Resolve().Values.I("octaves"));
+    }
+
+    // 명령줄의 --param bpcg.profile=tiny 는 따옴표가 없어 BareText 로 읽힙니다. 글자 매개변수는 이것을 받아야 합니다.
+    [Fact]
+    public void UnquotedTextOverridesAStringParam()
+    {
+        var one = new OrderedDictionary<string, object?>
+        {
+            ["methods"] = new List<object?> { new OrderedDictionary<string, object?> { ["id"] = "bpcg", ["method"] = "bpcg" } },
+        };
+        CompareConfig cfg = CompareRunner.ConfigFromDict(one, "t");
+        (string key, object? value) = Config.ParseAssignment("bpcg.profile=tiny");
+        Assert.IsType<BareText>(value);
+        CompareRunner.ApplyParamOverrides(cfg, [new(key, value)]);
+        Assert.Equal("tiny", cfg.Instances[0].Resolve().Values.S("profile"));
+        // 숫자 매개변수에 글자를 주면 받은 값을 알려 주고 멈춥니다.
+        CompareConfig fbm = CompareRunner.ConfigFromDict(Methods("fbm"), "t");
+        (key, value) = Config.ParseAssignment("fbm.octaves=many");
+        ArgumentException e = Assert.Throws<ArgumentException>(() => CompareRunner.ApplyParamOverrides(fbm, [new(key, value)]));
+        Assert.Contains("many", e.Message, StringComparison.Ordinal);
     }
 
     [Fact]

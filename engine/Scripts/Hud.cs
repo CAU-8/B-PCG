@@ -8,10 +8,12 @@ namespace Bpcg.Engine;
 /// 회랑 장면의 화면 위 정보와 레이어 패널.
 /// </summary>
 /// <remarks>
-/// 왼쪽 위: 지금 상태 (모드, 속력, 위치, 발밑 암석, 단면). 왼쪽 아래: 조작 도움말 (H 로 숨김).
+/// 왼쪽 위: 지금 상태 (모드, 속력, 위치, 발밑 암석, 단면). 그 첫 줄은 화면 속도와 그린 삼각형 수입니다
+/// (<see cref="FrameStats"/>, P 로 숨김). 왼쪽 아래: 조작 도움말 (H 로 숨김).
 /// 오른쪽: 레이어 패널. 줄마다 켜기·끄기 버튼과 '만 보기' 버튼이 있고, 아래에 '모두 보기',
 /// 색 바꾸기, 손전등, 지구본, 처음 화면 버튼이 있습니다 (Tab 으로 숨김). 버튼을 누르려면 Esc 로 마우스를 놓습니다.
-/// 크기는 <see cref="UiScale"/> 가 화면 배율에 맞춰 키웁니다 ([-]·[=] 로 더 바꿈).
+/// 크기는 <see cref="UiScale"/> 가 화면 배율과 창 크기에 맞춰 키웁니다 ([-]·[=] 로 더 바꿈).
+/// 회랑을 불러오는 동안에는 위 셋을 숨기고 <see cref="Loading"/> 의 진행 막대만 보입니다.
 /// </remarks>
 public partial class Hud : CanvasLayer
 {
@@ -21,13 +23,19 @@ public partial class Hud : CanvasLayer
 
     public const string HelpText = """
         [V] 날기 ↔ 걷기    [WASD] 이동    [Space·E] 위로 (걷기에서는 Space로 뛰기)    [Q·Ctrl] 아래로
-        [Shift] 5배 빨리 날기    [휠] 나는 속력 바꾸기    [화면 클릭] 마우스로 둘러보기    [Esc] 마우스 놓기 (단추 누를 때)
+        [Shift] 5배 빨리 날기    [휠·트랙패드 스크롤] 나는 속력 바꾸기    [화면 클릭] 마우스로 둘러보기    [Esc] 마우스 놓기 (단추 누를 때)
         {layer_keys}
         [X] 단면 칼 켜기·끄기 (눈앞의 땅을 잘라 지층 보기)    [ [ · ] ] 단면 당기기·밀기
         [T] 다음 동굴 입구로 가기    [Shift+T] 이전 입구    [G] 땅 색: 자연색 ↔ 지질도    [F] 손전등
         [M] 지구본(행성 전체)으로    [N] 처음 화면(새 행성 만들기)    [Tab] 레이어 패널 숨기기    [H] 도움말 숨기기
-        [-·=] 글자·패널 작게·크게
+        [-·=] 글자·패널 작게·크게    [P] 화면 속도 줄 숨기기
         """;
+
+    /// <summary>화면 속도 줄을 켜고 끄는 키.</summary>
+    public const Key PerfKey = Key.P;
+
+    /// <summary>화면 속도 줄을 다시 쓰는 간격 (s).</summary>
+    public const double PerfIntervalS = 0.5;
 
     private Label _status = null!;
     private Label _help = null!;
@@ -37,9 +45,19 @@ public partial class Hud : CanvasLayer
     private readonly Dictionary<string, Button> _toggles = [];
     private Button? _colorButton;
     private Button? _lampButton;
+    private string _statusText = "";
+    private string _perfLine = "";
+    private double _perfTimer;
+
+    /// <summary>왼쪽 위 첫 줄에 화면 속도와 그린 삼각형 수를 보이는지.</summary>
+    public bool PerfVisible { get; private set; } = true;
+
+    /// <summary>불러오기 진행 막대와 '불러오기 문제' 상자.</summary>
+    public LoadScreen Loading { get; private set; } = null!;
 
     public override void _Ready()
     {
+        FrameStats.EnableGpuTiming(GetViewport());
         _status = Ui.Label();
         _status.Position = new Vector2(16, 12);
         AddChild(_status);
@@ -65,6 +83,17 @@ public partial class Hud : CanvasLayer
         _rows.AddThemeConstantOverride("separation", 4);
         _panel.AddChild(_rows);
         AddChild(_panel);
+
+        Loading = new LoadScreen { Name = "Loading" };
+        AddChild(Loading);
+    }
+
+    /// <summary>상태 글·도움말·레이어 패널을 보이거나 숨깁니다 (불러오는 동안 숨김).</summary>
+    public void SetWorldVisible(bool on)
+    {
+        _status.Visible = on;
+        _help.Visible = on;
+        _panel.Visible = on;
     }
 
     /// <summary>레이어 패널을 만듭니다. 레이어가 바뀌면 버튼 상태를 다시 맞춥니다.</summary>
@@ -181,7 +210,42 @@ public partial class Hud : CanvasLayer
         }
     }
 
-    public void SetStatus(string text) => _status.Text = text;
+    public void SetStatus(string text)
+    {
+        _statusText = text;
+        RefreshStatusLabel();
+    }
+
+    /// <summary>화면 속도 줄을 켜거나 끕니다 (P).</summary>
+    public void SetPerfVisible(bool on)
+    {
+        PerfVisible = on;
+        _perfTimer = 0.0;
+        RefreshStatusLabel();
+    }
+
+    public override void _Process(double delta)
+    {
+        _perfTimer -= delta;
+        if (PerfVisible && _perfTimer <= 0.0)
+        {
+            _perfTimer = PerfIntervalS;
+            _perfLine = FrameStats.HudLine(FrameStats.Read(GetViewport()));
+            RefreshStatusLabel();
+        }
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventKey { Pressed: true, Echo: false } key && key.PhysicalKeycode == PerfKey)
+        {
+            SetPerfVisible(!PerfVisible);
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
+    private void RefreshStatusLabel() =>
+        _status.Text = PerfVisible && _perfLine.Length > 0 ? _perfLine + "\n" + _statusText : _statusText;
 
     public void ToggleHelp() => _help.Visible = !_help.Visible;
 

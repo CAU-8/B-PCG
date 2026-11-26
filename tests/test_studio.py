@@ -30,14 +30,22 @@ import bpcg_studio.views as views_mod
 from bpcg_studio import godot as gd
 from bpcg_studio import summary as sm
 from bpcg_studio.bundle import read_manifest
-from bpcg_studio.config import BareText, checked_overrides, load_config, parse_assignment
+from bpcg_studio.config import (
+    BareText,
+    Config,
+    checked_overrides,
+    load_config,
+    parse_assignment,
+)
 from bpcg_studio.jobs import (
     JobError,
     JobManager,
     cost_of,
     list_runs,
     pid_alive,
+    process_start_mark,
     resolve_run,
+    server_alive,
     toml_literal,
     validate_request,
 )
@@ -111,6 +119,12 @@ def test_schema_covers_every_config_key_with_help(profile):
     assert by_key["planet.radius_m"]["category"] == "physics"
     assert by_key["planet.radius_m"]["unit"] == "m"
     assert by_key["uplift.craton_erosion_m_per_myr"]["unit"] == "m/Myr"
+    # 이름 끝이 단위인 키(넓이 _m2 등)는 단위 칸이 비지 않습니다. log10 투수율은 m² 가 아닙니다.
+    m2 = [k for k in planet_keys | profile_keys if k.endswith("_m2")]
+    assert m2 and all(by_key[k]["unit"] for k in m2), {k: by_key[k]["unit"] for k in m2}
+    assert by_key["caves.sink_min_area_m2"]["unit"] == "m²"
+    assert by_key["groundwater.drain_area_m2"]["unit"] == "m²"
+    assert by_key["groundwater.surface_log10_perm_m2"]["unit"].startswith("log10")
     assert by_key["profile.hero.size_m"]["category"] == "resolution"
     assert not by_key["planet.seed"]["editable"]
     sections = {s["id"] for s in schema["sections"]}
@@ -293,15 +307,42 @@ def test_progress_scales_missing_history_stages():
 
 
 def test_progress_config_error_gets_its_own_warning():
+    # 히어로 영역 설정이 틀리면 명령줄이 오류 글 한 줄과 난 곳을 찍고 멈춥니다.
+    # 평면 히어로로 바꾸지 않습니다.
     tr = ProgressTracker()
     tr.start(0.0)
-    tr.feed(
-        "[히어로] 행성에서 히어로 자리를 찾지 못해 평면 히어로로 바꿉니다: profile.hero 는 "
-        "spacing_m > 0, size_m ≥ 3·spacing_m 이어야 합니다: 50.0, 25.0",
-        1.0,
-    )
-    (w,) = tr.snapshot(1.0)["warnings"]
-    assert "영역 설정" in w["message"] and "줄이거나" not in w["message"]
+    tr.feed("profile.hero 는 spacing_m > 0, size_m ≥ 3·spacing_m 이어야 합니다: 50.0, 25.0", 1.0)
+    tr.feed("  (오류가 난 곳: Bpcg.Hero.Domain.HeroGridSize)", 1.0)
+    domain, where = tr.snapshot(1.0)["warnings"]
+    assert "영역 설정" in domain["message"] and "줄이거나" not in domain["message"]
+    assert "설정 값이나 입력 파일" in where["message"]
+    big = ProgressTracker()
+    big.start(0.0)
+    big.feed("히어로 2000² = 4,000,000 칸은 상한 1600² 를 넘습니다. profile.hero.size_m 을 …", 2.0)
+    (w,) = big.snapshot(2.0)["warnings"]
+    assert "영역 설정" in w["message"]
+
+
+def test_progress_shows_globe_warnings():
+    """[지구본] 단계의 경고 줄도 노란 경고로 보여 줍니다 (문구는 Bake/Globe.cs 가 찍는 그대로)."""
+    lines = {
+        "[지구본] 경고: 판 번호가 0..300 라 uint8 (0..255)에 담을 수 없어 판 레이어만 건너뜁니다": (
+            "plates.count"
+        ),
+        "[지구본] 경고: 히어로 설정 해시가 행성과 다릅니다 (위치는 그대로 씁니다)": "설정이 다른",
+        "[지구본] 히어로 시드 7 가 행성 시드와 달라 표시하지 않습니다": "시드",
+        "[지구본] 경고: 새로 생긴 경고": "지구본 자료를 쓰다가",
+    }
+    for line, word in lines.items():
+        tr = ProgressTracker()
+        tr.start(0.0)
+        tr.feed(line, 1.0)
+        (w,) = tr.snapshot(1.0)["warnings"]
+        assert word in w["message"] and w["line"] == line
+    tr = ProgressTracker()
+    tr.start(0.0)
+    tr.feed("[지구본] 끝: 0.42 s", 1.0)
+    assert tr.snapshot(1.0)["warnings"] == []
 
 
 def test_progress_warns_when_solver_does_not_converge():
@@ -435,7 +476,6 @@ def test_generate_always_builds_console_first(monkeypatch, tmp_path, built):
     dll = tmp_path / "Bpcg.Cli.dll"
     if built:
         dll.touch()
-    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
     monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": False})
@@ -451,7 +491,6 @@ def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
 
     dll = tmp_path / "Bpcg.Cli.dll"
     dll.touch()
-    monkeypatch.setattr(jobs_mod, "CLI_DLL", dll)
     monkeypatch.setattr(jobs_mod, "cli_command", lambda args: ["dotnet", str(dll), *args])
     monkeypatch.setattr(jobs_mod, "build_command", lambda: ["dotnet", "build"])
     spec = validate_request({"profile": "tiny", "figures": True, "flat": flat})
@@ -463,6 +502,37 @@ def test_figures_step_calls_csharp_figures_command(monkeypatch, tmp_path, flat):
         assert len(commands) == 2
     else:
         assert commands[-1] == ["dotnet", str(dll), "figures", "results", str(run_dir)]
+
+
+def test_stop_all_stops_running_children(tmp_path):
+    """스튜디오 서버를 끌 때 도는 실행의 자식 프로세스도 멈춥니다(남겨 두면 서버 없이 계속 돎)."""
+    jm = JobManager(out_dir=tmp_path)
+    _stub(jm, "import time; print('[행성] 시작: x', flush=True); time.sleep(30)")
+    job = jm.start({"profile": "tiny", "figures": False})
+    deadline = time.time() + 30
+    while job.proc is None and time.time() < deadline:
+        time.sleep(0.05)
+    pid = job.proc.pid
+    assert jm.stop_all() == 1
+    _wait(job, 30)
+    assert job.status == "cancelled" and not pid_alive(pid)
+    assert jm.stop_all() == 0
+
+
+def test_validate_request_rejects_values_that_cannot_become_a_command(tmp_path):
+    """검사를 통과한 값으로 명령을 만들다 멈추면 빈 실행 폴더만 남습니다. 검사에서 미리 막습니다."""
+    for bad in ([16, None], ["a", 1], [16, {"x": 1}], [True, 1.0], [16, float("nan")]):
+        with pytest.raises(JobError) as e:
+            validate_request({"profile": "tiny", "overrides": {"hero.site_lat_lon_deg": bad}})
+        assert "hero.site_lat_lon_deg" in str(e.value.details) or "hero.site_lat_lon_deg" in str(
+            e.value
+        )
+    spec = validate_request(
+        {"profile": "tiny", "overrides": {"hero.site_lat_lon_deg": [8.39, -0.92]}}
+    )
+    assert spec["overrides"]["hero.site_lat_lon_deg"] == [8.39, -0.92]
+    with pytest.raises(JobError):
+        validate_request({"profile": "tiny", "seed": 1e999})
 
 
 def test_validate_request_reports_bad_keys():
@@ -505,6 +575,7 @@ def test_job_manager_runs_tiny_pipeline(csharp_cli, tmp_path):
         saved = json.loads(saved_path.read_text(encoding="utf-8"))
     assert saved["status"] == "done" and saved["stage_seconds"]["hero_solver"] >= 0
     assert saved["server_pid"] == os.getpid() and saved["cost"]["hero_cells"] == 64 * 64
+    assert saved["server_start"] == process_start_mark(os.getpid())
     assert (job.run_dir / "job.log").read_text(encoding="utf-8").count("[굽기]") >= 3
     man = read_manifest(job.run_dir / "hero")
     assert man["config"]["fans"]["enabled"] is False and man["seed"] == 2
@@ -631,6 +702,63 @@ def test_install_corridor_brings_globe_and_drops_stale_one(runs, tmp_path):
     assert not any(line.startswith("[지구본]") for line in logs["flat"])
 
 
+def test_install_corridor_skips_a_globe_baked_with_another_hero(runs, tmp_path):
+    """실행의 지구본이 이 회랑과 다른 히어로로 구운 지구본이면 엔진으로 옮기지 않고 까닭을 알립니다.
+
+    옮기면 지구본 장면이 지금 회랑과 다른 자리를 보여 줍니다. 엔진의 지난 지구본도 지웁니다.
+    """
+    out, _ = runs
+    run = tmp_path / "mixed"
+    shutil.copytree(out / "flat" / "corridor", run / "corridor")
+    shutil.copytree(out / "tiny" / "globe", run / "globe")
+    baked = tmp_path / "baked"
+    gd.install_corridor(out / "tiny" / "corridor", baked, run_key="tiny")
+    assert (baked / "globe" / "globe.json").is_file()
+    marker = gd.install_corridor(run / "corridor", baked, run_key="mixed")
+    assert marker["globe"] is False and not (baked / "globe").exists()
+    assert marker["globe_note"].startswith("지구본은 넣지 않았습니다")
+    assert "행성 없이 만든 평면 히어로" in marker["globe_note"]
+    assert "bpcg bake --hero" in marker["globe_note"]
+    # 같은 실행의 회랑과 지구본은 그대로 옮깁니다.
+    assert "globe_note" not in gd.install_corridor(out / "tiny" / "corridor", baked, run_key="tiny")
+
+
+def test_summary_warns_when_bundles_come_from_different_runs(runs, tmp_path):
+    """같은 폴더의 행성·히어로가 서로 다른 실행에서 나왔으면 경고합니다.
+
+    경고 글에는 받은 값과 고치는 법이 들어갑니다.
+
+    이때 '행성에서 자리를 찾지 못해 평면 히어로로 바꿨다'는 경고는 내지 않습니다(그런 일이 없었음).
+    """
+    out, _ = runs
+    run = tmp_path / "mixed"
+    shutil.copytree(out / "tiny" / "planet", run / "planet")
+    shutil.copytree(out / "flat" / "hero", run / "hero")
+    messages = [w["message"] for w in sm.run_summary(run, "mixed")["warnings"]]
+    assert any(
+        m.startswith("히어로(hero/)는 행성 없이 만든 평면 히어로인데") and "bpcg hero --from" in m
+        for m in messages
+    ), messages
+    assert not any("행성 위에 놓지 못해" in m for m in messages), messages
+    same = [w["message"] for w in sm.run_summary(out / "tiny", "tiny")["warnings"]]
+    assert not any("(hero/)" in m or "(globe/)" in m or "(corridor/)" in m for m in same), same
+
+
+def test_studio_config_digest_matches_the_generator(runs):
+    """스튜디오의 Config.digest() 는 생성기가 목차에 적는 설정 해시와 같습니다.
+
+    스레드 수는 결과를 바꾸지 않아 설정 해시에서 빠집니다.
+    """
+    out, _ = runs
+    for name in ("planet", "hero"):
+        man = read_manifest(out / "tiny" / name)
+        cfg = Config(man["config"])
+        assert cfg.digest() == man["config_digest"], name
+        threads = cfg.with_overrides({"profile.compute.numba_threads": 3})
+        assert threads.digest() == man["config_digest"], name
+        assert cfg.with_overrides({"landscape.theta": 0.6}).digest() != man["config_digest"]
+
+
 def test_install_corridor_refuses_incomplete_corridor(runs, tmp_path):
     out, _ = runs
     broken = tmp_path / "corridor"
@@ -645,6 +773,40 @@ def test_install_corridor_refuses_incomplete_corridor(runs, tmp_path):
     (broken / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
     with pytest.raises(gd.GodotError, match="올바르지"):
         gd.install_corridor(broken, baked)
+
+
+def test_install_copies_only_data_files_into_the_engine(runs, tmp_path):
+    """engine/ 은 Godot 프로젝트라, 남의 실행 폴더에 섞인 코드 파일이 엔진으로 들어가면 실행됩니다.
+
+    회랑은 manifest 의 이름이 자료 파일 종류가 아니면 멈추고, 지구본은 globe.json 이 적은 .bin 만
+    옮깁니다.
+    """
+    out, _ = runs
+    run = tmp_path / "run"
+    shutil.copytree(out / "tiny" / "corridor", run / "corridor")
+    shutil.copytree(out / "tiny" / "globe", run / "globe")
+    (run / "corridor" / "Evil.cs").write_text("class Evil {}", encoding="utf-8")
+    (run / "globe" / "Other.cs").write_text("class Other {}", encoding="utf-8")
+    (run / "globe" / "x.gdextension").write_text("[configuration]", encoding="utf-8")
+    baked = tmp_path / "baked"
+    gd.install_corridor(run / "corridor", baked, run_key="x")
+    copied = {p.name for p in baked.rglob("*") if p.is_file()}
+    assert "Evil.cs" not in copied and "Other.cs" not in copied and "x.gdextension" not in copied
+    assert (baked / "globe" / "globe.json").is_file()
+    assert {p.name for p in (baked / "globe").iterdir()} == set(gd.globe_files(run / "globe"))
+
+    man = json.loads((run / "corridor" / "manifest.json").read_text(encoding="utf-8"))
+    man["files"] = man["files"] + ["Evil.cs"]
+    (run / "corridor" / "manifest.json").write_text(json.dumps(man), encoding="utf-8")
+    with pytest.raises(gd.GodotError, match="굽기가 쓰는 종류"):
+        gd.install_corridor(run / "corridor", tmp_path / "baked2")
+    assert not (tmp_path / "baked2").exists() or not any((tmp_path / "baked2").rglob("*.cs"))
+
+    meta = json.loads((run / "globe" / "globe.json").read_text(encoding="utf-8"))
+    meta["fields"][0]["file"] = "../../engine/Scripts/Main.cs"
+    (run / "globe" / "globe.json").write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(gd.GodotError, match="지구본 파일 이름이 올바르지"):
+        gd.globe_files(run / "globe")
 
 
 # ---------------------------------------------------------------- 리뷰에서 나온 회귀 검사
@@ -684,6 +846,9 @@ def test_validate_request_checks_hero_and_corridor_area():
     assert "3·spacing_m" in details({"profile.hero.size_m": 200.0})["profile.hero.size_m"]
     assert "상한" in details({"profile.hero.size_m": 600_000.0})["profile.hero.size_m"]
     assert "profile.corridor.voxel_m" in details({"profile.corridor.voxel_m": 0.0})
+    # tiny 회랑의 표본 간격은 8 m 라 폭 4 m 는 높이맵에 표본 한 줄뿐입니다.
+    narrow = details({"profile.corridor.width_m": 4.0})["profile.corridor.width_m"]
+    assert "width_m 4 m" in narrow and "voxel_m 8 m" in narrow
     assert "덮어쓸 수 없습니다" in details({"planet.name": "x"})["planet.name"]
     ok = validate_request({"profile": "tiny", "overrides": {"profile.hero.size_m": 6450.0}})
     assert ok["overrides"] == {"profile.hero.size_m": 6450.0}
@@ -798,6 +963,31 @@ def test_planet_probe_is_near_pixel_lat_lon(runs, tmp_path):
         assert abs(where["lat"] - lat) < tol and abs(dlon) * np.cos(np.radians(lat)) < tol
 
 
+def test_probe_reads_one_cell_and_matches_full_field(runs, tmp_path):
+    """칸 정보는 필드 전체를 float64 로 바꾸지 않고 그 칸만 읽습니다.
+
+    값은 필드 전체를 바꿔 읽은 값과 같아야 합니다.
+    """
+    out, _ = runs
+    store = ViewStore(tmp_path / "cache")
+    for level in ("planet", "hero"):
+        data = store.level(out / "tiny", level)
+        h, w = data.grid_shape()
+        px, py = w // 3, h // 2
+        cell = data.cell_at(px, py)
+        probe = data.probe(px, py)
+        assert not data._values  # 지도용 캐시를 채우거나 밀어내지 않음
+        shown = {it["name"]: it for g in probe["groups"] for it in g["items"]}
+        assert len(shown) > 10
+        for name, item in shown.items():
+            if name == "receiver":
+                continue
+            factor = data.meta_light(name)["factor"]
+            want = float(data.values(name)[cell]) * factor
+            got = item["value"]
+            assert (got is None and not np.isfinite(want)) or got == want, name
+
+
 def test_view_overlays_and_version_follow_later_stages(runs, tmp_path):
     """실행 도중 행성 지도를 열어도, 나중에 생긴 히어로 자리·회랑 사각형이 지도에 나옵니다."""
     out, _ = runs
@@ -832,23 +1022,52 @@ def test_field_meta_always_has_positive_min_and_sensible_uplift_range(runs, tmp_
 
 
 # ---------------------------------------------------------------- 개요 (점수표·경고·시간)
-def test_scorecard_keeps_checks_that_failed_to_compute():
+def test_scorecard_keeps_items_that_failed_to_compute():
+    """계산이 예외로 끝난 항목은 종류와 상관없이 줄과 경고로 남습니다.
+
+    입력이 없어 건너뛴 항목만 숨깁니다.
+    """
     planet = {
         "planet.law_consistency": {
             "value": None, "pass": False, "kind": "check", "note": "계산 실패: 빈 배열",
         },
-        "planet.water_budget": {"value": 1e-9, "pass": True, "kind": "check"},
-        "planet.hack_exponent": {"value": None, "pass": None, "kind": "emergent", "note": "건너뜀"},
-        "planet.ocean_fraction": {"value": 0.7, "pass": None, "kind": "emergent"},
+        "planet.water_budget": {"value": 1e-9, "pass": True, "kind": "self", "note": "기준"},
+        "planet.hack_exponent": {
+            "value": None, "pass": None, "kind": "emergent", "note": "계산 실패: min_area_cells",
+        },
+        "planet.shelf_area": {
+            "value": None, "pass": None, "kind": "emergent", "note": "건너뜀: 없는 입력 z_m",
+        },
+        "planet.ocean_fraction": {"value": 0.7, "pass": None, "kind": "forced", "note": "x"},
+        "planet.grid_alignment_edge": {"value": 1.5, "pass": False, "kind": "check", "note": "y"},
     }  # fmt: skip
     rows = {r["key"]: r for r in sm._scorecard_rows(planet, None)}
     assert "law_consistency" in rows and rows["law_consistency"]["planet"]["pass"] is False
-    assert "hack_exponent" not in rows
+    assert "hack_exponent" in rows and rows["hack_exponent"]["planet"]["pass"] is None
+    assert "shelf_area" not in rows
+    assert rows["water_budget"]["kind_label"].startswith("자기 검사 (self)")
     assert rows["ocean_fraction"]["earth"] == f"{sm.EARTH_OCEAN_FRACTION:g}"  # Scorecard.cs 기준값
     failed = sm.failed_checks(planet, None)
-    assert [f["key"] for f in failed] == ["planet.law_consistency"] and failed[0]["compute_failed"]
-    warns = sm._warnings(None, None, None, None, {}, {}, failed)
-    assert any("불합격" in w["message"] and "계산 실패" in w["message"] for w in warns)
+    keys = {f["key"]: f["compute_failed"] for f in failed}
+    assert keys == {
+        "planet.law_consistency": True,
+        "planet.hack_exponent": True,
+        "planet.grid_alignment_edge": False,
+    }
+    warns = [w["message"] for w in sm._warnings(None, None, None, None, {}, {}, failed)]
+    assert any("불합격" in m and "격자 정렬" in m and "Hack" not in m for m in warns)
+    assert any("계산하지 못했습니다" in m and "Hack" in m and "경사 법칙" in m for m in warns)
+
+
+def test_progress_warns_when_scorecard_items_fail_to_compute():
+    tr = ProgressTracker()
+    tr.start(0.0)
+    line = "[점수표] 항목 29개 가운데 합격·불합격을 가리는 것 12개, 불합격 없음, 계산 실패 없음"
+    tr.feed(line, 1.0)
+    assert tr.snapshot(1.0)["warnings"] == []
+    tr.feed("[히어로] 끝: 1.00 s, 점수표 불합격 없음, 계산 실패 1개 (hero.hack_exponent)", 2.0)
+    (w,) = tr.snapshot(2.0)["warnings"]
+    assert "계산하지 못했습니다" in w["message"]
 
 
 def test_summary_warns_on_unconverged_strength_limit_and_labels_corridor_times():
@@ -924,6 +1143,7 @@ def test_job_manager_reports_failed_subprocess(tmp_path):
     st = jm.job_state(job.id)
     assert st["status"] == "failed" and st["returncode"] == 3
     assert "종료 코드 3" in st["error"] and st["progress"]["state"] == "failed"
+    assert st["error"].startswith("생성 파이프라인이 종료 코드 3")
     assert jm.active() is None
 
 
@@ -980,9 +1200,14 @@ def test_restart_marks_dead_server_jobs_interrupted(tmp_path):
     base = {"status": "running", "spec": {"profile": "tiny", "flat": False}, "progress": snap}
     _write_job(tmp_path / "studio" / "a", {**base, "id": "a", "server_pid": dead.pid})
     _write_job(tmp_path / "studio" / "old", {**base, "id": "old"})  # 예전 형식 (pid 없음)
-    _write_job(tmp_path / "studio" / "b", {**base, "id": "b", "server_pid": os.getppid()})
+    parent = {"server_pid": os.getppid(), "server_start": process_start_mark(os.getppid())}
+    _write_job(tmp_path / "studio" / "b", {**base, "id": "b", **parent})
+    # 서버가 꺼진 뒤 그 pid 를 다른 프로세스가 다시 받은 경우: pid 는 살아 있지만 시작 시각이 다름
+    reused = {"server_pid": os.getppid(), "server_start": "다른 프로세스:0"}
+    _write_job(tmp_path / "studio" / "c", {**base, "id": "c", **reused})
     jm = JobManager(out_dir=tmp_path)
-    for key in ("a", "old"):
+    keys = ("a", "old", "c") if parent["server_start"] else ("a", "old")
+    for key in keys:
         st = jm.job_state(key)
         pr = st["progress"]
         assert st["status"] == "interrupted" and st["finished"], key
@@ -994,6 +1219,26 @@ def test_restart_marks_dead_server_jobs_interrupted(tmp_path):
     with pytest.raises(JobError) as e:
         jm.start({"profile": "tiny"})
     assert e.value.status == 409 and "다른 스튜디오 서버" in str(e.value)
+
+
+def test_server_alive_tells_reused_pid_from_the_server():
+    """pid 가 같아도 시작 시각이 다르면 다른 프로세스입니다. 시작 시각을 모르면 pid 만 봅니다."""
+    me = process_start_mark(os.getpid())
+    if me is None:
+        pytest.skip(f"이 운영체제({sys.platform})에서는 프로세스 시작 시각을 읽지 못합니다")
+    assert me == process_start_mark(os.getpid())  # 같은 프로세스면 늘 같은 값
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        mark = process_start_mark(child.pid)
+        assert mark and mark != me
+        assert server_alive({"server_pid": child.pid, "server_start": mark})
+        assert not server_alive({"server_pid": child.pid, "server_start": me})
+        assert server_alive({"server_pid": child.pid})  # 예전 job.json (시작 시각 없음)
+    finally:
+        child.kill()
+        child.wait()
+    assert not server_alive({"server_pid": child.pid, "server_start": mark})
+    assert process_start_mark(0) is None and process_start_mark(True) is None
 
 
 def test_history_weights_scale_with_run_size(tmp_path):
@@ -1080,6 +1325,15 @@ def test_server_security_headers_and_contract(runs, tmp_path):
         assert _raw_post(port, "/api/validate", ok_body, evil)[0] == 403
         cross = {"Sec-Fetch-Site": "cross-site", "Content-Length": n}
         assert _raw_post(port, "/api/validate", ok_body, cross)[0] == 403
+        # GET 도 다른 사이트에서 온 요청이면 /api/ 는 막습니다 (빌드·그림 그리기를 시킬 수 있음).
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        conn.request("GET", "/api/runs", headers={"Sec-Fetch-Site": "cross-site"})
+        assert conn.getresponse().status == 403
+        conn.close()
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        conn.request("GET", "/api/runs", headers={"Sec-Fetch-Site": "same-origin"})
+        assert conn.getresponse().status == 200
+        conn.close()
         # 본문 길이가 음수·글자이면 400 (예전에는 음수면 1 MB 상한 없이 연결 끝까지 읽고 200)
         status, body = _raw_post(port, "/api/validate", ok_body, {"Content-Length": "-1"})
         assert status == 400 and "Content-Length" in body["error"]

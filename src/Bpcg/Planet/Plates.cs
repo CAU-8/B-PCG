@@ -367,6 +367,53 @@ public static class Plates
         return SmoothOnCellsKernel(values, cells, member, plate, nbr, BoundarySmoothIterations);
     }
 
+    /// <summary>
+    /// 칸마다 경계 건너편의 판: 이웃한 다른 판 가운데 이웃 칸을 가장 많이 가진 판이고, 같으면 번호가 작은 판입니다.
+    /// 다른 판 이웃이 없는 칸은 −1 입니다. <see cref="ClassifyBoundaries"/> 가 경계 칸에 적는 Other 와 같은 규칙입니다.
+    /// 예: 판 3 의 칸이 판 5 이웃 셋, 판 1 이웃 둘을 가지면 5 입니다. 둘씩이면 번호가 작은 1 입니다.
+    /// </summary>
+    public static int[] AcrossPlate(int[] nbr, int[] plate)
+    {
+        const int nSlots = CellGraph.NSlots;
+        int n = plate.Length;
+        if (nbr.Length != n * nSlots)
+        {
+            throw new ArgumentException($"nbr 는 칸 수 × {nSlots} 길이여야 합니다. 받은 길이: nbr {nbr.Length}, 칸 수 {n}");
+        }
+        int[] across = new int[n];
+        Parallelism.For(0, n, c =>
+        {
+            int k = plate[c];
+            int best = -1;
+            int bestCount = 0;
+            for (int s = 0; s < nSlots; s++)
+            {
+                int v = nbr[(c * nSlots) + s];
+                if (v < 0 || plate[v] == k)
+                {
+                    continue;
+                }
+                int kv = plate[v];
+                int count = 0;
+                for (int s2 = 0; s2 < nSlots; s2++)
+                {
+                    int v2 = nbr[(c * nSlots) + s2];
+                    if (v2 >= 0 && plate[v2] == kv)
+                    {
+                        count++;
+                    }
+                }
+                if (count > bestCount || (count == bestCount && kv < best))
+                {
+                    bestCount = count;
+                    best = kv;
+                }
+            }
+            across[c] = best;
+        });
+        return across;
+    }
+
     /// <summary>같은 판 이웃만 남긴 그래프 (same_plate_graph). Pos·Dist·Area 는 공유합니다.</summary>
     public static CellGraph SamePlateGraph(CellGraph graph, int[] plateId)
     {
