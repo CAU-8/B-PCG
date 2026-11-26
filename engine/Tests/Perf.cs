@@ -95,12 +95,15 @@ public partial class Perf : Node
         GetTree().Root.GuiDisableInput = true;
         DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
         Godot.Engine.MaxFps = 0;
-        ulong loadStart = Time.GetTicksMsec();
         var main = GD.Load<PackedScene>(MainScene).Instantiate<Main>();
         GetTree().Root.AddChild(main);
-        double loadS = (Time.GetTicksMsec() - loadStart) / 1000.0;
         main.SetProcessUnhandledInput(false);
         main.Hud.SetProcessUnhandledInput(false);
+        // 회랑은 다른 스레드와 여러 프레임에 나눠 불러옵니다. 다 불러온 뒤 플레이어를 멈춥니다.
+        while (!main.IsLoaded)
+        {
+            await ProcessFrame();
+        }
         main.Player.SetProcessUnhandledInput(false);
         main.Player.SetPhysicsProcess(false);
         FrameStats.EnableGpuTiming(GetViewport());
@@ -116,7 +119,8 @@ public partial class Perf : Node
             + $"창 {window.Size.X}×{window.Size.Y} px, 화면 배율 {UiScale.ScreenFactor(window):0.##}, 수직 동기화 끔, "
             + $"그림자 거리 {sun.DirectionalShadowMaxDistance:F0} m, 굽기 폴더 {baked.BakedDir}");
         GD.Print($"[그리기] 회랑 장면 불러오기 끝: 지형 메시 노드 {LogText.N(main.Terrain.GetNode("Mesh").GetChildCount())}개, "
-            + $"{loadS.ToString("F1", CultureInfo.InvariantCulture)} s");
+            + $"가장 긴 프레임 {main.LongestLoadFrameMs.ToString("F0", CultureInfo.InvariantCulture)} ms, "
+            + $"{main.LoadSeconds.ToString("F1", CultureInfo.InvariantCulture)} s");
 
         List<View> views = Views(main);
         // 1. 모든 시점·설정을 한 번씩 그려, Godot 가 뒤에서 하는 셰이더 준비(파이프라인 컴파일)를 먼저 끝냅니다.

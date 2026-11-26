@@ -2,12 +2,13 @@
 #
 #   lint    ruff 린트와 서식 검사 (Ubuntu)
 #   csharp  C# 빌드(Bpcg.slnx: 생성기·콘솔·결과 그림·엔진·대조 시험), 대조 시험, dotnet format (macOS 15)
-#   test    빠른 테스트(-m "not slow": C# 콘솔 결과 검사·스튜디오)와 설치 스크립트 점검 모드
+#   test    파이썬 테스트 전부(C# 콘솔 결과 검사·스튜디오, slow 표시 포함)와 설치 스크립트 점검 모드
 #           (Ubuntu, Windows, macOS 15)
 #   engine  Godot 4.7.2 .NET 판을 받아 엔진 연기 시험(tests/test_engine.py) (Ubuntu)
 #   setup   설치 스크립트 전체 실행 (uv 설치부터 Godot 까지). Actions 탭에서 손으로만 돌립니다.
 #
-# data, godot 표시가 붙은 테스트는 데이터나 Godot .NET 판이 없으면 스스로 건너뜁니다.
+# godot 표시가 붙은 테스트는 Godot .NET 판이 없으면 스스로 건너뜁니다. slow 표시는 손으로 돌릴 때
+# -m "not slow" 로 빼는 오래 걸리는 테스트이고, CI 는 빼지 않습니다.
 # 생성기는 C# 이므로 Python 테스트도 .NET SDK(global.json)가 있어야 합니다.
 name: ci
 
@@ -93,7 +94,7 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - run: uv sync --locked
-      - run: uv run pytest -m "not slow"
+      - run: uv run pytest
       # 설치 스크립트의 점검 모드(-Check)로 doctor 까지 돌립니다. 아무것도 설치하지 않습니다.
       - name: 설치 스크립트 점검 모드 (macOS, Linux)
         if: runner.os != 'Windows'

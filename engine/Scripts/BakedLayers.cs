@@ -9,13 +9,17 @@ namespace Bpcg.Engine;
 /// 구운 회랑 묶음(manifest.json)의 레이어를 불러오고, 보이기·숨기기를 맡습니다.
 /// </summary>
 /// <remarks>
-/// 회랑 지표 높이맵은 Terrain 노드가 읽고, 여기서는 나머지를 자식으로 만듭니다.
+/// 파일은 <see cref="CorridorFiles.Read"/> 가 주 스레드 밖에서 먼저 읽고, <see cref="Build"/> 가 주 스레드에서 한 단계씩
+/// 노드를 만듭니다 (단계 사이에 프레임을 그려 불러오기 화면이 움직이게). 회랑 지표는 Terrain 노드에 넣고, 여기서는
+/// 나머지를 자식으로 만듭니다.
 /// Surround: 히어로 전체 25 m 지형 (surround25). 회랑 자리는 비워 고운 지형에 맡깁니다.
 /// Water: 호수·강 수면 (water). WaterTable: 지하수면 (water_table), 처음에는 숨기고 처음 켤 때 메시를 만듭니다.
-/// Caves: 동굴 메시 (caves.glb). Section: 단면 판, 재질 부피(strata.u8)를 3D 텍스처로 읽어 자르는 면에 칠합니다.
+/// Caves: 동굴 메시 (caves.glb) 와 걷기용 충돌체 (<see cref="CaveCollision"/>). Section: 단면 판, 재질 부피(strata.u8)를
+/// 3D 텍스처로 읽어 자르는 면에 칠합니다.
 /// 레이어 이름은 <see cref="Layers"/> 의 키입니다. "entrance_holes" 는 지형에 동굴 입구 구멍을 뚫는 선택입니다
-/// (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 뚫음). "fractal_detail" 은 회랑 지형을 프랙탈 디테일
-/// 높이맵(heightmap_detail)으로 바꾸는 선택입니다. 보기용 지표이고 솔버 결과가 아닙니다. 파일이 있으면 처음에 켭니다.
+/// (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 그리지 않고 충돌면에도 구멍을 냄). "fractal_detail" 은 회랑 지형을 프랙탈 디테일
+/// 높이맵(heightmap_detail)으로 바꾸는 선택입니다. 보기용 지표이고 솔버 결과가 아닙니다. 파일이 있으면 처음부터 디테일
+/// 지형 하나만 만들고, 기본 지형은 다 불러온 뒤 다른 스레드에서 미리 준비해 두었다가 처음 끌 때 만듭니다.
 /// </remarks>
 public partial class BakedLayers : Node3D
 {
@@ -82,8 +86,22 @@ public partial class BakedLayers : Node3D
     /// <summary>자르는 면을 끌 때의 거리 (아무것도 버리지 않음).</summary>
     public const float NoCutOffsetM = 1.0e9f;
 
+    /// <summary>주 스레드에서 만드는 단계: 시간 기록 열쇠와 화면 이름. <see cref="Build"/> 가 이 순서로 지나갑니다.</summary>
+    public static readonly (string Key, string Label)[] BuildStages =
+    [
+        ("terrain", "회랑 지형 메시와 충돌면 만드는 중"),
+        ("strata", "암석 색 텍스처 만드는 중"),
+        ("surround", "주변 지형 메시와 충돌면 만드는 중"),
+        ("water_caves", "물과 동굴 만드는 중"),
+        ("cave_collision", "동굴 충돌면 만드는 중"),
+        ("section", "지층 단면과 동굴 입구 준비하는 중"),
+    ];
+
     /// <summary>manifest 를 읽고 레이어를 만들었는지.</summary>
     public bool Loaded { get; private set; }
+
+    /// <summary>화면에 띄울 불러오기 문제 (한 줄에 하나). 없으면 빈 목록.</summary>
+    public List<string> Problems { get; } = [];
 
     /// <summary>읽은 폴더와 manifest.</summary>
     public string BakedDir { get; private set; } = "";
@@ -110,10 +128,23 @@ public partial class BakedLayers : Node3D
 
     public List<Vector3> EntrancesOutside { get; } = [];
 
-    /// <summary>동굴 메시 삼각형 수와 불러온 방법 ("import" 또는 "gltf_runtime").</summary>
+    /// <summary>
+    /// 동굴 메시 삼각형 수와 불러온 방법. 늘 "gltf_runtime" 입니다: 편집기가 가져온(import) 사본은 다시 구운 뒤
+    /// 가져오기를 돌리지 않으면 옛 동굴일 수 있어서, 실행 중에 파일을 직접 읽습니다.
+    /// </summary>
     public int CaveFaces { get; private set; }
 
     public string CaveSource { get; private set; } = "";
+
+    /// <summary>동굴 충돌체 (없으면 null) 와 그 조각 수·삼각형 수.</summary>
+    public StaticBody3D? CaveBody { get; private set; }
+
+    public int CaveCollisionTiles { get; private set; }
+
+    public int CaveCollisionFaces { get; private set; }
+
+    /// <summary>회랑 가장자리 땅속 벽 (동굴이 없으면 null). 회랑 밖으로 잘린 통로 끝에서 땅속으로 떨어지지 않게 막습니다.</summary>
+    public StaticBody3D? CaveEdgeWall { get; private set; }
 
     /// <summary>단면이 켜져 있는지, 자르는 면의 한 점과 법선 (카메라 쪽).</summary>
     public bool SectionOn { get; private set; }
@@ -136,7 +167,7 @@ public partial class BakedLayers : Node3D
     private MeshInstance3D? _section;
     private float _sectionYCenter;
 
-    /// <summary>기본(디테일 없는) 회랑 높이맵. 디테일을 켤 때 높이 차를 재려고 한 번 읽습니다.</summary>
+    /// <summary>기본(디테일 없는) 회랑 높이맵. 디테일을 켤 때 높이 차를 재려고 불러오는 동안 한 번 읽습니다.</summary>
     private HeightmapLoader? _baseHeightmap;
 
     /// <summary>단면(자르는 면)을 받는 재질.</summary>
@@ -145,7 +176,7 @@ public partial class BakedLayers : Node3D
     private readonly Dictionary<string, bool> _visible = [];
     private bool _entranceHoles = true;
 
-    /// <summary>회랑 지형의 기본 높이맵 경로 (Setup 때의 Terrain.HeightmapStem).</summary>
+    /// <summary>회랑 지형의 기본 높이맵 경로 (Build 를 시작할 때의 Terrain.HeightmapStem).</summary>
     private string _baseStem = "";
 
     /// <summary>높이맵 경로 → 셰이더용 높이 텍스처. 프랙탈 디테일을 켜고 끌 때 다시 만들지 않습니다.</summary>
@@ -154,8 +185,13 @@ public partial class BakedLayers : Node3D
     /// <summary>동굴 입구 파일 이름 → 읽은 높이맵.</summary>
     private readonly Dictionary<string, HeightmapLoader> _mouths = [];
 
-    /// <summary>manifest 를 읽고 레이어를 만듭니다. 구운 묶음이 없으면 false (표본 지형만 보입니다).</summary>
-    public bool Setup(HeightmapTerrain terrain)
+    /// <summary>
+    /// 다른 스레드가 읽어 둔 회랑 파일로 지형과 레이어를 만듭니다 (주 스레드). MoveNext 한 번에 일 한 조각(지형 메시 조각
+    /// 하나, 충돌 조각 하나, 텍스처 묶음 하나 등)을 하고, 다음 조각이 속한 단계의 번호(<see cref="BuildStages"/>)를
+    /// 돌려줍니다. Main 이 프레임마다 한 번씩 불러, 조각 사이에 불러오기 화면을 그립니다. 끝나면 회랑 지형이 있고, 구운
+    /// 묶음이 있으면 Loaded 가 true 입니다.
+    /// </summary>
+    public IEnumerable<int> Build(CorridorFiles files, HeightmapTerrain terrain)
     {
         _terrain = terrain;
         _baseStem = terrain.HeightmapStem;
@@ -165,75 +201,100 @@ public partial class BakedLayers : Node3D
             _cutMaterials.Add(_terrainMaterial);
         }
         _visible["terrain"] = true;
-        BakedDir = BakedPaths.Dir();
-        string manPath = BakedDir.PathJoin("manifest.json");
-        if (!Files.Exists(manPath))
+        BakedDir = files.Dir;
+        Problems.AddRange(files.Problems);
+        foreach ((string key, long ms) in files.ReadMs)
         {
-            GD.Print($"구운 묶음이 없습니다 ({manPath}). 표본 지형만 보입니다");
-            return false;
+            LoadMs["read_" + key] = ms;
         }
-        OrderedDictionary<string, object?>? parsed = Json.ReadObject(manPath);
-        if (parsed is null || Json.S(Json.Get(parsed, "format")) != "bpcg-corridor")
-        {
-            GD.PushError($"회랑 manifest 형식이 아닙니다: {manPath}");
-            return false;
-        }
-        Manifest = parsed;
-        YOffsetM = Json.F(Json.Obj(Manifest["frame"])!["y_offset_m"]);
-        OrderedDictionary<string, object?> re = Json.Obj(Json.Obj(Manifest["corridor"])!["rect_engine_m"])!;
-        float xMin = Json.F(re["x_min"]);
-        float zMin = Json.F(re["z_min"]);
-        CorridorRect = new Rect2(xMin, zMin, Json.F(re["x_max"]) - xMin, Json.F(re["z_max"]) - zMin);
 
-        ulong t = Time.GetTicksMsec();
-        Strata = StrataVolume.LoadDir(BakedDir);
-        if (!Strata.IsValid())
+        // 지형을 만들 때 동굴 입구 자리의 충돌면을 바로 비우도록, 입구 높이맵을 먼저 넣어 둡니다.
+        foreach ((string name, HeightmapLoader mouth) in files.Mouths)
         {
-            GD.PushWarning("재질 부피를 쓰지 않습니다: " + Strata.ErrorMessage);
+            _mouths[name] = mouth;
+        }
+        terrain.HoleMouth = MouthForSurface;
+
+        yield return 0;
+        if (files.Terrain is not null)
+        {
+            if (files.UsesDetail)
+            {
+                terrain.HeightmapStem = DetailStem;
+            }
+            foreach (int _ in terrain.ApplySteps(files.Terrain))
+            {
+                yield return 0;
+            }
+        }
+        if (files.Manifest is null)
+        {
+            yield break;
+        }
+        Manifest = files.Manifest;
+        YOffsetM = files.YOffsetM;
+        CorridorRect = files.CorridorRect;
+        _baseHeightmap = files.BaseHeightmap;
+
+        yield return 1;
+        Strata = files.Strata;
+        Strata?.CreateTextures();
+        if (Strata is not null && !Strata.IsValid())
+        {
+            Problems.Add($"땅속 암석 부피의 텍스처를 만들지 못해 지질도 색(G)과 지층 단면(X) 없이 엽니다: {Strata.ErrorMessage}");
             Strata = null;
         }
-        Lap("strata", t);
         if (_terrainMaterial is not null)
         {
             _terrainMaterial.SetShaderParameter("color_mode", 1);
             _terrainMaterial.SetShaderParameter("y_offset_m", YOffsetM);
             _terrainMaterial.SetShaderParameter("open_entrances", _entranceHoles);
-            if (Strata is not null && terrain.UsedStem == BakedPaths.Resolve(terrain.HeightmapStem))
+            if (Strata is not null && files.TerrainIsBaked)
             {
                 Strata.ApplyTo(_terrainMaterial);
             }
-            ApplyCaveMouth(CaveMouthName);
+            ApplyCaveMouth(files.UsesDetail ? CaveMouthDetailName : CaveMouthName);
             ApplySurfaceHeight();
         }
 
-        t = Time.GetTicksMsec();
-        BuildSurround();
-        Lap("surround", t);
-        t = Time.GetTicksMsec();
-        BuildWater();
-        HeightmapLoader wt = HeightmapLoader.LoadStem(BakedDir.PathJoin("water_table"));
-        if (wt.IsValid())
+        yield return 2;
+        foreach (int _ in BuildSurround(files.Surround))
         {
-            WaterTable = wt;
+            yield return 2;
+        }
+
+        yield return 3;
+        BuildWater(files.Water, files.WaterMesh);
+        if (files.WaterTable is not null)
+        {
+            WaterTable = files.WaterTable;
             _visible["water_table"] = false;
         }
-        if (FileAccess.FileExists(BakedDir.PathJoin("water_table_lower.json")))
+        WaterTableLower = files.WaterTableLower;
+        yield return 3;
+        BuildCaves(files);
+
+        yield return 4;
+        foreach (int _ in BuildCaveCollision())
         {
-            HeightmapLoader wtl = HeightmapLoader.LoadStem(BakedDir.PathJoin("water_table_lower"));
-            WaterTableLower = wtl.IsValid() ? wtl : null;
+            yield return 4;
         }
-        Lap("water", t);
-        t = Time.GetTicksMsec();
-        BuildCaves();
-        Lap("caves", t);
+
+        yield return 5;
         BuildSection();
-        ReadEntrances();
+        EntrancesInside.AddRange(files.EntrancesInside);
+        EntrancesOutside.AddRange(files.EntrancesOutside);
         SetSection(false);
-        SetupFractalDetail();
+        yield return 5;
+        SetupFractalDetail(files);
         Loaded = true;
+    }
+
+    /// <summary>불러오기 단계별 시간을 한 줄로 찍습니다 (Main 이 다 불러온 뒤 부름).</summary>
+    public void PrintLoadTimes()
+    {
         string times = string.Join(", ", LoadMs.Select(kv => $"\"{kv.Key}\": {kv.Value}"));
         GD.Print($"구운 레이어: {string.Join(", ", LayerIds())}, 시간 {{ {times} }} ms");
-        return true;
     }
 
     /// <summary>지금 있는 레이어 이름 (Layers 순서).</summary>
@@ -301,6 +362,7 @@ public partial class BakedLayers : Node3D
             case "entrance_holes":
                 _entranceHoles = on;
                 _terrainMaterial?.SetShaderParameter("open_entrances", on);
+                _terrain.SetHolesOpen(on);
                 break;
             case "fractal_detail":
                 on = UseDetailSurface(on);
@@ -380,8 +442,6 @@ public partial class BakedLayers : Node3D
     /// <summary>지하수면 높이 (엔진 Y). 없거나 밖이면 NaN.</summary>
     public float WaterTableY(Vector3 p) => WaterTable is not null ? WaterTable.HeightAt(p) : float.NaN;
 
-    private void Lap(string key, ulong startMs) => LoadMs[key] = (long)(Time.GetTicksMsec() - startMs);
-
     private ShaderMaterial NewCutMaterial(string shaderPath)
     {
         var m = new ShaderMaterial { Shader = GD.Load<Shader>(shaderPath) };
@@ -411,6 +471,87 @@ public partial class BakedLayers : Node3D
         _visible["entrance_holes"] = _entranceHoles;
     }
 
+    /// <summary>
+    /// 회랑 지표 높이맵 경로 → 그 지표의 동굴 입구 높이맵 (지형 충돌면의 구멍, HeightmapTerrain.HoleMouth).
+    /// 셰이더가 그리지 않는 자리(ApplyCaveMouth)와 같은 파일을 고릅니다. 파일이 없으면 null.
+    /// 구멍을 열지 닫을지는 '동굴 입구 구멍' 레이어가 정합니다 (HeightmapTerrain.SetHolesOpen).
+    /// </summary>
+    private HeightmapLoader? MouthForSurface(string stem)
+    {
+        string? name = stem == BakedPaths.Resolve(DetailStem) ? CaveMouthDetailName
+            : stem == BakedPaths.Resolve(_baseStem) ? CaveMouthName : null;
+        // 지형 재질이 없으면 그림에 구멍을 낼 수 없으므로 충돌면도 막아 둡니다.
+        if (name is null || _terrainMaterial is null)
+        {
+            return null;
+        }
+        HeightmapLoader mouth = LoadMouth(name);
+        if (!mouth.IsValid() && name != CaveMouthName)
+        {
+            mouth = LoadMouth(CaveMouthName);
+        }
+        return mouth.IsValid() ? mouth : null;
+    }
+
+    /// <summary>
+    /// 동굴 메시에 걷기용 충돌체를 붙이고(충돌 조각 하나마다 한 번 돌려줌), 회랑 가장자리 땅속에 벽을 세우고, 주변 지형
+    /// 충돌면의 회랑 안 겹침 띠에서 동굴 자리를 비웁니다 (CaveCollision). 동굴이 없으면 아무것도 하지 않습니다.
+    /// </summary>
+    private IEnumerable<int> BuildCaveCollision()
+    {
+        if (_caves is null)
+        {
+            yield break;
+        }
+        var result = new CaveCollision.Result();
+        foreach (int step in CaveCollision.BuildSteps(_caves, result))
+        {
+            yield return step;
+        }
+        (CaveBody, CaveCollisionTiles, CaveCollisionFaces) = (result.Body, result.Tiles, result.Faces);
+        if (CaveBody is null)
+        {
+            yield break;
+        }
+        if (_terrain.Heightmap is HeightmapLoader surface && surface.IsValid())
+        {
+            float bottom = (_caves.Transform * new Vector3(0.0f, result.MinY, 0.0f)).Y - 1.0f;
+            CaveEdgeWall = CaveCollision.BuildEdgeWall(this, CorridorRect, surface, bottom);
+        }
+        yield return 0;
+        _surround?.ClearCollisionAt(CaveFootprint(result.Centers));
+    }
+
+    /// <summary>
+    /// 동굴이 차지하는 자리 (엔진 좌표 점): 동굴 충돌 삼각형마다 세 꼭짓점의 가운데(centers, 동굴 노드 기준)와, 입구
+    /// 높이맵(cave_mouth, cave_mouth_detail)이 음수인 표본. 주변 지형 충돌면이 회랑 안 겹침 띠에서 이 자리를 비웁니다
+    /// (HeightmapTerrain.ClearCollisionAt).
+    /// </summary>
+    private List<Vector3> CaveFootprint(IReadOnlyList<Vector3> centers)
+    {
+        var points = new List<Vector3>(centers.Count);
+        if (_caves is not null)
+        {
+            Transform3D xf = _caves.Transform;
+            foreach (Vector3 c in centers)
+            {
+                points.Add(xf * c);
+            }
+        }
+        foreach (string name in new[] { CaveMouthName, CaveMouthDetailName })
+        {
+            HeightmapLoader mouth = LoadMouth(name);
+            for (int i = 0; mouth.IsValid() && i < mouth.Heights.Length; i++)
+            {
+                if (mouth.Heights[i] < 0.0f)
+                {
+                    points.Add(mouth.SamplePosition(i));
+                }
+            }
+        }
+        return points;
+    }
+
     private HeightmapLoader LoadMouth(string fileName)
     {
         if (!_mouths.TryGetValue(fileName, out HeightmapLoader? mouth))
@@ -421,21 +562,23 @@ public partial class BakedLayers : Node3D
         return mouth;
     }
 
-    /// <summary>프랙탈 디테일 높이맵이 있고 회랑 지형이 구운 높이맵이면 선택 레이어로 두고 켭니다.</summary>
-    private void SetupFractalDetail()
+    /// <summary>
+    /// 회랑 지형이 프랙탈 디테일이면 지층 깊이를 디테일 지표에서 재게 맞추고, 켜진 선택 레이어로 둡니다. 끌 때 쓸 기본
+    /// 지형은 다른 스레드에서 미리 준비합니다. 기본 높이맵을 읽지 못했으면 끌 수 없으므로 레이어를 두지 않습니다.
+    /// </summary>
+    private void SetupFractalDetail(CorridorFiles files)
     {
-        if (_terrain.UsedStem != BakedPaths.Resolve(_baseStem))
+        if (!files.UsesDetail)
         {
             return;
         }
-        if (!HeightmapLoader.Exists(BakedPaths.Resolve(DetailStem)))
+        ApplySurfaceOffset(true);
+        if (_baseHeightmap is null || !_baseHeightmap.IsValid())
         {
             return;
         }
-        _visible["fractal_detail"] = false;
-        ulong t = Time.GetTicksMsec();
-        SetLayerVisible("fractal_detail", true);
-        Lap("fractal_detail", t);
+        _visible["fractal_detail"] = true;
+        _terrain.PrepareInBackground(BakedPaths.Resolve(_baseStem), _baseHeightmap);
     }
 
     /// <summary>
@@ -495,7 +638,7 @@ public partial class BakedLayers : Node3D
     private void ApplySurfaceOffset(bool on)
     {
         HeightmapLoader? now = _terrain.Heightmap;
-        if (on && (_baseHeightmap is null || !_baseHeightmap.IsValid()))
+        if (on && _baseHeightmap is null)
         {
             _baseHeightmap = HeightmapLoader.LoadStem(BakedPaths.Resolve(_baseStem));
         }
@@ -524,12 +667,12 @@ public partial class BakedLayers : Node3D
         }
     }
 
-    private void BuildSurround()
+    /// <summary>주변 지형을 만듭니다. 메시 조각이나 충돌 조각 하나마다 한 번 돌려줍니다 (<see cref="HeightmapTerrain.ApplySteps"/>).</summary>
+    private IEnumerable<int> BuildSurround(PreparedTerrain? prepared)
     {
-        string stem = BakedDir.PathJoin("surround25");
-        if (!HeightmapLoader.Exists(stem))
+        if (prepared is null)
         {
-            return;
+            yield break;
         }
         var m = new ShaderMaterial { Shader = GD.Load<Shader>(TerrainShaderPath) };
         m.SetShaderParameter("color_mode", 1);
@@ -539,29 +682,33 @@ public partial class BakedLayers : Node3D
         _surround = new HeightmapTerrain
         {
             Name = "Surround",
-            HeightmapStem = stem,
+            HeightmapStem = prepared.Stem,
             FallbackStem = "",
             Material = m,
             CollisionHole = CorridorRect,
+            BuildOnReady = false,
         };
         AddChild(_surround);
-        if (_surround.Heightmap is not null && _surround.Heightmap.IsValid())
+        foreach (int step in _surround.ApplySteps(prepared))
+        {
+            yield return step;
+        }
+        if (prepared.IsValid)
         {
             _visible["surround"] = true;
         }
     }
 
-    private void BuildWater()
+    private void BuildWater(HeightmapLoader? hm, MeshArrays? wet)
     {
-        HeightmapLoader hm = HeightmapLoader.LoadStem(BakedDir.PathJoin("water"));
-        if (!hm.IsValid())
+        if (hm is null || wet is null)
         {
             return;
         }
         _water = new MeshInstance3D
         {
             Name = "Water",
-            Mesh = WetQuads(hm),
+            Mesh = wet.ToArrayMesh(),
             Position = hm.Origin,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
@@ -574,9 +721,9 @@ public partial class BakedLayers : Node3D
 
     /// <summary>
     /// 물이 있는 표본이 하나라도 닿는 칸마다 사각형을 만듭니다. 물이 없는 꼭짓점은 같은 칸의 물 높이 평균을 씁니다
-    /// (그 자리는 지표가 더 높아 가려집니다). 물이 없으면 빈 메시.
+    /// (그 자리는 지표가 더 높아 가려집니다). 물이 없으면 빈 배열. Godot 자원을 만들지 않으므로 주 스레드 밖에서 불러도 됩니다.
     /// </summary>
-    private static ArrayMesh WetQuads(HeightmapLoader hm)
+    public static MeshArrays WetQuadArrays(HeightmapLoader hm)
     {
         int w = hm.Width;
         int h = hm.Height;
@@ -633,20 +780,9 @@ public partial class BakedLayers : Node3D
             // 위에서 볼 때 시계 방향 (지형과 같음): 북서, 북동, 남서 / 북동, 남동, 남서
             indices.AddRange([b, b + 1, b + 2, b + 1, b + 3, b + 2]);
         }
-        var mesh = new ArrayMesh();
-        if (verts.Count == 0)
-        {
-            return mesh;
-        }
         var normals = new Vector3[verts.Count];
         Array.Fill(normals, Vector3.Up);
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = verts.ToArray();
-        arrays[(int)Mesh.ArrayType.Normal] = normals;
-        arrays[(int)Mesh.ArrayType.Index] = indices.ToArray();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        return mesh;
+        return new MeshArrays { Vertices = verts.ToArray(), Normals = normals, Indices = indices.ToArray() };
     }
 
     private void BuildWaterTable()
@@ -659,46 +795,33 @@ public partial class BakedLayers : Node3D
         m.SetShaderParameter("water_color", WaterTableColor);
         m.SetShaderParameter("roughness", 0.3f);
         // 지형과 같이 조각으로 나눠, 화면 밖 조각은 건너뛰고 먼 조각은 거친 목록으로 그립니다.
+        HeightmapLoader.ChunkedArrays arrays = WaterTable.BuildChunkArrays();
         _waterTable = HeightmapTerrain.MeshNode(
-            WaterTable.BuildChunkedMesh(), WaterTable.Origin, m, GeometryInstance3D.ShadowCastingSetting.Off);
+            [.. arrays.Chunks.Select(c => c.ToArrayMesh())], [.. arrays.Chunks.Select(c => c.OnEdge)], null, WaterTable.Origin, m,
+            GeometryInstance3D.ShadowCastingSetting.Off);
         _waterTable.Name = "WaterTable";
         AddChild(_waterTable);
         SetSection(SectionOn, SectionPoint, SectionNormal);
     }
 
-    private void BuildCaves()
+    /// <summary>
+    /// 다른 스레드가 해석해 둔 동굴 메시(caves.glb)로 장면을 만듭니다. 장면은 해석한 문서로 만들어야
+    /// 메시가 그릴 수 있는 꼴(ArrayMesh)로 바뀝니다.
+    /// </summary>
+    private void BuildCaves(CorridorFiles files)
     {
-        string path = BakedDir.PathJoin("caves.glb");
-        if (!Files.Exists(path))
+        if (files.CaveDocument is null || files.CaveState is null)
         {
             return;
         }
-        Node? root = null;
-        // 편집기가 가져온(import) 파일이면 빠르게 읽고, 아니면 실행 중에 glTF 를 읽습니다.
-        if (path.StartsWith("res://", StringComparison.Ordinal) && ResourceLoader.Exists(path))
-        {
-            if (GD.Load(path) is PackedScene packed)
-            {
-                root = packed.Instantiate();
-                CaveSource = "import";
-            }
-        }
-        if (root is null)
-        {
-            var doc = new GltfDocument();
-            var state = new GltfState();
-            Error err = doc.AppendFromFile(path, state);
-            if (err == Error.Ok)
-            {
-                root = doc.GenerateScene(state);
-                CaveSource = "gltf_runtime";
-            }
-        }
+        Node? root = files.CaveDocument.GenerateScene(files.CaveState);
         if (root is not Node3D root3d)
         {
-            GD.PushError($"동굴 메시를 읽지 못했습니다: {path}");
+            root?.Free();
+            Problems.Add($"동굴 메시에서 장면을 만들지 못해 동굴 레이어 없이 엽니다: {files.CavePath}. {files.RebakeHint()}");
             return;
         }
+        CaveSource = "gltf_runtime";
         ShaderMaterial m = NewCutMaterial(CaveShaderPath);
         if (Strata is not null)
         {
@@ -795,32 +918,4 @@ public partial class BakedLayers : Node3D
     private static ImageTexture HeightTexture(HeightmapLoader hm) =>
         ImageTexture.CreateFromImage(Image.CreateFromData(
             hm.Width, hm.Height, false, Image.Format.Rf, Files.FloatBytes(hm.Heights)));
-
-    private void ReadEntrances()
-    {
-        string path = BakedDir.PathJoin("entrances.json");
-        OrderedDictionary<string, object?>? parsed = Json.ReadObject(path);
-        if (parsed is null)
-        {
-            return;
-        }
-        List<object?>? inside = Json.Arr(Json.Get(parsed, "inside") ?? new List<object?>());
-        List<object?>? outside = Json.Arr(Json.Get(parsed, "outside") ?? new List<object?>());
-        if (inside is null || outside is null)
-        {
-            GD.PushWarning($"동굴 입구 목록이 배열이 아닙니다 (예전 굽기?): {path}");
-            return;
-        }
-        for (int i = 0; i < Math.Min(inside.Count, outside.Count); i++)
-        {
-            EntrancesInside.Add(Vec3(inside[i]));
-            EntrancesOutside.Add(Vec3(outside[i]));
-        }
-    }
-
-    private static Vector3 Vec3(object? v)
-    {
-        List<object?> a = Json.Arr(v)!;
-        return new Vector3(Json.F(a[0]), Json.F(a[1]), Json.F(a[2]));
-    }
 }

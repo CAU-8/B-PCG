@@ -8,6 +8,7 @@ import json
 import struct
 
 import numpy as np
+import pytest
 from bundles import load_bundle, run_cli
 
 # 파일 → (가로, 세로) 픽셀 = figsize × dpi (render_results.py 와 같음, dpi 110)
@@ -53,6 +54,7 @@ def test_figures_results_writes_every_figure(csharp_cli, tiny_run, tmp_path):
         assert 0.6 < summary["earth_ocean_fraction"] < 0.8
 
 
+@pytest.mark.slow  # 따로 C# 실행을 돌려 몇 초 걸림 (CI 는 돌림)
 def test_figures_results_without_etopo(csharp_cli, tiny_run, tmp_path):
     out = tmp_path / "figures"
     csharp_cli("figures", "results", tiny_run, "--out", out, "--etopo", tmp_path / "none.nc")

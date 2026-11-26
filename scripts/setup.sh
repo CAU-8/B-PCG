@@ -7,6 +7,14 @@
 set -euo pipefail
 
 UV_VERSION="0.12.17"
+UV_URL_BASE="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
+# uv 가 없으면 위 주소의 압축 파일을 받아, 아래 SHA-256 과 같을 때만 풉니다 (받은 설치 스크립트를 바로 실행하지
+# 않음). 값은 GitHub 릴리스 정보(gh api repos/astral-sh/uv/releases/tags/0.12.17 의 digest)에서 가져왔습니다.
+# UV_VERSION 을 바꾸면 함께 바꿉니다.
+UV_SHA_MAC_ARM64="85f00cbdc6dd3e97eba4c31b4d014375a9fdfe8f570023b84e5102fc3456896b"
+UV_SHA_MAC_X64="8dcf05a8c809bb3c471d2b614788ba27a6e41298fc8c31ac84b5f4339fd468e5"
+UV_SHA_LINUX_X64="fa82fd8dde8e8eefdecada6aa0889666556cfceb690d06e0c3bca49eb3070a63"
+UV_SHA_LINUX_ARM64="d636d1b678e9e7f367ecb22b46bd1cabbed234d6bc3b4d96365d2b507f72f86c"
 GODOT_VERSION="4.7.2"
 GODOT_TAG="${GODOT_VERSION}-stable"
 GODOT_URL_BASE="https://github.com/godotengine/godot/releases/download/${GODOT_TAG}"
@@ -15,8 +23,7 @@ GODOT_URL_BASE="https://github.com/godotengine/godot/releases/download/${GODOT_T
 SHA_MAC="0862c53d7158c7a67f745e2e46f90b68cf5343cbe8b95d6d4333c469e42ca104af9c121d1746a50e5d221a99d09d82ef7016495f8e0d09255842884ed0502795"
 SHA_LINUX_X64="1855960b27ee3ef5e66e5e228cced69d55637b24334a7411162687dcd077d8f9f645348cdb8eae984bec8135d49ed855a1e3a16476786b8bce60774fd8402d13"
 SHA_LINUX_ARM64="4b8b700ea21bea16b1a2ed8bc3a266431604f0d6452c819e022bfadea33eb431269bd680b11cd9dab93fc1f487ae4a60d15ee511e5691a82c22a2753b428d263"
-MIN_MACOS_MAJOR=15     # 잠근 rasterio 1.5.2 의 Apple Silicon wheel 이 macosx_15_0 용입니다.
-MIN_GLIBC="2.28"       # 여러 패키지의 Linux wheel 이 manylinux_2_28 (glibc 2.28 이상) 용입니다.
+MIN_GLIBC="2.28"       # 여러 패키지의 Linux wheel 이 manylinux_2_27, manylinux_2_28 (glibc 2.28 이상) 용입니다.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 TOOLS_DIR="$ROOT/.tools"
@@ -29,14 +36,15 @@ B-PCG 개발 환경 설치 (macOS, Linux)
 
 쓰는 법: ./scripts/setup.sh [옵션...]
 
-  (옵션 없음)   uv, 파이썬 3.13, 기본 패키지 묶음(dev, data, mesh)을 설치합니다.
+  (옵션 없음)   uv, 파이썬 3.13, 기본 패키지 묶음(dev: 스튜디오와 시험에 쓰는 패키지)을 설치합니다.
                 생성기·엔진은 C# 이라 .NET 10 SDK 가 따로 있어야 합니다 (없으면 설치 명령을 알려 줌).
-  --analysis    비교·분석 도구(pyflwdir, landlab)도 설치합니다.
+  --analysis    비교·분석 도구(pyflwdir, landlab, numba, h5py)도 설치합니다. Intel Mac 에서는 안 됩니다.
   --gpl         GPL 비교 도구(fastscapelib, TopoToolbox)도 설치합니다. Linux ARM64 에서는 안 됩니다.
-  --notebook    JupyterLab 도 설치합니다.
+  --notebook    JupyterLab 도 설치합니다. Intel Mac 에서는 안 됩니다.
   --godot       Godot 4.7.2 .NET 판을 .tools/godot-net/ 에 받습니다 (macOS 약 200 MB, Linux 약 110 MB).
   --data        파일럿 데이터를 받습니다 (약 4.5 GB, 오래 걸립니다. 끊겨도 다시 실행하면 이어 받습니다).
-  --all         --analysis --gpl --notebook --godot 를 한꺼번에 (데이터는 빼고).
+  --all         --analysis --gpl --notebook --godot 와 data 묶음(자료를 읽는 패키지)을 한꺼번에
+                (파일럿 데이터 받기는 빼고).
   --check       아무것도 설치하지 않고 환경 점검(tools/doctor.py)만 합니다.
   -h, --help    이 도움말을 봅니다.
 
@@ -44,7 +52,8 @@ B-PCG 개발 환경 설치 (macOS, Linux)
 EOF
 }
 
-WITH_ANALYSIS=0; WITH_GPL=0; WITH_NOTEBOOK=0; WITH_GODOT=0; WITH_DATA=0; CHECK_ONLY=0
+# WITH_DATA 는 파일럿 데이터 받기, WITH_DATA_GROUP 은 자료를 읽는 패키지 묶음(data) 설치입니다.
+WITH_ANALYSIS=0; WITH_GPL=0; WITH_NOTEBOOK=0; WITH_GODOT=0; WITH_DATA=0; WITH_DATA_GROUP=0; CHECK_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --analysis) WITH_ANALYSIS=1 ;;
@@ -52,7 +61,7 @@ for arg in "$@"; do
     --notebook) WITH_NOTEBOOK=1 ;;
     --godot) WITH_GODOT=1 ;;
     --data) WITH_DATA=1 ;;
-    --all) WITH_ANALYSIS=1; WITH_GPL=1; WITH_NOTEBOOK=1; WITH_GODOT=1 ;;
+    --all) WITH_ANALYSIS=1; WITH_GPL=1; WITH_NOTEBOOK=1; WITH_GODOT=1; WITH_DATA_GROUP=1 ;;
     --check) CHECK_ONLY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf '모르는 옵션입니다: %s\n\n' "$arg" >&2; usage >&2; exit 2 ;;
@@ -106,27 +115,40 @@ case "$ARCH" in
 esac
 
 # 설치 전에 이 컴퓨터에서 패키지가 깔릴 수 있는지 먼저 봅니다. (--check 에서는 doctor 가 같은 점검을 합니다.)
+# 맥은 묶음마다 설치 파일(wheel)이 나온 가장 낮은 macOS 판이 다릅니다. 아래 판은 uv.lock 의 wheel 이름에서
+# 읽었고, 패키지 판을 올리면 다시 봅니다. 확인하는 명령 (아무것도 설치하지 않음):
+#   MACOSX_DEPLOYMENT_TARGET=14.0 uv sync --locked --no-build --dry-run \
+#     --python-platform aarch64-apple-darwin --group analysis
 platform_check() {
   if [ "$PLATFORM" = mac ]; then
-    local ver major
+    local ver need why
     ver="$(sw_vers -productVersion 2>/dev/null || echo 0)"
-    major="${ver%%.*}"
     say "운영체제: macOS $ver ($ARCH)"
     if [ "$ARCH" = x86_64 ]; then
       if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then
         die "터미널이 Rosetta(x86_64)로 돌고 있습니다. Apple Silicon 그대로 실행하세요:
       arch -arm64 /bin/bash ./scripts/setup.sh $*"
       fi
-      die "Intel Mac 은 지원하지 않습니다.
-      잠근 numba 0.68 / llvmlite 0.50 이 macOS x86_64 용 wheel 을 내지 않아, 소스에서 LLVM 을 빌드해야 합니다.
-      Apple Silicon Mac, Windows, Linux(x86_64) 중 하나를 쓰세요."
+      if [ "$WITH_ANALYSIS" = 1 ] || [ "$WITH_NOTEBOOK" = 1 ]; then
+        die "Intel Mac 에서는 --analysis 와 --notebook 을 쓸 수 없습니다 (--all 에도 들어 있습니다).
+      잠근 numba 0.68(analysis 묶음)과 argon2-cffi-bindings 26.1(notebook 묶음)이 macOS x86_64 용
+      wheel 을 내지 않아, uv 가 소스에서 빌드해야 합니다. 두 옵션을 빼고 다시 실행하세요.
+      기본 설치와 --gpl, --godot, --data 는 Intel Mac 에서도 됩니다."
+      fi
+      need="10.15"; why="잠근 scipy 1.18.1 의 Intel Mac 용 wheel 이 macosx_10_15 용입니다"
+    else
+      need="12.0"; why="잠근 scipy 1.18.1 의 Apple Silicon 용 wheel 이 macosx_12_0 용입니다"
+      if [ "$WITH_ANALYSIS" = 1 ]; then
+        need="14.0"; why="analysis 묶음의 netcdf4 1.7.4 가 Apple Silicon 용 wheel 을 macosx_14_0 용으로만 냅니다"
+      fi
     fi
-    if [ "${major:-0}" -lt "$MIN_MACOS_MAJOR" ] 2>/dev/null; then
-      die "macOS $MIN_MACOS_MAJOR (Sequoia) 이상이 필요합니다. 지금은 $ver 입니다.
-      까닭: 잠근 rasterio 1.5.2 의 Apple Silicon wheel 이 macOS 15 이상용(macosx_15_0)으로만 나와,
-      더 낮은 버전에서는 uv 가 GDAL 을 소스에서 빌드하려다 실패합니다 (pyproj, fastscapelib 은 14 이상 필요).
-      시스템 설정 > 일반 > 소프트웨어 업데이트에서 올린 뒤 다시 실행하세요."
+    if [ "$WITH_GPL" = 1 ] || [ "$WITH_DATA_GROUP" = 1 ]; then
+      need="15.0"; why="gpl·data 묶음의 rasterio 1.5.2 가 macOS 용 wheel 을 macosx_15_0 용으로만 냅니다"
     fi
+    version_ge "$ver" "$need" || die "macOS $need 이상이 필요합니다. 지금은 $ver 입니다.
+      까닭: $why.
+      더 낮은 판에서는 uv 가 그 패키지를 소스에서 빌드하려다 실패합니다.
+      시스템 설정 > 일반 > 소프트웨어 업데이트에서 올리거나, 그 묶음을 설치하는 옵션을 빼고 다시 실행하세요."
   else
     local glibc=""
     glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')" || true
@@ -143,7 +165,8 @@ platform_check() {
     else
       say "운영체제: Linux ($ARCH), glibc $glibc"
       version_ge "$glibc" "$MIN_GLIBC" || die "glibc $MIN_GLIBC 이상이 필요합니다. 지금은 $glibc 입니다.
-      까닭: numba, rasterio 등의 Linux wheel 이 manylinux_2_28 용이라 더 낮은 glibc 에서는 설치되지 않습니다.
+      까닭: numpy, scipy, pillow 와 선택 묶음 패키지의 Linux wheel 이 manylinux_2_27, manylinux_2_28 용이라
+      더 낮은 glibc 에서는 설치되지 않습니다.
       Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+ 처럼 더 새 배포판을 쓰세요."
     fi
     if [ "$ARCH" = arm64 ]; then
@@ -158,7 +181,8 @@ platform_check() {
 }
 
 # ---------------------------------------------------------------- uv 찾기
-# 공식 설치 스크립트와 같은 순서로 정합니다: UV_INSTALL_DIR, XDG_BIN_HOME, XDG_DATA_HOME/../bin, ~/.local/bin
+# uv 를 둘 폴더는 공식 설치 스크립트와 같은 순서로 정합니다 (그 스크립트로 이미 깐 uv 도 찾도록):
+# UV_INSTALL_DIR, XDG_BIN_HOME, XDG_DATA_HOME/../bin, ~/.local/bin
 if [ -n "${UV_INSTALL_DIR:-}" ]; then UV_BIN_DIR="$UV_INSTALL_DIR"
 elif [ -n "${XDG_BIN_HOME:-}" ]; then UV_BIN_DIR="$XDG_BIN_HOME"
 elif [ -n "${XDG_DATA_HOME:-}" ]; then UV_BIN_DIR="$XDG_DATA_HOME/../bin"
@@ -243,12 +267,60 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. uv (파이썬과 패키지 관리자)
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
+# GitHub 릴리스의 uv 압축 파일을 받아 SHA-256 이 UV_SHA_* 와 같은지 본 뒤, uv 와 uvx 를 $UV_BIN_DIR 에 둡니다.
+# 값이 다르면 받은 파일을 지우고 아무것도 두지 않은 채 멈춥니다.
+install_uv() {
+  local target sha url tmp got dir exe
+  case "$PLATFORM-$ARCH" in
+    mac-arm64) target="aarch64-apple-darwin"; sha="$UV_SHA_MAC_ARM64" ;;
+    mac-x86_64) target="x86_64-apple-darwin"; sha="$UV_SHA_MAC_X64" ;;
+    linux-x86_64) target="x86_64-unknown-linux-gnu"; sha="$UV_SHA_LINUX_X64" ;;
+    linux-arm64) target="aarch64-unknown-linux-gnu"; sha="$UV_SHA_LINUX_ARM64" ;;
+    *) die "이 운영체제($PLATFORM-$ARCH)용 uv 내려받기는 준비돼 있지 않습니다." ;;
+  esac
+  url="$UV_URL_BASE/uv-$target.tar.gz"
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/bpcg-uv.XXXXXX")"
+  say "uv $UV_VERSION 받기: $url"
+  if ! curl -fL --retry 3 --retry-delay 2 --progress-bar -o "$tmp/uv.tar.gz" "$url"; then
+    rm -rf "$tmp"
+    die "uv 내려받기에 실패했습니다. 인터넷 연결을 확인하고 다시 실행하세요."
+  fi
+  got="$(sha256_of "$tmp/uv.tar.gz")"
+  if [ "$got" != "$sha" ]; then
+    rm -rf "$tmp"
+    die "받은 uv 파일의 SHA-256 이 스크립트에 적은 값과 다릅니다. 받은 파일은 지웠습니다.
+      받은 파일: $got
+      적은 값:   $sha
+      다시 실행해도 다르면 팀에 알려 주세요."
+  fi
+  if ! tar -xzf "$tmp/uv.tar.gz" -C "$tmp"; then
+    rm -rf "$tmp"
+    die "uv 압축 파일을 풀지 못했습니다: $url"
+  fi
+  dir="$tmp/uv-$target"
+  mkdir -p "$UV_BIN_DIR"
+  for exe in uv uvx; do
+    if [ ! -f "$dir/$exe" ]; then
+      rm -rf "$tmp"
+      die "uv 압축 파일 안에 uv-$target/$exe 가 없습니다: $url"
+    fi
+    # 임시 이름으로 복사한 뒤 바꿔, 중간에 멈춰도 반쯤 쓴 실행 파일이 남지 않게 합니다.
+    cp "$dir/$exe" "$UV_BIN_DIR/.$exe.bpcg-part"
+    chmod 755 "$UV_BIN_DIR/.$exe.bpcg-part"
+    mv -f "$UV_BIN_DIR/.$exe.bpcg-part" "$UV_BIN_DIR/$exe"
+  done
+  rm -rf "$tmp"
+}
+
 UV_INSTALLED_NOW=0
 if ! find_uv; then
   t=$SECONDS
-  say "uv $UV_VERSION 설치 (공식 설치 스크립트, $UV_BIN_DIR). 셸 설정 파일은 건드리지 않습니다."
-  curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | env UV_NO_MODIFY_PATH=1 sh \
-    || die "uv 설치에 실패했습니다. 인터넷 연결을 확인하고 다시 실행하세요."
+  say "uv $UV_VERSION 설치 ($UV_BIN_DIR). 셸 설정 파일은 건드리지 않습니다."
+  install_uv
   hash -r
   find_uv || die "uv 를 설치했지만 $UV_BIN_DIR 에서 찾지 못했습니다. 새 터미널을 열고 다시 실행하세요."
   UV_INSTALLED_NOW=1
@@ -256,7 +328,9 @@ if ! find_uv; then
 fi
 UV_HAVE="$(uv --version | awk '{print $2}')"
 version_ge "$UV_HAVE" "$UV_VERSION" || die "uv $UV_HAVE 는 너무 오래됐습니다. $UV_VERSION 이상이 필요합니다.
-      올리기: uv self update   (Homebrew 로 깔았다면 brew upgrade uv)"
+      올리기: uv self update   (Homebrew 로 깔았다면 brew upgrade uv)
+      이 스크립트가 $UV_BIN_DIR 에 깐 uv 는 uv self update 가 되지 않습니다.
+      그 폴더의 uv, uvx 를 지운 뒤 이 스크립트를 다시 실행하세요."
 say "uv $UV_HAVE ($(command -v uv))"
 
 # ---------------------------------------------------------------- 4. 파이썬 + 패키지
@@ -283,10 +357,11 @@ if venv_is_stale; then
 fi
 
 SYNC_ARGS=(--locked --inexact)
-GROUP_NOTE="기본(dev, data, mesh)"
+GROUP_NOTE="기본(dev)"
 if [ "$WITH_ANALYSIS" = 1 ]; then SYNC_ARGS+=(--group analysis); GROUP_NOTE="$GROUP_NOTE + analysis"; fi
 if [ "$WITH_GPL" = 1 ]; then SYNC_ARGS+=(--group gpl); GROUP_NOTE="$GROUP_NOTE + gpl"; fi
 if [ "$WITH_NOTEBOOK" = 1 ]; then SYNC_ARGS+=(--group notebook); GROUP_NOTE="$GROUP_NOTE + notebook"; fi
+if [ "$WITH_DATA_GROUP" = 1 ]; then SYNC_ARGS+=(--group data); GROUP_NOTE="$GROUP_NOTE + data"; fi
 
 # 파이썬 버전은 .python-version, 패키지 버전은 uv.lock 이 정합니다. 파이썬도 uv 가 직접 받습니다.
 t=$SECONDS
@@ -331,7 +406,7 @@ sha512_of() {
 install_godot() {
   local zip sha url part extract item
   case "$PLATFORM-$ARCH" in
-    mac-arm64) zip="Godot_v${GODOT_TAG}_mono_macos.universal.zip"; sha="$SHA_MAC" ;;
+    mac-*) zip="Godot_v${GODOT_TAG}_mono_macos.universal.zip"; sha="$SHA_MAC" ;;  # Apple Silicon, Intel 겸용
     linux-x86_64) zip="Godot_v${GODOT_TAG}_mono_linux_x86_64.zip"; sha="$SHA_LINUX_X64" ;;
     linux-arm64) zip="Godot_v${GODOT_TAG}_mono_linux_arm64.zip"; sha="$SHA_LINUX_ARM64" ;;
     *) die "이 운영체제($PLATFORM-$ARCH)용 Godot 내려받기는 준비돼 있지 않습니다." ;;

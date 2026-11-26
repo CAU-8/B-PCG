@@ -13,6 +13,7 @@ namespace Bpcg.Engine;
 /// 오른쪽: 레이어 패널. 줄마다 켜기·끄기 버튼과 '만 보기' 버튼이 있고, 아래에 '모두 보기',
 /// 색 바꾸기, 손전등, 지구본, 처음 화면 버튼이 있습니다 (Tab 으로 숨김). 버튼을 누르려면 Esc 로 마우스를 놓습니다.
 /// 크기는 <see cref="UiScale"/> 가 화면 배율과 창 크기에 맞춰 키웁니다 ([-]·[=] 로 더 바꿈).
+/// 회랑을 불러오는 동안에는 위 셋을 숨기고 <see cref="Loading"/> 의 진행 막대만 보입니다.
 /// </remarks>
 public partial class Hud : CanvasLayer
 {
@@ -51,6 +52,9 @@ public partial class Hud : CanvasLayer
     /// <summary>왼쪽 위 첫 줄에 화면 속도와 그린 삼각형 수를 보이는지.</summary>
     public bool PerfVisible { get; private set; } = true;
 
+    /// <summary>불러오기 진행 막대와 '불러오기 문제' 상자.</summary>
+    public LoadScreen Loading { get; private set; } = null!;
+
     public override void _Ready()
     {
         FrameStats.EnableGpuTiming(GetViewport());
@@ -79,6 +83,17 @@ public partial class Hud : CanvasLayer
         _rows.AddThemeConstantOverride("separation", 4);
         _panel.AddChild(_rows);
         AddChild(_panel);
+
+        Loading = new LoadScreen { Name = "Loading" };
+        AddChild(Loading);
+    }
+
+    /// <summary>상태 글·도움말·레이어 패널을 보이거나 숨깁니다 (불러오는 동안 숨김).</summary>
+    public void SetWorldVisible(bool on)
+    {
+        _status.Visible = on;
+        _help.Visible = on;
+        _panel.Visible = on;
     }
 
     /// <summary>레이어 패널을 만듭니다. 레이어가 바뀌면 버튼 상태를 다시 맞춥니다.</summary>

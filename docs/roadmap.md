@@ -74,14 +74,14 @@ CI(GitHub가 PR마다 자동으로 돌리는 빌드·시험) 초록은 자동 �
 | 할 일 | 왜 | 상태 | 확인 방법 |
 |---|---|---|---|
 | 루트 폴더 하나(`b-pcg`)로 통일, 명령 이름 `bpcg`(파이썬 패키지 `bpcg_studio`, C# 라이브러리 `Bpcg`) | 세 사람이 같은 이름과 경로로 명령을 돌림 | 끝 | `uv run pytest` |
-| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 6개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
+| 파이썬 3.13 + uv(파이썬 버전과 패키지를 한 번에 맞춰 설치하는 도구) + `uv.lock`, 의존성 묶음 5개 | 모두 같은 판의 패키지를 설치함([conventions.md](conventions.md) 11절) | 끝 | `uv sync --locked` |
 | 설치 스크립트(맥·리눅스 `setup.sh`, 윈도우 `setup.ps1`)와 점검 도구(`tools/doctor.py`) | 명령 하나로 설치하고, 빠진 항목을 점검함 | 끝(맥에서 시험, 윈도우·리눅스는 팀원 컴퓨터에서 첫 시험 필요) | `./scripts/setup.sh --check` |
 | 개발 규칙(`docs/conventions.md`), 협업 순서(`CONTRIBUTING.md`), PR 양식, CI 설정 | 규칙을 글로 정하고, 깨진 코드가 `main`에 들어가지 않게 함 | 끝 | GitHub에 올린 뒤 CI 초록 |
 | 파일럿 자료 4.5 GB와 `data/manifest.json`(크기·해시) | 3단계의 θ 파일럿(진짜 지구 자료로 강 규칙의 숫자를 처음 재 보는 일)에 씀. 크기·해시로 받은 파일이 온전한지 확인함 | 끝 | `uv run python tools/download_pilot.py --verify-only` |
 | 임시 폴더에 있던 분석 스크립트·그림·시험 자료를 `analysis/`, `docs/`, `tests/fixtures/`로 이전 | 가봉 분석 스크립트와 그림이 임시 폴더에만 있었음(설계도 10장) | 끝 | `analysis/README.md` |
 | Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) 프로젝트 뼈대(`engine/`)와 headless 연기 시험 | 엔진 담당(C)이 1주차부터 엔진 일을 시작함. 연기 시험은 화면 없이(headless) 엔진을 띄워 열리는지만 보는 짧은 시험 | 끝 | `uv run pytest -m godot` |
 | 첫 커밋, GitHub 저장소 만들기, main 보호 규칙 | `main`에 직접 올리는 실수를 막음(conventions 10절) | 저장소와 첫 커밋은 끝남([CAU-8/B-PCG](https://github.com/CAU-8/B-PCG)). 보호 규칙은 관리자 확인 필요 | CONTRIBUTING.md 끝 절 |
-| 코드 라이선스 정하기(데이터와 분리) | 결과물을 GitHub에 오픈소스로 공개해야 함(설계도 8장) | 남음(전원) | `LICENSE` 파일 |
+| 코드 라이선스 정하기(데이터와 분리) | 결과물을 GitHub에 오픈소스로 공개해야 함(설계도 8장) | 끝. MIT, 저작권자 `B-PCG contributors`. 옮겨 온 코드와 잘라 온 자료는 따로 적음 | `LICENSE`, `THIRD_PARTY_NOTICES.md` |
 | 팀원 두 명의 컴퓨터에서 설치 스크립트 실행 | 설치 스크립트를 아직 맥에서만 시험함 | 남음(팀원) | `tools/doctor.py` 결과를 PR에 붙임 |
 | 묶음 형식 초안(manifest + 필드 파일), 기호·단위 표 합의 | 묶음의 모양을 정함. 같은 기호(P0, κ, G, R, chi)가 저마다 두 뜻이었음(설계도 5장) | 묶음 형식은 코드와 문서에 있음(`src/Bpcg/Bake/Bundle.cs`, [pipeline.md](pipeline.md) 11장). 따로 두기로 한 `docs/bundle_format.md`는 만들지 않음. 기호·단위 표는 conventions 2·3절 | [pipeline.md](pipeline.md) 11장, conventions 2·3절 |
 | 기억에 기대는 수치의 원문 확인 나눠 맡기 | 원문을 확인하지 않은 수치(예: 내륙 배수 18~20%, 해양 비율 0.708)가 설계도에 있음 | 남음(전원) | 설계도 10장 할 일 |

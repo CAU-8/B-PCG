@@ -18,7 +18,7 @@ $G --path engine res://scenes/globe.tscn -- --baked-dir="$PWD/out/tiny/corridor"
 - 처음 화면의 '지난 결과'에서 실행을 골라 지구본을 열 수도 있습니다.
 - 지구본에서 M을 누르면 회랑으로, N을 누르면 처음 화면으로 갑니다.
 
-`--baked-dir` 을 빼면 처음 화면이 고른 실행, 그다음 `res://baked` 의 지구본을 읽습니다. 굽기 폴더 안의 `globe/` 를 먼저 찾고, 없으면 옆의 `../globe` 를 찾습니다.
+굽기 폴더는 회랑과 같은 순서로 정합니다: 처음 화면이 고른 실행 → `--baked-dir` → `res://baked`. 그래서 `--baked-dir` 로 띄운 뒤 처음 화면(N)에서 다른 실행을 고르면 그 실행의 지구본을 읽습니다. 굽기 폴더 안의 `globe/` 를 먼저 찾고, 없으면 옆의 `../globe` 를 찾습니다.
 
 자료가 없으면(`globe.json` 이 없음) 화면 가운데에 '지구본 자료가 없습니다'와 굽는 명령이 나옵니다. 자료가 있는데 크기·형식이 틀리면 '지구본 자료를 읽지 못했습니다'와 그 까닭이 나옵니다. 어느 쪽이든 장면은 멈추지 않습니다.
 
@@ -28,7 +28,7 @@ $G --path engine res://scenes/globe.tscn -- --baked-dir="$PWD/out/tiny/corridor"
 |---|---|
 | 보이는 범위 | 행성 전체(거시 배율). 아래 길이는 지구 설정(반지름 6,371 km) 기준입니다. 지구본 칸 한 변 약 39.1 km(면당 256칸). 값을 계산한 행성 지도(L0) 칸은 laptop 프로필(격자 크기와 해상도를 미리 묶어 둔 설정 이름)에서 약 19.5 km, tiny에서 약 313 km입니다. 칸 크기는 모두 면 가운데 칸 한 변(2πR ÷ 4N)으로 잽니다 |
 | 자료 | `<굽기 폴더>/globe/globe.json` + `.bin` (기본 `engine/baked/globe/`, 명령줄 `-- --baked-dir=<폴더>` 로 바꿈) |
-| 굽기 | 처음 화면의 '행성 만들기', `uv run bpcg all`, `uv run bpcg bake --hero <실행>/hero` 가 실행 폴더의 `globe/` 에 굽습니다. `--engine` 이면 `engine/baked/globe/` 에도 쓰고, `--no-globe` 면 굽지 않습니다 |
+| 굽기 | 처음 화면의 '행성 만들기', `uv run bpcg all`, `uv run bpcg bake --hero <실행>/hero` 가 실행 폴더의 `globe/` 에 굽습니다. `--engine` 이면 `engine/baked/globe/` 에도 쓰고, `--no-globe` 면 굽지 않습니다. 이때 지난 지구본은 이 히어로와 함께 구운 지구본일 때만 남깁니다(`globe.json` 의 `hero_bundle`, [docs/pipeline.md](../docs/pipeline.md) 11장 '실행 폴더') |
 | 면당 칸 수 | 256. `Globe.BakeGlobe` 의 `faceRes` 는 2~1,024를 받습니다. 1,024를 넘으면 꼭짓점 표만 수 GB라 노트북 메모리가 모자라 굽지 않습니다. 명령줄 선택(`--face-res`)은 아직 없습니다 |
 | 그리기 | 큐브스피어(주사위 여섯 면을 부풀려 공 모양으로 만든 격자) 면 6장. 셰이더가 꼭짓점을 고도 × 과장 배율(기본 20배)만큼 바깥으로 밀고, 고른 레이어의 색을 칠합니다 |
 | 색 | 레이어마다 `globe.json` 의 색표나 범주 색. 값이 없는 칸은 회색. Godot(3D 세계를 보여 주는 오픈소스 게임 엔진) 조명을 쓰지 않아 평평한 곳(바다, 평지)은 어디서나 범례 색 그대로입니다. 그늘은 비탈만 밝게·어둡게 하고, G로 끄면 모든 칸이 범례 색과 같습니다 |
