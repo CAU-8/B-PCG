@@ -12,6 +12,13 @@ using Bpcg.Planet;
 namespace Bpcg.Bake;
 
 /// <summary>
+/// B-PCG 가 아닌 방법으로 만든 행성을 구울 때 globe.json 에 적는 만든 방법(generator), 제목(title), 설명(description).
+/// Layers 는 레이어 이름(필드·덧그림의 name) → (무엇인가, 읽는 법). B-PCG 계산을 전제로 쓴 기본 설명을 바꿉니다. 읽는 법이 null 이면 그대로 둡니다.
+/// </summary>
+public sealed record GlobeGenerator(
+    string Name, string Title, string Description, IReadOnlyDictionary<string, (string Description, string? HowToRead)>? Layers = null);
+
+/// <summary>
 /// 행성 전체를 지구본처럼 돌려 보기 위한 굽기 (src/bpcg/bake/globe.py). 면 기저는 (6, 3, 3) [면, (n, u, v), xyz] 행 우선.
 /// </summary>
 public static class Globe
@@ -1224,7 +1231,8 @@ public static class Globe
     public static OrderedDictionary<string, object?> BakeGlobe(
         PlanetState planetState, Config? cfg, string outDir, int faceRes = DefaultFaceRes, OrderedDictionary<string, object?>? hero = null,
         Action<string>? log = null, OrderedDictionary<string, object?>? faceBasis = null, string? engineDir = null,
-        OrderedDictionary<string, object?>? parent = null, OrderedDictionary<string, object?>? heroBundle = null)
+        OrderedDictionary<string, object?>? parent = null, OrderedDictionary<string, object?>? heroBundle = null,
+        GlobeGenerator? generator = null)
     {
         long tAll = Stopwatch.GetTimestamp();
         CellGraph graph = planetState.Graph;
@@ -1389,6 +1397,24 @@ public static class Globe
             ["file_bytes"] = sizes,
             ["seconds"] = secOut,
         };
+        if (generator is not null)
+        {
+            // B-PCG 가 아닌 방법으로 만든 행성 (노이즈 비교본): 제목과 설명을 바꾸고 만든 방법을 적습니다.
+            meta["title"] = generator.Title;
+            meta["description"] = generator.Description;
+            meta["generator"] = generator.Name;
+            foreach (OrderedDictionary<string, object?> e in entries.Concat(ovEntries))
+            {
+                if (generator.Layers is not null && generator.Layers.TryGetValue((string)e["name"]!, out var text))
+                {
+                    e["description"] = text.Description;
+                    if (text.HowToRead is not null)
+                    {
+                        e["how_to_read"] = text.HowToRead;
+                    }
+                }
+            }
+        }
         double total = Seconds(tAll);
         secOut["total"] = Num(total);
         Bundle.WriteJson(Path.Combine(outDir, GlobeJson), meta, maxArray: null);

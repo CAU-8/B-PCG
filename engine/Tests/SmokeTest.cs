@@ -965,6 +965,14 @@ public partial class SmokeTest : Node
         }
         GD.Print($"레이어: {string.Join(", ", ids)}, 동굴 삼각형 {baked.CaveFaces} ({baked.CaveSource}), "
             + $"입구 {baked.EntrancesInside.Count}, 재질 부피 {baked.Strata.Cols} × {baked.Strata.Layers} × {baked.Strata.Rows}");
+        // 노이즈 비교본이면 상태 글 맨 위에 그렇다고 알리는 줄이 있어야 하고, B-PCG 회랑에는 없어야 합니다.
+        main.UpdateStatus();
+        string first = hud.StatusText.Split('\n')[0];
+        if (main.IsNoiseWorld != (first == Main.NoiseWorldLine))
+        {
+            return Fail($"노이즈 비교본 표시가 맞지 않습니다: 노이즈 비교본 {main.IsNoiseWorld}, 상태 글 첫 줄 '{first}'");
+        }
+        GD.Print($"만든 방법: {(main.IsNoiseWorld ? "노이즈 비교본" : "B-PCG")}, 상태 글 첫 줄 '{first}'");
         return true;
     }
 

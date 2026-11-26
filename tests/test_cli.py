@@ -216,11 +216,44 @@ def test_help_lists_commands_and_options(csharp_cli):
     for args in (["--help"], ["all", "-h"], ["help"]):
         proc = csharp_cli(*args)
         assert proc.stdout.startswith("usage: bpcg"), args
-        for word in ("all", "planet", "hero", "bake", "compare", "figures", "studio"):
+        for word in ("all", "planet", "hero", "bake", "noise", "compare", "figures", "studio"):
             assert f"\n  {word} " in proc.stdout, word
         for flag in ("--planet", "--profile", "--seed", "--out", "--set", "--from", "--flat",
                      "--hero", "--engine", "--no-globe"):  # fmt: skip
             assert f"\n  {flag} " in proc.stdout, flag
+
+
+def test_noise_world_writes_the_same_engine_files(csharp_cli, tmp_path):
+    """bpcg noise: 같은 프로필·시드로 노이즈 비교본을 만들어, B-PCG 와 같은 파일 꼴로 씁니다."""
+    run = tmp_path / "noise"
+    proc = csharp_cli(
+        "noise", "--profile", "tiny", "--seed", "0", "--out", run,
+        "--set", "noise.caves.tunnel_radius_m=3.0",
+    )  # fmt: skip
+    lines = proc.stdout.strip().splitlines()
+    assert lines[-1].startswith("[노이즈] 끝: "), lines[-1]
+    assert "[설정] noise.caves.tunnel_radius_m = 3.0 (기본 2.6)" in proc.stdout
+    for name in CORRIDOR_FILES:
+        assert (run / "corridor" / name).is_file(), name
+    assert (run / "globe" / "globe.json").is_file()
+    assert not (run / "planet").exists() and not (run / "hero").exists()
+    man = read_json(run / "corridor" / "manifest.json")
+    assert man["generator"] == "noise" and man["seed"] == 0 and man["profile"] == "tiny"
+    noise = read_json(run / "noise" / "manifest.json")
+    assert noise["config"]["noise"]["caves"]["tunnel_radius_m"] == 3.0
+    assert abs(noise["planet"]["ocean_fraction"] - 0.71) < 0.005
+
+
+def test_noise_rejects_unknown_noise_key(csharp_cli, tmp_path):
+    """노이즈 설정에 없는 키는 비슷한 키를 알려 주고 멈춥니다 (스택 추적 없이)."""
+    proc = csharp_cli(
+        "noise", "--profile", "tiny", "--out", tmp_path / "x",
+        "--set", "noise.caves.tunnel_radius=3",
+        check=False,
+    )  # fmt: skip
+    assert proc.returncode == 1
+    assert "noise.caves.tunnel_radius" in proc.stderr and "비슷한 키" in proc.stderr
+    assert "at Bpcg" not in proc.stderr
 
 
 def test_rejects_missing_inputs(csharp_cli, tmp_path):

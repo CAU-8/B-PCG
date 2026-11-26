@@ -207,6 +207,7 @@
 |---|---|---|---|
 | 스튜디오 | `bpcg studio` | 매개변수를 바꿔 돌리고 지도·그림을 보는 내 컴퓨터 안 웹 도구(http://127.0.0.1:8765) | [studio.md](studio.md) |
 | 방법 비교 | `bpcg compare` | 기존 지형 생성 방법과 B-PCG를 같은 칸·같은 시드로 돌려 견주는 도구 | [compare.md](compare.md) |
+| 노이즈 비교본 | `bpcg noise`, `Bpcg.NoiseWorld`, `configs/noise/default.toml` | B-PCG와 비교하려고, 같은 크기·같은 시드의 행성 전체(행성 지도·히어로 유역·회랑·지구본)를 판·침식·물의 흐름 계산 없이 노이즈만으로 만든 결과. B-PCG와 같은 파일 꼴이라 Godot에서 같은 장면으로 봄 | Godot 처음 화면 '만드는 방법', 회랑 상태 글 맨 윗줄, [noise_world.md](noise_world.md) |
 | 연산 과정 | stages | 방법이 지형을 만드는 동안의 중간 지도들 | 스튜디오 '방법 비교' |
 | 학습 | fit, `configs/learned/` | 딥러닝이 아님. 진짜 지형 자료로 규칙의 숫자(θ, k_s, S_crit)를 맞추는 일. 아직 하지 않음 | [roadmap.md](roadmap.md) |
 | 손 보정 | `hand` | 첫 실행에서 생긴 문제를 고치려 손으로 바꾼 임시 값. 학습 전까지만 씀 | 스튜디오 매개변수 분류 |

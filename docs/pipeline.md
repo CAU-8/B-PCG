@@ -1686,6 +1686,7 @@ z_init이 없으면 z_outlet + (출구까지 대원 거리 × 1e-3) + 10 m·fbm�
 | `uv run bpcg bake --hero out/earth/hero --engine` | 회랑 굽기, 옆에 행성 묶음이 있으면 지구본(`globe/`)도. 그 행성이 히어로를 만든 행성이 아니면 굽기 전에 멈춤(11장 '실행 폴더'). `engine/baked/`에도 씀. `--set detail.*`, `--no-globe` |
 | `uv run bpcg all --profile tiny --out out/tiny` | 전부 한 번 |
 | `uv run bpcg planet --planet small10 --profile laptop --out out/small10` | 반지름 10 km 작은 행성의 1~4단계 (아래 '작은 행성 설정') |
+| `uv run bpcg noise --profile tiny --seed 0` | 노이즈 비교본: 같은 행성 설정·프로필·시드의 행성 전체를 1~4단계 없이 노이즈만으로 만들어 B-PCG와 같은 꼴의 `corridor/`·`globe/` 를 씀 (기본 `out/<행성 이름>-noise`). `--set noise.*`, `--engine` ([noise_world.md](noise_world.md)) |
 
 **명령줄이 멈추거나 바꾸는 경우.**
 

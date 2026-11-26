@@ -395,7 +395,7 @@ public static class Mesh
     /// </summary>
     /// <remarks>
     /// Anchor (V,) 는 꼭짓점이 바깥과 닿는지입니다: 동굴이 지표를 뚫고 나온 가장자리이거나 회랑 가장자리에 놓인 꼭짓점이면 참.
-    /// <see cref="BuildMesh"/> 가 이 표시로 어디로도 통하지 않는 조각(막힌 주머니)을 지웁니다.
+    /// <see cref="BuildMesh(double[], int[], HeroVolume, EngineFrame, double, bool[])"/> 가 이 표시로 어디로도 통하지 않는 조각(막힌 주머니)을 지웁니다.
     /// </remarks>
     public static (double[] Verts, int[] Faces, bool[] Anchor, OrderedDictionary<string, object?> Diag) CaveSurface(
         HeroVolume volume, (double XMin, double XMax, double YMin, double YMax) rect, double voxelM, Action<string>? log = null)
@@ -677,7 +677,15 @@ public static class Mesh
     /// 들어갈 수도 볼 수도 없는 벽이라 엔진에 넘기지 않습니다. 모두 지워지면 삼각형이 0개인 메시를 돌려줍니다.
     /// </remarks>
     public static CaveMesh BuildMesh(double[] vertsLocal, int[] faces, HeroVolume volume, EngineFrame frame, double voxelM,
-        bool[]? anchor = null)
+        bool[]? anchor = null) =>
+        BuildMesh(vertsLocal, faces, pts => volume.EvaluateFields(pts, VolumeField.SolidMaterial).SolidMaterial, frame, voxelM, anchor);
+
+    /// <summary>
+    /// <see cref="BuildMesh(double[], int[], HeroVolume, EngineFrame, double, bool[])"/> 와 같은 일을 하되, 벽 색을 정하는 재질을
+    /// solidMaterial(국소 좌표 점 (M, 3) → 재질 번호 (M,))로 받습니다. 노이즈 비교본(<c>Bpcg.NoiseWorld</c>)이 씁니다.
+    /// </summary>
+    public static CaveMesh BuildMesh(double[] vertsLocal, int[] faces, Func<double[], byte[]> solidMaterial, EngineFrame frame,
+        double voxelM, bool[]? anchor = null)
     {
         if (anchor is not null && anchor.Length != vertsLocal.Length / 3)
         {
@@ -747,7 +755,7 @@ public static class Mesh
         {
             probe[q] = verts[q] - (ColorProbeVoxels * voxelM * normals[q]);
         }
-        byte[] mat = volume.EvaluateFields(frame.ToLocal(probe), VolumeField.SolidMaterial).SolidMaterial;
+        byte[] mat = solidMaterial(frame.ToLocal(probe));
         byte[] rgba = new byte[mat.Length * 4];
         for (int q = 0; q < mat.Length; q++)
         {

@@ -608,7 +608,7 @@ public static class Corridor
     // 예: span 6,000 m, step 2 m 이면 3,001개, span 6,001 m 이면 3,002개(마지막 표본 6,002 m).
     private static int CoverCount(double span, double step) => (int)Math.Ceiling((span / step) - 1e-9) + 1;
 
-    private static (double[] Gx, double[] Gy) Mesh2(double[] xs, double[] ys)
+    internal static (double[] Gx, double[] Gy) Mesh2(double[] xs, double[] ys)
     {
         double[] gx = new double[xs.Length * ys.Length];
         double[] gy = new double[gx.Length];
@@ -762,6 +762,16 @@ public static class Corridor
                 mat[(s0 * nz) + q] = id;
             });
         }
+        return WriteStrata(mat, top, xs, ys, nz, frame, outDir);
+    }
+
+    /// <summary>
+    /// 재질 부피 파일을 씁니다: strata.u8 (행 × 층 × 열), strata.json (범례·칸 수), strata_top (윗면 높이맵).
+    /// mat 은 점마다 층을 이어 놓은 배열 (점 번호 × nz + 층), 점은 xs·ys 격자의 행 우선 순서입니다. 노이즈 비교본도 같은 꼴로 씁니다.
+    /// </summary>
+    internal static OrderedDictionary<string, object?> WriteStrata(
+        byte[] mat, double[] top, double[] xs, double[] ys, int nz, EngineFrame frame, string outDir)
+    {
         int nrow = ys.Length;
         int ncol = xs.Length;
         byte[] vol = new byte[mat.Length];

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Bpcg.Core;
+using Bpcg.NoiseWorld;
 using Godot;
 
 namespace Bpcg.Engine;
@@ -19,6 +20,8 @@ namespace Bpcg.Engine;
 /// 회랑 장면으로 갑니다. 명령줄에 <c>-- --baked-dir=&lt;폴더&gt;</c> 를 주면 처음 한 번만 이 화면을 건너뛰고 바로 회랑 장면을
 /// 엽니다. 명령줄 옵션(건너뛰기, --generate 등)은 이 실행에서 처음 화면이 처음 열릴 때만 따르므로, 회랑에서 N 으로
 /// 돌아오면 이 화면이 그대로 뜹니다 (<see cref="TakeCommandLine"/>).
+/// '만드는 방법'을 '노이즈 비교본'으로 고르면 같은 행성 설정·프로필·시드로 <see cref="NoiseRuns.All"/> 을 돌려
+/// &lt;날짜-시각&gt;-&lt;프로필&gt;-s&lt;시드&gt;-noise/ 에 씁니다. B-PCG 와 같은 파일 꼴이라 회랑·지구본 장면이 그대로 엽니다.
 /// </remarks>
 public partial class StartMenu : Control
 {
@@ -35,6 +38,7 @@ public partial class StartMenu : Control
     private Label _profileNote = null!;
     private SpinBox _seed = null!;
     private CheckBox _flat = null!;
+    private OptionButton _method = null!;
     private CheckBox _openWhenDone = null!;
     private Button _generate = null!;
     private ProgressBar _progress = null!;
@@ -100,7 +104,7 @@ public partial class StartMenu : Control
 
     /// <summary>
     /// 명령줄로 화면을 몹니다 (시험·자동 실행): <c>-- --generate [--planet=earth] [--profile=tiny] [--seed=0] [--flat]
-    /// [--quit-when-done]</c>. --quit-when-done 이면 끝나고 'BPCG_GENERATE_OK &lt;실행 폴더&gt;' 또는
+    /// [--noise] [--quit-when-done]</c>. --noise 는 '만드는 방법'을 노이즈 비교본으로 고릅니다. --quit-when-done 이면 끝나고 'BPCG_GENERATE_OK &lt;실행 폴더&gt;' 또는
     /// 'BPCG_GENERATE_FAIL: &lt;까닭&gt;' 을 찍고 종료 코드 0/1 로 끝냅니다.
     /// </summary>
     private void ApplyCommandLine()
@@ -127,6 +131,10 @@ public partial class StartMenu : Control
                     break;
                 case "--flat":
                     _flat.ButtonPressed = true;
+                    break;
+                case "--noise":
+                    _method.Select(MethodNoise);
+                    OnMethodSelected(MethodNoise);
                     break;
                 case "--quit-when-done":
                     _quitWhenDone = true;
@@ -194,20 +202,24 @@ public partial class StartMenu : Control
         string planet = _planet.GetItemText(_planet.Selected);
         string profile = _profile.GetItemText(_profile.Selected);
         long seed = (long)_seed.Value;
-        bool flat = _flat.ButtonPressed;
-        string runDir = Path.Combine(EnginePaths.RunsRoot(), $"{DateTime.Now:yyyyMMdd-HHmmss}-{profile}-s{seed}");
+        bool noise = _method.Selected == MethodNoise;
+        bool flat = !noise && _flat.ButtonPressed;
+        string runDir = Path.Combine(EnginePaths.RunsRoot(), $"{DateTime.Now:yyyyMMdd-HHmmss}-{profile}-s{seed}{(noise ? "-noise" : "")}");
         _log.Clear();
         _logLines = 0;
-        AppendLog($"[엔진] 만들기 시작: 행성 설정 {planet}, 프로필 {profile}, 시드 {seed}{(flat ? ", 평면 히어로" : "")}");
+        string how = noise ? ", 노이즈 비교본" : flat ? ", 평면 히어로" : "";
+        AppendLog($"[엔진] 만들기 시작: 행성 설정 {planet}, 프로필 {profile}, 시드 {seed}{how}");
         AppendLog($"[엔진] 결과 폴더: {runDir}");
-        _stages = new StageProgress(flat);
+        _stages = new StageProgress(flat, noise);
         _startedAt = Stopwatch.GetTimestamp();
         SetBusy(true);
         _task = Task.Run(() =>
         {
             Config cfg = Runs.WithSeed(Config.LoadConfig(planet, profile), seed);
             Pipeline.ApplyThreads(cfg);
-            return Runs.All(cfg, runDir, flat, null, line => _lines.Enqueue(line));
+            return noise
+                ? NoiseRuns.All(cfg, runDir, null, line => _lines.Enqueue(line))
+                : Runs.All(cfg, runDir, flat, null, line => _lines.Enqueue(line));
         });
     }
 
@@ -258,11 +270,12 @@ public partial class StartMenu : Control
     private void SetBusy(bool busy)
     {
         _generate.Disabled = busy;
-        _generate.Text = busy ? "만드는 중…" : "행성 만들기";
+        _generate.Text = busy ? "만드는 중…" : GenerateLabel();
         _planet.Disabled = busy;
         _profile.Disabled = busy;
         _seed.Editable = !busy;
-        _flat.Disabled = busy;
+        _method.Disabled = busy;
+        _flat.Disabled = busy || _method.Selected == MethodNoise;
         _openCorridor.Disabled = busy || _runs.GetSelectedItems().Length == 0;
         _openGlobe.Disabled = busy || !SelectedHasGlobe();
     }
@@ -293,7 +306,8 @@ public partial class StartMenu : Control
         {
             EnginePaths.RunEntry r = _runEntries[i];
             string globe = r.HasGlobe ? "" : " · 지구본 없음";
-            _runs.AddItem($"{r.Name}  (프로필 {r.Profile}, 시드 {r.Seed}{globe})");
+            string noise = r.IsNoise ? " · 노이즈 비교본" : "";
+            _runs.AddItem($"{r.Name}  (프로필 {r.Profile}, 시드 {r.Seed}{noise}{globe})");
             if (BakedPaths.RuntimeDir is string now && Path.GetFullPath(now) == Path.GetFullPath(r.CorridorDir))
             {
                 select = i;
@@ -335,6 +349,24 @@ public partial class StartMenu : Control
         }
         OnProfileSelected(_profile.Selected);
     }
+
+    // '만드는 방법' 목록의 번호.
+    private const int MethodBpcg = 0;
+    private const int MethodNoise = 1;
+
+    // 노이즈 비교본은 행성 전체를 노이즈로 만들므로 '평면 히어로'를 고를 수 없습니다.
+    private void OnMethodSelected(long index)
+    {
+        bool noise = index == MethodNoise;
+        _flat.Disabled = noise || IsGenerating;
+        if (noise)
+        {
+            _flat.ButtonPressed = false;
+        }
+        _generate.Text = IsGenerating ? "만드는 중…" : GenerateLabel();
+    }
+
+    private string GenerateLabel() => _method.Selected == MethodNoise ? "노이즈 비교본 만들기" : "행성 만들기";
 
     private void OnProfileSelected(long index)
     {
@@ -423,6 +455,18 @@ public partial class StartMenu : Control
             TooltipText = "같은 시드면 같은 행성이 나옵니다(운영체제와 CPU 종류가 같은 컴퓨터끼리). 다른 행성을 보려면 번호를 바꾸세요",
         };
         grid.AddChild(_seed);
+        grid.AddChild(FieldLabel("만드는 방법"));
+        _method = new OptionButton
+        {
+            FocusMode = FocusModeEnum.None,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            TooltipText = "B-PCG 는 판·비·강을 계산해 만듭니다. 노이즈 비교본은 같은 크기·시드의 행성을 오늘날 게임처럼 노이즈만으로 "
+                + "만들어, 두 결과를 같은 화면에서 비교하게 합니다",
+        };
+        _method.AddItem("B-PCG (판·비·강 계산)", MethodBpcg);
+        _method.AddItem("노이즈 비교본 (오늘날 게임 방식)", MethodNoise);
+        _method.ItemSelected += OnMethodSelected;
+        grid.AddChild(_method);
 
         _profileNote = Ui.Label(Ui.FontSize - 2);
         _profileNote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
