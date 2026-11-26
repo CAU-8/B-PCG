@@ -1277,55 +1277,20 @@ public sealed class HeroVolume
         {
             sinkAllowed[c] = Rocks.Soluble[surfaceRock[c]] && !isRiver[c] && !isLake[c] && !isOcean[c];
         }
-        // 강가 샘: 아래층(지금 물이 흐르는 층)의 물은 그 물 높이를 정한 큰 물(강·호수·바다)로 빠집니다. 아래층이 있는 칸이
-        // 물 칸이거나, 둘레 여덟 칸에 수면이 그 층 높이 이하인 물 칸이 있으면 샘입니다 (통로는 물 높이에서 저항이 가장 작은
-        // 끝으로 빠지고, 샘의 자리가 지하수면을 정함: Audra & Palmer 2011). 굴은 따로 파지 않고 물가로 짧게 잇습니다.
+        // 강가 샘(CaveNetwork.BankSprings): 아래층(지금 물이 흐르는 층)의 물은 그 물 높이를 정한 큰 물(강·호수·바다)로 빠집니다.
+        // 히어로 단계도 같은 함수로 '사라지는 개울이 샘까지 닿는지'를 봅니다(KarstStreams.DrainsToSpring). 굴은 따로 파지 않고
+        // 물가로 짧게 잇습니다.
         double[] wlev = fields.GetFloat64("water_level_m");
         bool[] isWater = new bool[n];
         for (int c = 0; c < n; c++)
         {
             isWater[c] = (isRiver[c] || isLake[c] || isOcean[c]) && double.IsFinite(wlev[c]);
         }
-        int[] bankTo = new int[n];
-        Array.Fill(bankTo, -1);
+        (bool[] bankSpring, int[] bankTo) = CaveNetwork.BankSprings(
+            graph, CaveLevels[..n], isWater, wlev, outlet[..n]);
         for (int c = 0; c < n; c++)
         {
-            double lv = CaveLevels[c];
-            if (outlet[c] || !double.IsFinite(lv))
-            {
-                continue;
-            }
-            if (isWater[c])
-            {
-                outlet[c] = true;
-                continue;
-            }
-            int cj = c / nx;
-            int ci = c % nx;
-            int best = -1;
-            for (int dj = -1; dj <= 1; dj++)
-            {
-                for (int di = -1; di <= 1; di++)
-                {
-                    int j2 = cj + dj;
-                    int i2 = ci + di;
-                    if ((dj == 0 && di == 0) || j2 < 0 || j2 >= ny || i2 < 0 || i2 >= nx)
-                    {
-                        continue;
-                    }
-                    int nb = (j2 * nx) + i2;
-                    // 수면이 가장 낮은 물 칸으로 잇습니다 (같으면 번호가 작은 칸).
-                    if (isWater[nb] && wlev[nb] <= lv + 1e-6 && (best < 0 || wlev[nb] < wlev[best]))
-                    {
-                        best = nb;
-                    }
-                }
-            }
-            if (best >= 0)
-            {
-                outlet[c] = true;
-                bankTo[c] = best;
-            }
+            outlet[c] |= bankSpring[c];
         }
 
         // 아래층이 놓인 지층의 층리면 높이와 기운 정도. 통로가 층리면을 따라 물 높이 아래로 오르내리는 폭을 정합니다.
@@ -1342,6 +1307,16 @@ public sealed class HeroVolume
             {
                 streamLoss[c] = exchange[c] < 0.0 ? -exchange[c] : 0.0;
             }
+        }
+        // 개울이 사라지는 싱크홀의 길: 그린 아래층에, 지표에서 300 m(groundwater.max_depth_m)보다 깊어 굽지 않는 석회암의 아래
+        // 지하수면 높이를 더합니다. 히어로 단계가 같은 함수(Caves.RouteLevel0)와 같은 묶음 값으로 '샘까지 닿는지'를 보았습니다.
+        // 아래 지하수면 필드가 없는 옛 묶음은 그린 아래층만 씁니다.
+        double[]? route0 = null;
+        if (streamLoss is not null && fields.Contains("water_table_lower_m"))
+        {
+            route0 = Caves.RouteLevel0(
+                CaveLevels[..n], fields.GetFloat64("water_table_lower_m"), fields.GetFloat64("z_m"),
+                LayerColumns.FromColumns(StrataBottom, StrataRock, NLayers), cfg.F("groundwater.max_depth_m"));
         }
         // 아래 설정 키가 없는 묶음(이 키가 생기기 전의 히어로 묶음)은 통로 굵기를 시간으로 막지 않고, 꺼진 땅을 만들지 않습니다.
         Section cavesCfg = cfg.Sec("caves");
@@ -1361,7 +1336,8 @@ public sealed class HeroVolume
                 UpliftMPerYr: fields.Contains("uplift_m_per_yr") ? fields.GetFloat64("uplift_m_per_yr") : null,
                 BedZ: bedZ, DipSin: dipSin, StreamLossM3PerYr: streamLoss,
                 GroundAtNodes: cells => SurfaceHeight(
-                    Array.ConvertAll(cells, c => graph.Pos[c * 3]), Array.ConvertAll(cells, c => graph.Pos[(c * 3) + 1]))));
+                    Array.ConvertAll(cells, c => graph.Pos[c * 3]), Array.ConvertAll(cells, c => graph.Pos[(c * 3) + 1])),
+                StreamRouteLevel0: route0));
         BuildDolines(
             graph, area, sinkSpacing,
             cavesCfg.Contains("doline_radius_m") ? cfg.F("caves.doline_radius_m") : 0.0,

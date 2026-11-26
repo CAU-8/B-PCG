@@ -135,7 +135,8 @@
 | 채우고 넘치고 합치기 | `LakeBalance.Solve`, 기록 줄 `[3단계]`의 '호수 물수지' | 호수 물수지를 푸는 방법. 웅덩이 바닥마다 호수를 하나 두고 낮은 칸부터 잠그다가, 물이 모자라면 멈추고 남으면 증발을 뺀 나머지를 턱 너머 호수로 넘김. 두 호수의 수면이 턱에서 만나면 하나로 합침(Barnes 외 2021의 Fill–Spill–Merge에 증발을 넣은 것) | [pipeline.md](pipeline.md) 8.1 |
 | 넘치지 못하는 호수 | `lake_closed` | 들어오는 물보다 증발이 많아 넘칠 높이까지 차지 못한 호수(지구의 사해). 강이 여기서 끝나고 바다로 나가지 않음. 가장 깊은 곳의 물 깊이가 `lakes.min_depth_m`(2 m) 이상인 호수만 셈 | 스튜디오 '넘치지 못하는 호수' 지도 |
 | 마른 분지 | `LakeState.Dry`, 진단 `n_dry_basins` | 강이 끝나는데 호수가 없는 우묵한 자리(지구의 소금 평지). 들어오는 물이 가장 낮은 칸 하나도 잠그지 못하거나, 물 깊이가 `lakes.min_depth_m`에 못 미치는 자리. 들어온 물은 그 바닥에서 모두 증발함 | 기록 줄 `[3단계]`의 '마른 분지', [pipeline.md](pipeline.md) 8.1 |
-| 사라지는 개울, 마른 골짜기 | `karst_exchange_m3_per_yr`, `KarstStreams.Apply` | 석회암 땅에서 작은 개울이 바닥의 구멍으로 사라지고(값이 음수인 칸), 그 아래 골짜기가 물 없이 남는 것. 사라진 물은 큰 강가의 샘(값이 양수인 칸)으로 다시 나옴. 히어로 유역에만 있음 | 스튜디오 '땅속으로 사라지고 솟는 물' 지도, [pipeline.md](pipeline.md) 8.5 |
+| 사라지는 개울, 마른 골짜기 | `karst_exchange_m3_per_yr`, `KarstStreams.Apply`, `KarstStreams.DrainsToSpring` | 석회암 땅에서 작은 개울이 바닥의 구멍으로 사라지고(값이 음수인 칸), 그 아래 골짜기가 물 없이 남는 것. 아래층 동굴로 샘까지 물이 빠지는 자리에서만 사라지고(지표 아래 300 m보다 깊은 석회암을 지나는 길도 셈), 그 자리에는 늘 싱크홀이 있음. 사라진 물은 큰 강가의 샘(값이 양수인 칸)으로 다시 나옴. 히어로 유역에만 있음 | 스튜디오 '땅속으로 사라지고 솟는 물' 지도, [pipeline.md](pipeline.md) 8.5 |
+| 넘침 높이 | `CaveNetwork.SpillHead` | 석회암 속 물이 동굴을 타고 샘까지 빠지려면 차올라야 하는 가장 낮은 물 높이. 샘 쪽 길에 더 높은 턱이 있으면 그 턱의 높이. 개울 바닥이 이보다 10 m 넘게 높아야 개울이 땅속으로 사라짐 | [pipeline.md](pipeline.md) 8.5 |
 | 큰 물 | `KarstStreamResult.Big` | 바다, 호수, 그리고 땅속 통로가 다 삼키지 못할 만큼 큰 강. 석회암 지하수면의 기준. 작은 개울은 그 지하수면보다 높이 떠 있을 수 있어 기준이 되지 못함 | [pipeline.md](pipeline.md) 8.5 |
 | 골짜기 깊이 | valley depth | 강 둘레의 가장 높은 땅과 강 수면의 높이 차. 동굴 층의 높이를 정함 | — |
 | 흙 두께 | `soil_thickness_m` | 암석 위를 덮은 흙. 흙이 생기는 최대 속도(따뜻하고 습할수록 빠름)가 땅이 솟는 속도보다 빠를 때만 쌓이고, 아니면 0(맨 암반) | 스튜디오 흙 지도 |
@@ -152,7 +153,7 @@
 | 동굴 층 | `cave_level_0_m`, `cave_level_1_m` | 녹는 암석 안에 수평으로 뚫린 동굴 통로의 높이. 0층은 지금 지하수면 높이라 물에 잠김, 위층은 옛 강 높이라 마름 | Godot 동굴 레이어 |
 | 동굴 입구 | `cave_entrance` | 동굴 층이 강가(샘)나 골짜기 벽에서 지표와 만나는 칸. 같은 층 입구끼리 200 m 넘게 떨어짐. 3D 회랑에서는 이 칸 가운데 산 밖으로 열리고 싱크홀에서 온 물이 나오는 칸(샘)에만 입구 굴을 팜 | Godot T 키 |
 | 싱크홀 | `HeroVolume.SinkOpen`, `caves.sink_spacing_m`, `caves.sink_min_area_m2` | 석회암 지표에서 물이 땅속으로 들어가는 구멍. 두 가지: 빗물이 모이는 자리(서로 300 m 넘게 떨어짐)와 개울이 사라지는 자리. 지표에서 동굴 층까지 수직굴이 뚫려 있음 | Godot 회랑 |
-| 샘 | `HeroVolume.EntranceOpen`, `HeroVolume.NBankSprings` | 땅속을 흐른 물이 지표로 나오는 자리. 두 가지: 아래층의 물이 강·호수·바다와 만나는 강가 샘, 동굴 입구 후보 가운데 산 밖으로 열리는 골짜기 벽의 샘. 통로가 닿은 샘에만 굴(강가는 샘 구멍)을 둠 | Godot T 키 |
+| 샘 | `HeroVolume.EntranceOpen`, `HeroVolume.NBankSprings`, `CaveNetwork.BankSprings` | 땅속을 흐른 물이 지표로 나오는 자리. 두 가지: 아래층의 물이 강·호수·바다와 만나는 강가 샘, 동굴 입구 후보 가운데 산 밖으로 열리는 골짜기 벽의 샘. 통로가 닿은 샘에만 굴(강가는 샘 구멍)을 둠 | Godot T 키 |
 | 수직굴 | `CaveNetwork.SegIsShaft` | 싱크홀에서 동굴 층까지 곧게 내려가는 굴 | Godot 회랑 |
 | 꺼진 땅(돌리네) | `HeroVolume.DolineDepthAt`, `caves.doline_radius_m`, `caves.doline_depth_ratio`, `caves.doline_max_slope` | 싱크홀 둘레의 지표가 그릇 모양으로 꺼진 자리. 바닥의 구멍으로 물이 빠져서 물은 고이지 않음. 반지름 15~60 m, 깊이는 지름의 0.10배. 둘레 땅의 평균 경사가 약 12° 이하인 싱크홀에만 둠. 3D 회랑의 지표에만 만듦 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
 | 동굴 호수 | `CaveNetwork.Lakes`, `CaveNetwork.LoopDepth`, `CaveNetwork.SawtoothDepth` | 아래층 통로가 물 높이 아래로 내려간 구간에 고인 물. 물 깊이 2.5 m 이상이고 천장 아래에 0.5 m 이상 빈 곳이 남은 구간을 호수 하나로 셈. 통로는 기운 지층의 면을 따라 물 높이 아래로 내려갔다 올라오기를 되풀이하고, 천장까지 잠긴 구간은 물에 다 잠긴 통로임 | Godot 회랑, [pipeline.md](pipeline.md) 10장 4번 |
