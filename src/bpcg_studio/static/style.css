@@ -35,6 +35,10 @@
   --planet: #c8641b;
   --hero: #2a64ad;
   --bake: #6b4fa0;
+  --earth-gen: #c8641b; /* 진짜 지구와 비교: 생성 값 */
+  --earth-ref: #2a64ad; /* 지구 값 */
+  --earth-extra1: #6b4fa0;
+  --earth-extra2: #2f7d3e;
   --shadow: 0 1px 2px rgba(16, 22, 52, 0.06), 0 2px 8px rgba(16, 22, 52, 0.05);
   --sans: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR",
     "Segoe UI", sans-serif;
@@ -74,6 +78,10 @@
     --planet: #f0965a;
     --hero: #72aaf0;
     --bake: #b9a2ec;
+    --earth-gen: #f0965a;
+    --earth-ref: #72aaf0;
+    --earth-extra1: #b9a2ec;
+    --earth-extra2: #74c983;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
     color-scheme: dark;
   }
@@ -86,6 +94,7 @@
   --danger: #ee8a83; --danger-soft: #3a1c22; --cat-learn: #72aaf0; --cat-hand: #e7a35c;
   --cat-physics: #aab3d4; --cat-resolution: #b9a2ec; --cat-literature: #74c983;
   --cat-detail: #d7a978; --planet: #f0965a; --hero: #72aaf0; --bake: #b9a2ec;
+  --earth-gen: #f0965a; --earth-ref: #72aaf0; --earth-extra1: #b9a2ec; --earth-extra2: #74c983;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   color-scheme: dark;
 }
@@ -496,3 +505,29 @@ dialog.lightbox .close { position: absolute; right: 8px; top: 8px; }
   .stage { grid-template-columns: 22px minmax(0, 1fr) 64px; }
   .stage .phase { display: none; }
 }
+
+/* ---------------------------------------------------------------- 진짜 지구와 비교 (earth.js) */
+.earth-intro { display: grid; gap: 12px; }
+.earth-summary { display: flex; gap: 36px; flex-wrap: wrap; align-items: end; }
+.earth-summary .kv { gap: 2px; }
+.big-pct.muted { color: var(--muted); }
+.badge.kind-emergent { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+.badge.kind-forced { color: var(--muted); }
+.badge.kind-none { color: var(--faint); border-style: dashed; }
+.earth-table td:nth-child(3), .earth-table td:nth-child(4) { font-size: 0.82rem; max-width: 26ch; }
+.earth-table td:nth-child(5) { min-width: 120px; }
+.earth-row { cursor: pointer; }
+.earth-row:hover, .earth-row:focus-visible { background: var(--accent-soft); outline: none; }
+.earth-row.skipped .etitle { color: var(--muted); }
+.earth-row .caret { display: inline-block; width: 1.1em; color: var(--muted); }
+.earth-row .etitle { font-weight: 600; color: var(--fg-strong); }
+.earth-row .hint { margin-left: 1.1em; }
+.earth-detail > td { background: var(--panel); }
+.earth-detail-body { display: grid; gap: 8px; padding: 6px 4px 10px; }
+.earth-chart { width: 100%; max-width: 760px; height: auto; display: block; }
+.score { display: flex; gap: 8px; align-items: center; }
+.score-bar { flex: 1; min-width: 60px; height: 8px; border-radius: 4px; background: var(--line-soft); overflow: hidden; border: 1px solid var(--line); }
+.score-bar > i { display: block; height: 100%; background: var(--accent); }
+.earth-sources summary { cursor: pointer; }
+.earth-sources { display: grid; gap: 10px; }
+.earth-sources td.cite { font-size: 0.76rem; color: var(--muted); max-width: 48ch; }

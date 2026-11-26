@@ -441,6 +441,9 @@ def test_server_api_smoke(runs, tmp_path):
         assert np.isfinite(np.frombuffer(data, dtype="<f4")).all()
         probe = _get(base, "/api/probe?run=tiny&level=hero&px=1&py=1")
         assert probe["groups"]
+        earth = _get(base, "/api/earth?run=tiny")
+        assert "summary" in earth and "rows" in earth
+        assert b"renderEarth" in _get(base, "/static/earth.js", raw=True)
         ok = _post(
             base, "/api/validate", {"profile": "tiny", "overrides": {"landscape.theta": 0.5}}
         )

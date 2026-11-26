@@ -20,6 +20,7 @@ ThreadingHTTPServer 만 쓰고, 화면(static/)도 바깥 자원(CDN·글꼴) �
 | GET /api/figure?run=&name= | 그림 PNG |
 | GET /api/godot | Godot 상태 (찾은 경로, engine/baked 에 있는 실행) |
 | POST /api/godot/launch | 회랑 복사 → 가져오기 → 실행 {run, mode: play|editor} |
+| GET /api/earth?run= | 진짜 지구와 비교하는 지표 표 (earth.compare_run) |
 | /compare, /api/compare/* | 방법 비교 화면 (compare_api.py 의 표) |
 
 v= 는 브라우저 캐시를 구분하는 값이라 서버는 읽지 않습니다(늘 지금 파일을 보냄).
@@ -56,6 +57,7 @@ from bpcg_studio import __version__
 from bpcg_studio import godot as gd
 from bpcg_studio.compare_api import CompareService
 from bpcg_studio.config import load_config
+from bpcg_studio.earth import EarthService
 from bpcg_studio.jobs import JobError, JobManager, list_runs, resolve_run, validate_request
 from bpcg_studio.params import build_schema, planet_names, profile_names
 from bpcg_studio.paths import OUT
@@ -99,6 +101,7 @@ class Studio:
         self.views = ViewStore(self.out_dir / "studio" / ".cache")
         self.godot = gd.GodotRunner(baked_dir=baked_dir, log_dir=self.out_dir)
         self.compare = CompareService(self.out_dir / "compare")
+        self.earth = EarthService()
 
     def run_dir(self, q: dict) -> Path:
         return resolve_run(_one(q, "run"), self.out_dir)
@@ -325,6 +328,8 @@ def make_handler(app: Studio, port: int) -> type[BaseHTTPRequestHandler]:
             elif path == "/api/probe":
                 data = app.views.level(app.run_dir(q), _one(q, "level"))
                 self._json(data.probe(_int(q, "px"), _int(q, "py")))
+            elif path == "/api/earth":
+                self._json(app.earth.get(app.run_dir(q)))
             elif path == "/api/figure":
                 p = figure_path(app.run_dir(q), _one(q, "name"))
                 self._send(200, p.read_bytes(), "image/png")

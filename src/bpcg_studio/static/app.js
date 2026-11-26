@@ -753,6 +753,7 @@ async function loadSummary(force) {
     renderOverview();
     renderFigures();
     if (S.tab === "reference") buildReference();
+    if (S.tab === "earth" && typeof loadEarth === "function") loadEarth();
     if (S.tab === "planet" || S.tab === "hero") renderTab(S.tab);
   }
 }
@@ -771,7 +772,9 @@ function renderTab(tab) {
   else if (tab === "overview") renderOverview();
   else if (tab === "figures") renderFigures();
   else if (tab === "reference") buildReference();
-  else if (tab === "planet" || tab === "hero") {
+  else if (tab === "earth") {
+    if (typeof renderEarth === "function") renderEarth();
+  } else if (tab === "planet" || tab === "hero") {
     if (!S.maps[tab]) S.maps[tab] = new MapView(tab, $(`#tab-${tab}`));
     S.maps[tab].show();
   }
