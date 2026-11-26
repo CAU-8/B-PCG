@@ -14,9 +14,10 @@ namespace Bpcg.Engine;
 /// 나머지를 자식으로 만듭니다.
 /// Surround: 히어로 전체 25 m 지형 (surround25). 회랑 자리는 비워 고운 지형에 맡깁니다.
 /// Water: 호수·강 수면 (water). WaterTable: 지하수면 (water_table), 처음에는 숨기고 처음 켤 때 메시를 만듭니다.
-/// Caves: 동굴 메시 (caves.glb). Section: 단면 판, 재질 부피(strata.u8)를 3D 텍스처로 읽어 자르는 면에 칠합니다.
+/// Caves: 동굴 메시 (caves.glb) 와 걷기용 충돌체 (<see cref="CaveCollision"/>). Section: 단면 판, 재질 부피(strata.u8)를
+/// 3D 텍스처로 읽어 자르는 면에 칠합니다.
 /// 레이어 이름은 <see cref="Layers"/> 의 키입니다. "entrance_holes" 는 지형에 동굴 입구 구멍을 뚫는 선택입니다
-/// (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 뚫음). "fractal_detail" 은 회랑 지형을 프랙탈 디테일
+/// (cave_mouth: 지표 점의 동굴 거리, 음수인 곳을 그리지 않고 충돌면에도 구멍을 냄). "fractal_detail" 은 회랑 지형을 프랙탈 디테일
 /// 높이맵(heightmap_detail)으로 바꾸는 선택입니다. 보기용 지표이고 솔버 결과가 아닙니다. 파일이 있으면 처음부터 디테일
 /// 지형 하나만 만들고, 기본 지형은 다 불러온 뒤 다른 스레드에서 미리 준비해 두었다가 처음 끌 때 만듭니다.
 /// </remarks>
@@ -92,6 +93,7 @@ public partial class BakedLayers : Node3D
         ("strata", "암석 색 텍스처 만드는 중"),
         ("surround", "주변 지형 메시와 충돌면 만드는 중"),
         ("water_caves", "물과 동굴 만드는 중"),
+        ("cave_collision", "동굴 충돌면 만드는 중"),
         ("section", "지층 단면과 동굴 입구 준비하는 중"),
     ];
 
@@ -133,6 +135,16 @@ public partial class BakedLayers : Node3D
     public int CaveFaces { get; private set; }
 
     public string CaveSource { get; private set; } = "";
+
+    /// <summary>동굴 충돌체 (없으면 null) 와 그 조각 수·삼각형 수.</summary>
+    public StaticBody3D? CaveBody { get; private set; }
+
+    public int CaveCollisionTiles { get; private set; }
+
+    public int CaveCollisionFaces { get; private set; }
+
+    /// <summary>회랑 가장자리 땅속 벽 (동굴이 없으면 null). 회랑 밖으로 잘린 통로 끝에서 땅속으로 떨어지지 않게 막습니다.</summary>
+    public StaticBody3D? CaveEdgeWall { get; private set; }
 
     /// <summary>단면이 켜져 있는지, 자르는 면의 한 점과 법선 (카메라 쪽).</summary>
     public bool SectionOn { get; private set; }
@@ -196,6 +208,13 @@ public partial class BakedLayers : Node3D
             LoadMs["read_" + key] = ms;
         }
 
+        // 지형을 만들 때 동굴 입구 자리의 충돌면을 바로 비우도록, 입구 높이맵을 먼저 넣어 둡니다.
+        foreach ((string name, HeightmapLoader mouth) in files.Mouths)
+        {
+            _mouths[name] = mouth;
+        }
+        terrain.HoleMouth = MouthForSurface;
+
         yield return 0;
         if (files.Terrain is not null)
         {
@@ -216,10 +235,6 @@ public partial class BakedLayers : Node3D
         YOffsetM = files.YOffsetM;
         CorridorRect = files.CorridorRect;
         _baseHeightmap = files.BaseHeightmap;
-        foreach ((string name, HeightmapLoader mouth) in files.Mouths)
-        {
-            _mouths[name] = mouth;
-        }
 
         yield return 1;
         Strata = files.Strata;
@@ -259,11 +274,17 @@ public partial class BakedLayers : Node3D
         BuildCaves(files);
 
         yield return 4;
+        foreach (int _ in BuildCaveCollision())
+        {
+            yield return 4;
+        }
+
+        yield return 5;
         BuildSection();
         EntrancesInside.AddRange(files.EntrancesInside);
         EntrancesOutside.AddRange(files.EntrancesOutside);
         SetSection(false);
-        yield return 4;
+        yield return 5;
         SetupFractalDetail(files);
         Loaded = true;
     }
@@ -340,6 +361,7 @@ public partial class BakedLayers : Node3D
             case "entrance_holes":
                 _entranceHoles = on;
                 _terrainMaterial?.SetShaderParameter("open_entrances", on);
+                _terrain.SetHolesOpen(on);
                 break;
             case "fractal_detail":
                 on = UseDetailSurface(on);
@@ -446,6 +468,87 @@ public partial class BakedLayers : Node3D
         _terrainMaterial.SetShaderParameter("mouth_spacing_m", mouth.SpacingM);
         _terrainMaterial.SetShaderParameter("mouth_size", new Vector2(mouth.Width, mouth.Height));
         _visible["entrance_holes"] = _entranceHoles;
+    }
+
+    /// <summary>
+    /// 회랑 지표 높이맵 경로 → 그 지표의 동굴 입구 높이맵 (지형 충돌면의 구멍, HeightmapTerrain.HoleMouth).
+    /// 셰이더가 그리지 않는 자리(ApplyCaveMouth)와 같은 파일을 고릅니다. 파일이 없으면 null.
+    /// 구멍을 열지 닫을지는 '동굴 입구 구멍' 레이어가 정합니다 (HeightmapTerrain.SetHolesOpen).
+    /// </summary>
+    private HeightmapLoader? MouthForSurface(string stem)
+    {
+        string? name = stem == BakedPaths.Resolve(DetailStem) ? CaveMouthDetailName
+            : stem == BakedPaths.Resolve(_baseStem) ? CaveMouthName : null;
+        // 지형 재질이 없으면 그림에 구멍을 낼 수 없으므로 충돌면도 막아 둡니다.
+        if (name is null || _terrainMaterial is null)
+        {
+            return null;
+        }
+        HeightmapLoader mouth = LoadMouth(name);
+        if (!mouth.IsValid() && name != CaveMouthName)
+        {
+            mouth = LoadMouth(CaveMouthName);
+        }
+        return mouth.IsValid() ? mouth : null;
+    }
+
+    /// <summary>
+    /// 동굴 메시에 걷기용 충돌체를 붙이고(충돌 조각 하나마다 한 번 돌려줌), 회랑 가장자리 땅속에 벽을 세우고, 주변 지형
+    /// 충돌면의 회랑 안 겹침 띠에서 동굴 자리를 비웁니다 (CaveCollision). 동굴이 없으면 아무것도 하지 않습니다.
+    /// </summary>
+    private IEnumerable<int> BuildCaveCollision()
+    {
+        if (_caves is null)
+        {
+            yield break;
+        }
+        var result = new CaveCollision.Result();
+        foreach (int step in CaveCollision.BuildSteps(_caves, result))
+        {
+            yield return step;
+        }
+        (CaveBody, CaveCollisionTiles, CaveCollisionFaces) = (result.Body, result.Tiles, result.Faces);
+        if (CaveBody is null)
+        {
+            yield break;
+        }
+        if (_terrain.Heightmap is HeightmapLoader surface && surface.IsValid())
+        {
+            float bottom = (_caves.Transform * new Vector3(0.0f, result.MinY, 0.0f)).Y - 1.0f;
+            CaveEdgeWall = CaveCollision.BuildEdgeWall(this, CorridorRect, surface, bottom);
+        }
+        yield return 0;
+        _surround?.ClearCollisionAt(CaveFootprint(result.Centers));
+    }
+
+    /// <summary>
+    /// 동굴이 차지하는 자리 (엔진 좌표 점): 동굴 충돌 삼각형마다 세 꼭짓점의 가운데(centers, 동굴 노드 기준)와, 입구
+    /// 높이맵(cave_mouth, cave_mouth_detail)이 음수인 표본. 주변 지형 충돌면이 회랑 안 겹침 띠에서 이 자리를 비웁니다
+    /// (HeightmapTerrain.ClearCollisionAt).
+    /// </summary>
+    private List<Vector3> CaveFootprint(IReadOnlyList<Vector3> centers)
+    {
+        var points = new List<Vector3>(centers.Count);
+        if (_caves is not null)
+        {
+            Transform3D xf = _caves.Transform;
+            foreach (Vector3 c in centers)
+            {
+                points.Add(xf * c);
+            }
+        }
+        foreach (string name in new[] { CaveMouthName, CaveMouthDetailName })
+        {
+            HeightmapLoader mouth = LoadMouth(name);
+            for (int i = 0; mouth.IsValid() && i < mouth.Heights.Length; i++)
+            {
+                if (mouth.Heights[i] < 0.0f)
+                {
+                    points.Add(mouth.SamplePosition(i));
+                }
+            }
+        }
+        return points;
     }
 
     private HeightmapLoader LoadMouth(string fileName)

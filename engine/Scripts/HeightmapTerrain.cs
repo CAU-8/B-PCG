@@ -16,6 +16,8 @@ namespace Bpcg.Engine;
 /// 계산하고 (주 스레드 밖에서 불러도 됨), <see cref="ApplySteps"/> 가 그 결과로 노드를 만듭니다 (주 스레드, 메시 덩어리나
 /// 충돌 조각 하나씩). 메시 Mesh 는 덩어리마다 면(surface) 하나이고, 충돌체 Body 아래에는 정사각 조각 Shape0, Shape1, … 이
 /// 있습니다 (<see cref="HeightmapLoader.BuildMeshChunks"/>, <see cref="HeightmapLoader.BuildShapeTiles"/>).
+/// <see cref="HoleMouth"/> 를 넣으면 동굴 입구 자리의 충돌면에 구멍을 뚫습니다 (구멍 닿은 조각을 바꾸고 Body/HolePatch 를 붙임).
+/// 구멍을 닫을 때(<see cref="SetHolesOpen"/>)는 Body/HolePlug 를 붙입니다.
 /// </remarks>
 public partial class HeightmapTerrain : Node3D
 {
@@ -35,7 +37,10 @@ public partial class HeightmapTerrain : Node3D
     [Export]
     public float SkirtM { get; set; }
 
-    /// <summary>이 사각형(국소 X, Z) 안은 충돌면을 아래로 내립니다. 넓이 0 이면 끔.</summary>
+    /// <summary>
+    /// 이 사각형(국소 X, Z) 자리는 충돌면을 비워 더 고운 지형에 맡깁니다. 넓이 0 이면 끔. 두 지형이 이어지도록 경계 안쪽
+    /// 한 칸 띠는 남깁니다. 그 띠에서도 동굴 자리는 <see cref="ClearCollisionAt"/> 로 비웁니다.
+    /// </summary>
     [Export]
     public Rect2 CollisionHole { get; set; }
 
@@ -55,7 +60,34 @@ public partial class HeightmapTerrain : Node3D
     /// <summary>메시와 충돌면을 새로 만든 횟수. 전에 만든 경로를 다시 쓰면 세지 않습니다 (검사용).</summary>
     public int BuildCount { get; private set; }
 
-    private sealed record Built(HeightmapLoader Heightmap, ArrayMesh Mesh, HeightMapShape3D[] Shapes, Transform3D[] ShapeTransforms);
+    /// <summary>
+    /// 높이맵 경로 → 그 지표의 동굴 입구 높이맵 (cave_mouth: 지표 점에서 동굴까지의 거리, 음수면 동굴 빈 곳 안).
+    /// 돌려준 높이맵이 음수인 자리에 충돌면 구멍을 뚫어, 걷는 플레이어가 입구로 동굴에 들어갈 수 있게 합니다.
+    /// null 이거나 null 을 돌려주면 구멍이 없는 충돌면입니다. BakedLayers 가 지형을 만들기 전에 넣습니다.
+    /// </summary>
+    public Func<string, HeightmapLoader?>? HoleMouth { get; set; }
+
+    /// <summary>
+    /// 동굴 입구 구멍을 열어 둘지. false 면 구멍 자리에 마개(<see cref="HeightmapLoader.HoleSet.Plug"/>)를 붙여 막습니다.
+    /// 충돌 조각은 그대로 두고 작은 마개만 붙였다 떼므로 바로 바뀝니다. <see cref="SetHolesOpen"/> 으로 바꿉니다.
+    /// </summary>
+    public bool HolesOpen { get; private set; } = true;
+
+    /// <summary>지금 열려 있는 충돌면 구멍 (구멍이 없거나 닫혀 있으면 null).</summary>
+    public HeightmapLoader.HoleSet? Holes { get; private set; }
+
+    private sealed record Built(
+        HeightmapLoader Heightmap, ArrayMesh Mesh, HeightMapShape3D[] Shapes, Transform3D[] ShapeTransforms, IReadOnlyList<ShapeTile> Tiles);
+
+    /// <summary>구멍을 뚫은 충돌면의 Godot 모양: 바뀐 조각 (조각 번호 → 모양), 덧판, 마개.</summary>
+    private sealed record HoleShapes(
+        HeightmapLoader.HoleSet Set, Dictionary<int, HeightMapShape3D> Tiles, ConcavePolygonShape3D? Patch, ConcavePolygonShape3D? Plug);
+
+    /// <summary>(높이맵 경로, 입구 높이맵 경로) → 구멍을 뚫은 충돌면. 입구 구멍·프랙탈 디테일을 켜고 끌 때 다시 만들지 않습니다.</summary>
+    private readonly Dictionary<(string Stem, string Mouth), HoleShapes> _holes = [];
+
+    /// <summary>주변 지형이 회랑 안 겹침 띠에서 비운 동굴 자리 (<see cref="ClearCollisionAt"/>, 없으면 null).</summary>
+    private HoleShapes? _cleared;
 
     /// <summary>경로 → 그 경로로 마지막에 만든 높이맵·메시·충돌 모양. Rebuild(true) 가 다시 씁니다.</summary>
     private readonly Dictionary<string, Built> _built = [];
@@ -142,8 +174,10 @@ public partial class HeightmapTerrain : Node3D
             body.AddChild(new CollisionShape3D { Name = $"Shape{i}", Shape = shapes[i], Transform = prepared.Tiles[i].Transform });
             yield return ++step;
         }
-        _built[prepared.Stem] = new Built(prepared.Heightmap, mesh, shapes, prepared.Tiles.Select(t => t.Transform).ToArray());
+        _built[prepared.Stem] = new Built(
+            prepared.Heightmap, mesh, shapes, prepared.Tiles.Select(t => t.Transform).ToArray(), prepared.Tiles);
         BuildCount++;
+        ApplyHoles();
     }
 
     /// <summary>
@@ -268,6 +302,144 @@ public partial class HeightmapTerrain : Node3D
             body.AddChild(new CollisionShape3D { Name = $"Shape{i}", Shape = built.Shapes[i], Transform = built.ShapeTransforms[i] });
         }
         AddChild(body);
+        ApplyHoles();
+    }
+
+    /// <summary><see cref="HoleMouth"/> 를 넣거나 바꾼 뒤 지금 충돌면에 구멍을 뚫거나 없앱니다.</summary>
+    public void RefreshHoles() => ApplyHoles();
+
+    /// <summary>동굴 입구 구멍을 열거나(마개를 뗌) 닫습니다(마개를 붙임).</summary>
+    public void SetHolesOpen(bool open)
+    {
+        HolesOpen = open;
+        ApplyHoles();
+    }
+
+    /// <summary>
+    /// 이 노드 기준 국소 좌표 (x, z) 가 충돌면 구멍 가까이 (비운 표본을 꼭짓점으로 갖는 칸 안) 인지. 구멍이 없으면 false.
+    /// 이런 칸의 충돌면은 높이맵과 다를 수 있습니다 (구멍이거나 덧판).
+    /// </summary>
+    public bool NearHole(Vector3 localPos)
+    {
+        if (Holes is null || Heightmap is null || !Heightmap.IsValid())
+        {
+            return false;
+        }
+        HeightmapLoader hm = Heightmap;
+        int col = Mathf.FloorToInt((localPos.X - hm.Origin.X) / hm.SpacingM);
+        int row = Mathf.FloorToInt((localPos.Z - hm.Origin.Z) / hm.SpacingM);
+        for (int r = row; r <= row + 1; r++)
+        {
+            for (int c = col; c <= col + 1; c++)
+            {
+                if (r >= 0 && c >= 0 && r < hm.Height && c < hm.Width && Holes.IsOpen((r * hm.Width) + c))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// <see cref="CollisionHole"/> 안 겹침 띠에서 points (국소 좌표, x·z 만 씀) 가 든 삼각형의 CollisionHole 안 부분을
+    /// 충돌면에서 뺍니다 (<see cref="HeightmapLoader.BuildRectClear"/>). 주변 지형의 보이지 않는 면이 동굴을 막지 않게
+    /// 동굴 충돌면과 입구 구멍 자리를 넣습니다. 지형을 만든 뒤 한 번 부릅니다. 반환: 바꾼 충돌 조각 수.
+    /// </summary>
+    public int ClearCollisionAt(IReadOnlyCollection<Vector3> points)
+    {
+        if (!CollisionHole.HasArea() || points.Count == 0 || Heightmap is null || !_built.TryGetValue(UsedStem, out Built? built))
+        {
+            return 0;
+        }
+        HeightmapLoader.HoleSet set = Heightmap.BuildRectClear(CollisionHole, points, built.Tiles);
+        _cleared = ToShapes(set, built.Tiles);
+        foreach ((int i, HeightMapShape3D shape) in _cleared.Tiles)
+        {
+            // 다시 쓸 때(Use)도 비운 조각을 쓰도록 만들어 둔 모양을 바꿉니다.
+            built.Shapes[i] = shape;
+        }
+        ApplyHoles();
+        return _cleared.Tiles.Count;
+    }
+
+    /// <summary>
+    /// 지금 높이맵과 HoleMouth 의 답에 맞게 충돌 조각(Body/Shape0, …)의 모양과 Body/HolePatch(덧판), Body/HolePlug(마개),
+    /// Body/RectPatch(주변 지형의 회랑 띠 덧판)를 정합니다.
+    /// </summary>
+    private void ApplyHoles()
+    {
+        if (GetNodeOrNull<StaticBody3D>("Body") is not StaticBody3D body || !_built.TryGetValue(UsedStem, out Built? built))
+        {
+            return;
+        }
+        HoleShapes? holes = null;
+        HeightmapLoader? mouth = HoleMouth?.Invoke(UsedStem);
+        if (mouth is not null && mouth.IsValid() && built.Heightmap.IsValid())
+        {
+            (string, string) key = (UsedStem, mouth.Stem);
+            if (!_holes.TryGetValue(key, out holes))
+            {
+                holes = ToShapes(built.Heightmap.BuildHoleSet(mouth, built.Tiles), built.Tiles);
+                _holes[key] = holes;
+            }
+        }
+        for (int i = 0; i < built.Shapes.Length; i++)
+        {
+            Shape3D want = holes is not null && holes.Tiles.TryGetValue(i, out HeightMapShape3D? open) ? open : built.Shapes[i];
+            if (body.GetNodeOrNull<CollisionShape3D>($"Shape{i}") is CollisionShape3D node && node.Shape != want)
+            {
+                node.Shape = want;
+            }
+        }
+        SetChildShape(body, "HolePatch", holes?.Patch);
+        SetChildShape(body, "HolePlug", holes is not null && !HolesOpen ? holes.Plug : null);
+        SetChildShape(body, "RectPatch", _cleared?.Patch);
+        Holes = holes is not null && HolesOpen && holes.Set.Open.Length > 0 ? holes.Set : null;
+    }
+
+    /// <summary>구멍 계산 결과를 Godot 충돌 모양으로 바꿉니다 (주 스레드). 덧판·마개는 높이맵처럼 앞뒤 양면을 막습니다.</summary>
+    private static HoleShapes ToShapes(HeightmapLoader.HoleSet set, IReadOnlyList<ShapeTile> tiles)
+    {
+        var tileShapes = new Dictionary<int, HeightMapShape3D>();
+        foreach ((int i, float[] data) in set.TileData)
+        {
+            tileShapes[i] = new HeightMapShape3D { MapWidth = tiles[i].Size, MapDepth = tiles[i].Size, MapData = data };
+        }
+        return new HoleShapes(set, tileShapes, Trimesh(set.Patch), Trimesh(set.Plug));
+    }
+
+    private static ConcavePolygonShape3D? Trimesh(Vector3[] faces)
+    {
+        if (faces.Length == 0)
+        {
+            return null;
+        }
+        var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
+        shape.SetFaces(faces);
+        return shape;
+    }
+
+    /// <summary>body 아래 name 이라는 충돌 모양 노드를 shape 로 맞춥니다 (null 이면 노드를 뗌).</summary>
+    private static void SetChildShape(StaticBody3D body, string name, Shape3D? shape)
+    {
+        CollisionShape3D? node = body.GetNodeOrNull<CollisionShape3D>(name);
+        if (shape is null)
+        {
+            if (node is not null)
+            {
+                body.RemoveChild(node);
+                node.QueueFree();
+            }
+        }
+        else if (node is null)
+        {
+            body.AddChild(new CollisionShape3D { Name = name, Shape = shape });
+        }
+        else if (node.Shape != shape)
+        {
+            node.Shape = shape;
+        }
     }
 
     private void ClearChildren()

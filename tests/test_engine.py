@@ -18,11 +18,15 @@ Godot 는 사용자 폴더에 설정과 user:// 를 쓰므로 HOME (리눅스 XD
   그 실행으로 회랑·지구본 검사를 돌려 레이어·동굴 삼각형·입구 수·지구본 필드 수가 굽기 결과와
   같은지 봄. 회랑을 여러 프레임에 나눠 불러오는지, 지형을 한 번만 만드는지, 충돌면 조각의 솔기를
   넘어 걷는지, --baked-dir 로 띄워도 처음 화면으로 돌아오는지도 봄.
+  동굴 메시가 있으면 동굴 충돌면이 메시 삼각형을 모두 담는지, 걷다 떨어지면 처음 자리로
+  돌아오는지(낙하 한계)도 봄.
 - test_engine_shows_load_problems: 망가진 동굴 메시와 빠진 지하수면 파일을 화면의 '불러오기 문제'
   상자에 띄우고, 나머지 레이어로 회랑을 여는지 봄.
 - test_engine_matches_cli: 엔진 안 생성 결과가 C# 콘솔(Bpcg.Cli all)과 파일까지 같은지 봄
   (manifest 의 걸린 시간 'seconds'·'*_seconds' 만 뺌).
 - test_engine_loads_console_bake: 콘솔로 구운 동굴 회랑과 지구본 약속 대체 자료도 읽는지 봄.
+  2 m 로 구운 동굴 회랑에서 걷는 플레이어가 입구로 걸어 들어가 통로 바닥에 서고,
+  입구 구멍마다 떨어져 동굴 바닥에 서는지도 봄.
 - test_engine_globe_malformed: .bin 크기가 틀린 지구본에 '읽지 못했습니다' 알림이 뜨는지 봄.
 - test_fixture_globe_follows_contract: 대체 자료 자체가 약속을 지키는지 (Godot 없이).
 """
@@ -278,6 +282,14 @@ def test_engine_generates_and_loads(engine, generated_run):
     assert "불러오기: " in out and "지형 메시 1번 만듦" in out
     assert "충돌 조각: " in out and "솔기 걷기: " in out
     assert "처음 화면: --baked-dir 건너뛰기는 처음 한 번만" in out
+    if "caves" in man["file_meta"]:
+        # tiny 회랑(8 m 간격)은 가장 가는 통로(반지름 2 m)를 그리지 못해
+        # 걸어 들어가기를 건너뜁니다.
+        assert f"동굴 걷기: 충돌 삼각형 {man['file_meta']['caves']['faces']} " in out
+        assert "걸어 들어가기는 건너뜀 (회랑 간격 8 m" in out
+    else:
+        assert "동굴 걷기: 동굴 메시가 없어 건너뜁니다" in out
+    assert "그 아래로 떨어지면 처음 자리로 돌아옴" in out
 
     # 굽기 폴더가 실행의 corridor/ 이면 지구본은 옆의 globe/ 에서 찾습니다.
     out = _scene(engine, GLOBE_SCENE, _baked(corridor), "--expect-globe", ok="BPCG_GLOBE_OK")
@@ -346,6 +358,16 @@ def test_engine_loads_console_bake(engine, cave_run, tmp_path):
     out = _scene(engine, SMOKE_SCENE, _baked(baked), "--expect-baked", ok="BPCG_SMOKE_OK")
     assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
     assert f"입구 {man['caves']['n_entrances']}," in out
+    # 2 m 로 구운 동굴 회랑: 동굴 충돌체가 메시 삼각형을 모두 담고, 걸어서 입구로 들어가고,
+    # 플레이어가 지나갈 만큼 넓은 입구 구멍마다 떨어져 동굴 바닥에 섭니다.
+    # 떨어져 보는 구멍은 6곳까지입니다.
+    faces = man["file_meta"]["caves"]["faces"]
+    assert f"동굴 걷기: 충돌 삼각형 {faces} " in out
+    walked = r"\d+번 입구로 [\d.]+ m 걸어 들어가 지표 [\d.]+ m 아래 통로 바닥에 섬"
+    assert re.search(walked, out), out
+    drops = re.search(r"넓은 곳 (\d+)곳\) 가운데 (\d+)곳에 떨어져 동굴 바닥에 섬", out)
+    assert drops and int(drops.group(2)) == min(int(drops.group(1)), 6) > 0, out
+    assert "그 아래로 떨어지면 처음 자리로 돌아옴" in out
     out = _scene(engine, GLOBE_SCENE, _baked(baked), "--expect-globe", ok="BPCG_GLOBE_OK")
     assert f"필드 {len(meta['fields'])} 개 모두 고름" in out
     assert "이름표 '히어로 유역 (" in out

@@ -10,6 +10,7 @@ namespace Bpcg.Engine;
 /// 노클립(기본): 땅과 동굴 벽을 뚫고 바라보는 방향으로 납니다. WASD 로 움직이고, Space·E 로 오르고,
 /// Q·Ctrl 로 내립니다. Shift 를 누르면 FastMultiplier 배 빠르고, 마우스 휠이나 트랙패드 두 손가락 스크롤로 속력을 바꿉니다.
 /// 걷기: WASD 로 걷고 Space 로 뜁니다. 중력은 프로젝트 설정(physics/3d/default_gravity)을 따릅니다.
+/// 땅과 동굴 벽에 막히고, 지형의 동굴 입구 구멍(입구 굴, 싱크홀)으로 동굴에 들어가 통로 바닥을 걷습니다.
 /// 화면을 누르면 마우스로 둘러보고, Esc 로 마우스를 놓습니다.
 /// </remarks>
 public partial class Player : CharacterBody3D
@@ -51,7 +52,10 @@ public partial class Player : CharacterBody3D
     [Export]
     public float MouseSensitivityRad { get; set; } = 0.002f;
 
-    /// <summary>걷기에서 이 높이 (m) 아래로 떨어지면 처음 자리로 돌려놓습니다.</summary>
+    /// <summary>
+    /// 걷기에서 이 높이 (엔진 Y, m) 아래로 떨어지면 처음 자리로 돌려놓습니다. 동굴 벽 틈 같은 곳으로 세상 밖에 떨어진 경우입니다.
+    /// Main 이 지형·주변 지형·동굴 가운데 가장 낮은 면보다 <see cref="Main.FallMarginM"/> 아래로 다시 정합니다.
+    /// </summary>
     [Export]
     public float FallLimitYM { get; set; } = -1000.0f;
 
@@ -60,6 +64,12 @@ public partial class Player : CharacterBody3D
     /// 걷기로 바꿀 때 땅속이면 지면 위로 올립니다.
     /// </summary>
     public Func<Vector3, float>? GroundHeightAt { get; set; }
+
+    /// <summary>
+    /// 전역 위치가 땅속 동굴의 빈 곳 안인지 돌려주는 함수. Main 이 넣습니다.
+    /// 몸 가운데가 동굴 안이면 걷기로 바꿔도 지면 위로 올리지 않고, 그 자리에서 동굴 바닥으로 내려섭니다.
+    /// </summary>
+    public Func<Vector3, bool>? InCaveAt { get; set; }
 
     public Node3D Head { get; private set; } = null!;
 
@@ -167,6 +177,7 @@ public partial class Player : CharacterBody3D
     /// <summary>
     /// 발이 지면 아래(또는 지면에 거의 붙어)면 지면 위 0.5 m 로 올리고 아래로 가던 속도를 없앱니다.
     /// 지형 높이맵이 바뀔 때(프랙탈 디테일) 걷는 플레이어가 새 땅속에 묻히지 않게 씁니다. 올렸으면 true.
+    /// 몸 가운데가 동굴 빈 곳 안이면(<see cref="InCaveAt"/>) 동굴에 있는 것이므로 올리지 않습니다.
     /// </summary>
     public bool LiftAboveGround()
     {
@@ -176,6 +187,10 @@ public partial class Player : CharacterBody3D
         }
         float ground = GroundHeightAt(GlobalPosition);
         if (!float.IsFinite(ground) || GlobalPosition.Y >= ground + 0.1f)
+        {
+            return false;
+        }
+        if (InCaveAt is not null && InCaveAt(Shape.GlobalPosition))
         {
             return false;
         }

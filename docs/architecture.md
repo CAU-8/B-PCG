@@ -402,6 +402,7 @@ $$S(c, l) = \max\!\left(S_{\min},\ \min\!\left(S_{\text{crit}, l},\ \frac{1}{1 /
 
 - **회랑 장면(`scenes/main.tscn`, `Scripts/Main.cs`)**: 구운 폴더(`<실행>/corridor/`)에서 2 m 높이맵(`heightmap.bin`), 주변 25 m 지형(`surround25.bin`), 수면(`water.bin`), 지하수면(`water_table.bin`, `water_table_lower.bin`), 동굴 메시(`caves.glb`), 3D 재질 부피(`strata.u8`, `strata_top.bin`)를 읽습니다(`Scripts/BakedLayers.cs`).
   - `HeightmapTerrain.cs`가 높이맵 한 장을 통째로 메시와 충돌체로 만듭니다. 카메라 거리에 따라 해상도를 바꾸는 기능(LOD)은 없습니다.
+  - 걷기 모드에서 동굴에 들어갈 수 있습니다. `CaveCollision.cs`가 동굴 메시를 128 m 조각으로 나눠 조각마다 충돌체를 붙이고, `HeightmapLoader.BuildHoleSet`이 동굴 입구 자리(`cave_mouth.bin`이 음수인 곳)의 지형 충돌면에 구멍을 뚫습니다([engine/README.md](../engine/README.md) '동굴 걸어 들어가기').
   - 플레이어가 `X` 키를 누르면 눈앞 15 m에 단면 칼(눈앞의 땅을 잘라 속 지층을 보여 주는 세로 평면)을 세웁니다. 지형 셰이더(`shaders/cross_section.gdshader`)가 그 면과 눈 사이의 땅을 지웁니다. 단면 셰이더(`shaders/strata_section.gdshader`)가 잘린 면에 `strata.u8` 3차원 텍스처에서 읽은 암석 색을 칠하고, 아래 지하수면 아래를 파랗게 물들이고, 두 지하수면에 선을 긋습니다. 동굴 자리는 비워서 뒤의 동굴 메시가 보이게 합니다.
 - **지구본 장면(`scenes/globe.tscn`, `Scripts/GlobeMain.cs`)**: `<실행>/globe/` 폴더의 목차 `globe.json`과 레이어마다 하나씩인 `.bin` 13개(고도, 칸 안 기복, 판, 판 경계, 지각 종류, 융기 속도, 해양저 나이, 기온, 강수량, 강 유량, 지표 암석, 지층이 쌓인 순서, 동굴), 겹쳐 그리는 강·호수(`rivers.bin`, `lakes.bin`), 꼭짓점 고도(`corners_elevation_m.bin`)를 읽습니다. 행성을 돌려 보며 레이어를 바꿔 칠하고, 히어로 유역이 행성 어디에 자리 잡았는지 주황 핀으로 표시합니다. 파일 형식은 [engine/GLOBE.md](../engine/GLOBE.md)에 있습니다.
 

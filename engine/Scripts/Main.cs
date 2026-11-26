@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 
@@ -37,6 +38,20 @@ public partial class Main : Node3D
     public const float EntranceBackoffM = 4.0f;
 
     public const float EntranceEyeUpM = 1.0f;
+
+    /// <summary>걷기로 입구 앞에 설 때: 굴 축을 따라 지표를 재는 간격, 입구 아래 가장자리에서 밖으로 물러나는 거리 (m).</summary>
+    public const float EntranceStepM = 0.25f;
+
+    public const float EntranceStandBackM = 0.6f;
+
+    /// <summary>입구 구멍 한가운데에서 동굴 바닥을 찾는 깊이 (m). 통로 반지름의 위 한계(3 m)의 두 배보다 조금 깊게.</summary>
+    public const float EntranceFloorSearchM = 8.0f;
+
+    /// <summary>
+    /// 낙하 한계: 걷는 플레이어가 지형·주변 지형·동굴 가운데 가장 낮은 면보다 이만큼(m) 아래로 떨어지면 처음 자리로 돌려놓습니다.
+    /// 그 아래에는 설 땅이 없으므로, 동굴 바닥이나 깊은 골짜기에 선 플레이어는 되돌려지지 않습니다.
+    /// </summary>
+    public const float FallMarginM = 100.0f;
 
     /// <summary>상태 글을 다시 쓰는 간격 (s).</summary>
     public const double StatusIntervalS = 0.1;
@@ -104,6 +119,7 @@ public partial class Main : Node3D
 
         Baked.SectionAnchor = SectionInFront;
         Player.GroundHeightAt = GroundY;
+        Player.InCaveAt = InCave;
         Hud.ActionRequested += OnHudAction;
         Baked.TerrainRebuilt += OnTerrainRebuilt;
         StartLoading();
@@ -201,6 +217,7 @@ public partial class Main : Node3D
         LoadSeconds = seconds;
         float clearance = Player.Noclip ? NoclipSpawnClearanceM : 2.0f;
         Player.GlobalPosition = Terrain.SpawnPoint(clearance);
+        Player.FallLimitYM = LowestSolidY() - FallMarginM;
         Player.RememberSpawn();
         Player.ProcessMode = ProcessModeEnum.Inherit;
         Hud.BindLayers(Baked);
@@ -364,7 +381,14 @@ public partial class Main : Node3D
         UpdateOptionLabels();
     }
 
-    /// <summary>step 번째 다음 동굴 입구 앞으로 옮겨 입구 안쪽을 봅니다 (노클립으로 바꿈).</summary>
+    /// <summary>지금 보고 있는 동굴 입구 번호 (entrances.json 순서, 0 부터). 아직 T 를 누르지 않았으면 −1.</summary>
+    public int EntranceIndex => _entranceIndex;
+
+    /// <summary>
+    /// step 번째 다음 동굴 입구 앞으로 옮겨 입구 안쪽을 봅니다. 걷는 중이면 입구 아래 가장자리 바로 밖 땅에 세워,
+    /// 앞으로 걸으면 굴로 들어가게 합니다(<see cref="EntranceStand"/>). 설 자리가 없는 입구(지표로 열린 구멍이 없는 굴 등)는
+    /// 같은 방향으로 건너뜁니다. 날고 있거나 설 자리가 있는 입구가 하나도 없으면 노클립으로 산비탈 밖 공중에서 봅니다.
+    /// </summary>
     public void GoToEntrance(int step)
     {
         int n = Baked.EntrancesInside.Count;
@@ -373,6 +397,16 @@ public partial class Main : Node3D
             return;
         }
         _entranceIndex = Mathf.PosMod(_entranceIndex + step, n);
+        for (int tried = 0; !Player.Noclip && tried < n; tried++)
+        {
+            if (EntranceStand(_entranceIndex) is (Vector3 feet, Vector3 target, _))
+            {
+                Player.LookFrom(feet + (Vector3.Up * Player.Head.Position.Y), target);
+                Player.Velocity = Vector3.Zero;
+                return;
+            }
+            _entranceIndex = Mathf.PosMod(_entranceIndex + (step < 0 ? -1 : 1), n);
+        }
         Vector3 inside = Baked.EntrancesInside[_entranceIndex];
         Vector3 outside = Baked.EntrancesOutside[_entranceIndex];
         Vector3 outDir = outside - inside;
@@ -433,6 +467,107 @@ public partial class Main : Node3D
         forward.Y = 0.0f;
         forward = forward.Length() > 1e-6f ? forward.Normalized() : Vector3.Forward;
         return (eye + (forward * SectionDistanceM), -forward);
+    }
+
+    /// <summary>
+    /// 걷는 플레이어를 세울 동굴 입구 앞 자리를 찾습니다. 반환: (발 위치, 바라볼 점, 굴 바닥 높이), 못 찾으면 null.
+    /// </summary>
+    /// <remarks>
+    /// 입구 굴은 수평이고, entrances.json 의 inside(굴이 시작하는 샘 칸)와 outside(산비탈 밖 공중 끝)가 같은 높이의 축입니다.
+    /// 1. 축을 밖에서 안으로 따라가며 지표가 축 높이에 닿는 곳을 찾습니다. 지표가 굴을 가로지르는 입구 구멍의 한가운데입니다.
+    /// 2. 거기서 동굴 충돌체만 맞히는 광선을 아래로 쏘아 굴 바닥 높이를 잽니다.
+    /// 3. 밖으로 되돌아가며 지표가 바닥 높이까지 내려오는 곳(입구의 아래 가장자리)을 찾고, 거기서 0.6 m 밖 땅에 세웁니다.
+    ///    산비탈이 끝까지 바닥보다 높으면(강가 샘 등) 구멍 한가운데의 굴 바닥에 세웁니다.
+    /// 예: 축 높이 121.8 m 인 굴에서 지표가 121.8 m 가 되는 곳의 바닥이 119.8 m 이면, 지표가 119.8 m 까지 내려오는
+    /// 산비탈 자리에서 0.6 m 밖에 서서 굴 안쪽을 봅니다.
+    /// </remarks>
+    public (Vector3 Feet, Vector3 Target, float FloorY)? EntranceStand(int index)
+    {
+        Vector3 inside = Baked.EntrancesInside[index];
+        Vector3 outside = Baked.EntrancesOutside[index];
+        var dir = new Vector3(inside.X - outside.X, 0.0f, inside.Z - outside.Z);
+        float length = dir.Length();
+        if (length < EntranceStepM)
+        {
+            return null;
+        }
+        Vector3 u = dir / length;
+        Vector3 At(float t) => new(outside.X + (u.X * t), inside.Y, outside.Z + (u.Z * t));
+        float tMid = float.NaN;
+        for (float t = 0.0f; t <= length; t += EntranceStepM)
+        {
+            float g = GroundY(At(t));
+            if (float.IsFinite(g) && g >= inside.Y)
+            {
+                tMid = t;
+                break;
+            }
+        }
+        if (float.IsNaN(tMid))
+        {
+            return null;
+        }
+        float floorY = CaveCollision.FloorBelow(GetWorld3D().DirectSpaceState, At(tMid), EntranceFloorSearchM);
+        if (!float.IsFinite(floorY))
+        {
+            return null;
+        }
+        Vector3 target = At(tMid + (4.0f * EntranceFloorSearchM));
+        target.Y = floorY + Player.Head.Position.Y;
+        for (float t = tMid; t >= 0.0f; t -= EntranceStepM)
+        {
+            float g = GroundY(At(t));
+            if (float.IsFinite(g) && g <= floorY)
+            {
+                Vector3 feet = At(Math.Max(t - EntranceStandBackM, 0.0f));
+                float gs = GroundY(feet);
+                feet.Y = (float.IsFinite(gs) ? gs : g) + 0.05f;
+                return (feet, target, floorY);
+            }
+        }
+        Vector3 onFloor = At(tMid);
+        onFloor.Y = floorY + 0.05f;
+        return (onFloor, target, floorY);
+    }
+
+    /// <summary>
+    /// 걸어서 설 수 있는 면 가운데 가장 낮은 높이 (엔진 Y): 회랑 지형, 주변 지형, 동굴 충돌면의 최저점.
+    /// 프랙탈 디테일을 켜고 끄면 회랑 지형의 최저점이 몇 m 바뀌지만, 낙하 한계의 여유(FallMarginM)가 그보다 큽니다.
+    /// 예: 회랑 최저 0 m, 주변 지형(유역 출구 쪽) 최저 −1,200 m, 동굴 최저 −150 m 이면 −1,200 m 입니다.
+    /// </summary>
+    public float LowestSolidY()
+    {
+        float low = float.PositiveInfinity;
+        foreach (HeightmapTerrain? t in new[] { Terrain, Baked.GetNodeOrNull<HeightmapTerrain>("Surround") })
+        {
+            if (t?.Heightmap is HeightmapLoader hm && hm.IsValid())
+            {
+                low = Math.Min(low, t.ToGlobal(new Vector3(0.0f, hm.Origin.Y + hm.MinHeightM, 0.0f)).Y);
+            }
+        }
+        if (Baked.CaveBody is StaticBody3D cave)
+        {
+            Transform3D xf = cave.GlobalTransform;
+            foreach (CollisionShape3D s in cave.GetChildren().OfType<CollisionShape3D>())
+            {
+                foreach (Vector3 v in ((ConcavePolygonShape3D)s.Shape).GetFaces())
+                {
+                    low = Math.Min(low, (xf * v).Y);
+                }
+            }
+        }
+        return float.IsFinite(low) ? low : 0.0f;
+    }
+
+    /// <summary>
+    /// 전역 위치 p 가 땅속 동굴의 빈 곳 안인지: 지표 아래이고, 동굴 충돌면이 p 를 앞면으로 둘러쌉니다 (<see cref="CaveCollision.Inside"/>).
+    /// 동굴 충돌체가 없으면 false.
+    /// </summary>
+    public bool InCave(Vector3 p)
+    {
+        float ground = GroundY(p);
+        return Baked.CaveBody is not null && float.IsFinite(ground) && p.Y < ground
+            && CaveCollision.Inside(GetWorld3D().DirectSpaceState, p);
     }
 
     /// <summary>전역 위치의 회랑 지면 높이 (엔진 Y). 회랑 밖이면 주변 지형 높이, 그것도 없으면 NaN.</summary>
