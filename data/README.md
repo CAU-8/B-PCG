@@ -37,6 +37,8 @@ uv run python tools/download_pilot.py --verify-only
 | `cache/` | 지워도 되는 임시 파일 (zip 에서 꺼낸 파일 등) | 필요할 때 다시 생깁니다 |
 | `logs/` | 내려받기 기록 | 지워도 됩니다 |
 
+스튜디오의 '진짜 지구와 비교' 탭은 이 자료를 직접 읽지 않습니다. `uv run bpcg earth-ref` 가 이 자료로 만든 작은 기준 파일(`configs/reference/earth.json`)을 읽습니다([configs/reference/README.md](../configs/reference/README.md)).
+
 코드에서는 이 경로를 직접 쓰지 않고 `bpcg_studio.paths`(파이썬)의 `PILOT`, `EXTERNAL`, `DERIVED`, `CACHE` 와 `Bpcg.Core.Paths`(C#)의 `Pilot`, `External`, `Derived`, `Cache` 를 씁니다.
 
 ## 자료 목록
@@ -45,14 +47,14 @@ uv run python tools/download_pilot.py --verify-only
 
 | 경로 (`data/` 아래) | 담는 자료 | 크기 | 출처 | 라이선스 | 얻는 법 | 쓰는 곳 |
 |---|---|---|---|---|---|---|
-| `pilot/etopo/ETOPO_2022_v1_60s_N90W180_surface.nc` | 지구 전체 고도, 육지+해저, 60초(약 1.8 km) | 478.3 MB | NOAA NCEI | 퍼블릭 도메인 | 스크립트 | 5장 (지구 고도 분포와 비교) |
-| `pilot/chelsa/CHELSA_bio12_1981-2010_V.2.1.tif` | 연강수 1981-2010, 30초 | 349.3 MB | CHELSA V2.1 | CC0 (확인 안 됨) | 스크립트 | 3장 (유량(상류에서 모여 한 칸을 지나가는 물의 양) Q = P·A 로 바꿀 때) |
-| `pilot/aridity/Global-AI_ET0__annual_v3_1.zip` | 건조 지수(AI)와 잠재 증발산(ET0), 연간 | 645.8 MB | figshare (Zomer 외) | CC BY 4.0 / 비상업 (아래 참고) | 스크립트 | 3장 (기후 구분), 5장 (기후 규칙) |
-| `pilot/riveratlas/RiverATLAS_Data_v10.gdb.zip` | 전 세계 하천 구간과 속성 | 2,506.5 MB | HydroSHEDS RiverATLAS v1.0 | CC BY 4.0, 일부 열 ODbL | 스크립트 | 3장 (하천 차수·경사 비교) |
-| `pilot/octopus/crn_int_basins.geojson`, `crn_aus_basins.geojson` | 10Be 유역 평균 침식률 5,673개 유역 | 281.6 MB | OCTOPUS v2 (WFS) | CC BY-NC-SA 4.0 으로 취급 (미해결) | 스크립트 | 3장 (침식률 정답값) |
+| `pilot/etopo/ETOPO_2022_v1_60s_N90W180_surface.nc` | 지구 전체 고도, 육지+해저, 60초(약 1.8 km) | 478.3 MB | NOAA NCEI | 퍼블릭 도메인 | 스크립트 | 5장 (지구 고도 분포와 비교), 스튜디오 '진짜 지구와 비교' |
+| `pilot/chelsa/CHELSA_bio12_1981-2010_V.2.1.tif` | 연강수 1981-2010, 30초 | 349.3 MB | CHELSA V2.1 | CC0 (확인 안 됨) | 스크립트 | 3장 (유량(상류에서 모여 한 칸을 지나가는 물의 양) Q = P·A 로 바꿀 때), 스튜디오 '진짜 지구와 비교' |
+| `pilot/aridity/Global-AI_ET0__annual_v3_1.zip` | 건조 지수(AI)와 잠재 증발산(ET0), 연간 | 645.8 MB | figshare (Zomer 외) | CC BY 4.0 / 비상업 (아래 참고) | 스크립트 | 3장 (기후 구분), 5장 (기후 규칙), 스튜디오 '진짜 지구와 비교' |
+| `pilot/riveratlas/RiverATLAS_Data_v10.gdb.zip` | 전 세계 하천 구간과 속성 | 2,506.5 MB | HydroSHEDS RiverATLAS v1.0 | CC BY 4.0, 일부 열 ODbL | 스크립트 | 3장 (하천 차수·경사 비교), 스튜디오 '진짜 지구와 비교' |
+| `pilot/octopus/crn_int_basins.geojson`, `crn_aus_basins.geojson` | 10Be 유역 평균 침식률 5,673개 유역 | 281.6 MB | OCTOPUS v2 (WFS) | CC BY-NC-SA 4.0 으로 취급 (미해결) | 스크립트 | 3장 (침식률 정답값), 스튜디오 '진짜 지구와 비교' |
 | `pilot/octopus/pilot_basins.csv` | 파일럿 유역 40개 목록 (`configs/pilot_basins.csv` 의 사본) | 6.7 kB | OCTOPUS 에서 골라냄 | OCTOPUS 를 따름 | 스크립트 | 3장 |
-| `pilot/glo90/*.tif` (55개) | 파일럿 유역을 덮는 90 m 고도 타일 | 245.9 MB | Copernicus DEM GLO-90 (AWS) | Copernicus DEM 라이선스 (출처 문구 의무) | 스크립트 | 3장 (경사-면적 회귀, θ·k_sn·S_crit) |
-| `external/afrisar/Polarimetric_height_profile_1577.zip` | AfriSAR 레이더 숲 높이 단면 (가봉) | 15,105.1 MB | ORNL DAAC 1577 | NASA 공개 자료, 인용 요청 | 손으로 (NASA Earthdata 로그인) | 지금은 없음 (식생 구조 참고 후보) |
+| `pilot/glo90/*.tif` (55개) | 파일럿 유역을 덮는 90 m 고도 타일 | 245.9 MB | Copernicus DEM GLO-90 (AWS) | Copernicus DEM 라이선스 (출처 문구 의무) | 스크립트 | 3장 (경사-면적 회귀, θ·k_sn·S_crit), 스튜디오 '진짜 지구와 비교' |
+| `external/afrisar/Polarimetric_height_profile_1577.zip` | AfriSAR 레이더 숲 높이 단면 (가봉) | 15,105.1 MB | ORNL DAAC 1577 | NASA 공개 자료, 인용 요청 | 손으로 (NASA Earthdata 로그인) | 원자료는 지금 없음. `analysis/` 가 만든 `derived/afrisar/`, `derived/veg/` 결과를 스튜디오 '진짜 지구와 비교'가 씀 |
 
 파일마다 주소, 크기, sha256, 라이선스는 `manifest.json` 에 있습니다.
 

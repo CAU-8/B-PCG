@@ -84,6 +84,7 @@
       <button class="tab" role="tab" data-tab="planet" aria-selected="false">행성 지도</button>
       <button class="tab" role="tab" data-tab="hero" aria-selected="false">히어로 지도</button>
       <button class="tab" role="tab" data-tab="figures" aria-selected="false">그림</button>
+      <button class="tab" role="tab" data-tab="earth" aria-selected="false" title="이 실행을 진짜 지구 자료(고도·강수·건조 지수·하천·침식률·90 m 고도·가봉 레이더)와 같은 잣대로 비교합니다">진짜 지구와 비교</button>
       <button class="tab" role="tab" data-tab="reference" aria-selected="false">매개변수 설명</button>
     </nav>
 
@@ -92,6 +93,7 @@
     <section class="tabpanel" id="tab-planet" role="tabpanel" hidden></section>
     <section class="tabpanel" id="tab-hero" role="tabpanel" hidden></section>
     <section class="tabpanel" id="tab-figures" role="tabpanel" hidden></section>
+    <section class="tabpanel" id="tab-earth" role="tabpanel" hidden></section>
     <section class="tabpanel" id="tab-reference" role="tabpanel" hidden></section>
   </main>
 </div>
@@ -99,5 +101,6 @@
 <div id="tooltip" class="tooltip" hidden></div>
 <dialog id="lightbox" class="lightbox"><button class="btn small close" type="button">닫기</button><img alt=""></dialog>
 <script src="/static/app.js"></script>
+<script src="/static/earth.js"></script>
 </body>
 </html>

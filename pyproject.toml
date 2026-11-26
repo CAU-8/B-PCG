@@ -26,7 +26,7 @@ dev = [
     "matplotlib>=3.11",
     "pillow>=12.3",  # tests/test_bake.py 가 PNG 를 읽음
 ]
-# 진짜 지구 자료(data/pilot: GeoTIFF, netCDF, gdb)를 읽는 도구. 지금은 이 묶음을 부르는 코드가 없습니다.
+# 진짜 지구 자료(data/pilot: GeoTIFF, netCDF, gdb)를 읽는 도구. 지구 기준 파일을 만드는 bpcg earth-ref 가 씁니다.
 data = [
     "h5py>=3.16",
     "h5netcdf>=1.8",

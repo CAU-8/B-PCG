@@ -193,7 +193,9 @@
 | emergent | `kind: emergent` | 입력에 없던 성질이 결과로 나온 지표. '지구답다'는 근거로 쓰는 것은 이것뿐 | 점수표 |
 | check | `kind: check` | 결과를 다시 재어 확인하는 규칙(솔버가 다 풀었는지, 경사가 경사 법칙과 맞는지, 강이 바둑판 방향을 따르지 않는지). 어기면 불합격 | 점수표 |
 | self (자기 검사) | `kind: self` | 만드는 코드가 늘 맞게 짠 규칙(물이 모두 바다에 닿음, 거꾸로 흐르는 강 0, 물·흙 수지). 어기면 코드 결함이라 불합격. 맞아도 지구와 닮았다는 근거가 아님 | 점수표 |
-| 기준선 | baseline | 진짜 지구 자료(ETOPO 등)를 같은 코드로 잰 점수. 우리 행성과 견줄 잣대 | [roadmap.md](roadmap.md) |
+| 기준선 | baseline | 진짜 지구 자료(ETOPO 등)를 같은 코드로 잰 점수. 우리 행성과 비교할 잣대 | 스튜디오 '진짜 지구와 비교', [roadmap.md](roadmap.md) |
+| 지구 기준 파일 | `configs/reference/earth.json`, `bpcg earth-ref` | 진짜 지구 자료 일곱 가지(약 4.5 GB)를 한 번 읽어 분포·곡선·표만 남긴 43 kB 파일. 자료를 받지 않아도 비교 탭을 쓰게 저장소에 둠 | [configs/reference/README.md](../configs/reference/README.md) |
+| 닮은 정도 | `score` | 생성 값과 지구 값이 얼마나 같은지 0~100. 분포는 겹치는 넓이(겹침), 숫자 하나는 2^(−\|log2(생성 ÷ 지구)\|)(배수, 두 배 어긋나면 50), 표본이 적은 값은 지구 값들 가운데 몇 번째인지(가운데)로 셈 | 스튜디오 '진짜 지구와 비교', [studio.md](studio.md) |
 | 대조군 | control | 노이즈 지형이나 요소 하나를 끈 행성. 무엇이 효과를 냈는지 가르는 데 씀 | [compare.md](compare.md) |
 | golden 파일 | `tests/golden/data` | 옛 Python 생성기의 결과를 정답으로 저장해 둔 시험 자료. 만드는 프로그램을 지워서 새로 만들 수 없음. 설정 사례와 필드 표만 예외로, 다시 쓰거나 손으로 고침 | [history.md](history.md), [tests/golden/data/README.md](../tests/golden/data/README.md) |
 | golden 대조 시험 | `tests/golden` | golden 파일과 C# 결과가 비트까지 같은지 보는 시험 | [csharp_port.md](csharp_port.md) |

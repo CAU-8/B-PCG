@@ -3,6 +3,7 @@
 | 명령 | 하는 일 |
 |---|---|
 | bpcg studio | 매개변수를 바꿔 돌리고 결과를 보는 로컬 웹 도구 (docs/studio.md) |
+| bpcg earth-ref | data/ 의 진짜 지구 자료로 스튜디오 '진짜 지구와 비교' 탭의 기준 파일을 만듦 |
 | bpcg planet·hero·bake·all … | C# 콘솔(src/Bpcg.Cli)에 그대로 넘깁니다 (빌드는 자동) |
 """
 
@@ -29,6 +30,10 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and argv[0] == "studio":
         return _studio(argv[1:])
+    if argv and argv[0] == "earth-ref":
+        from bpcg_studio.earthref import main as earth_ref
+
+        return earth_ref(argv[1:])
     try:
         ensure_built()
         return subprocess.call(cli_command(argv))
