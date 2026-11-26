@@ -104,6 +104,10 @@ public partial class GlobeView : Node3D
 
     public int MarkerCount { get; private set; }
 
+    /// <summary>노이즈 비교본(globe.json 의 generator 가 "noise")으로 만든 지구본인지.</summary>
+    public static bool IsNoise(GlobeData? data) =>
+        data is not null && Json.Str(data.Meta, "generator", "") == Bpcg.NoiseWorld.NoiseCorridor.Generator;
+
     /// <summary>자료로 지구본을 만듭니다. 자료가 없거나 잘못됐으면 아무것도 그리지 않습니다.</summary>
     public void Setup(GlobeData? globeData)
     {
@@ -112,6 +116,11 @@ public partial class GlobeView : Node3D
         if (Data is null || !Data.IsValid())
         {
             return;
+        }
+        // 노이즈 비교본의 강은 유량이 없어 모두 1 등급입니다. 기본 문턱(4 등급)이면 강이 하나도 그려지지 않으므로 1 등급부터 그립니다.
+        if (IsNoise(Data))
+        {
+            RiverMinClass = 1;
         }
         ImageTexture[] corners = Data.CornerTextures();
         ImageTexture[] overlay = Data.OverlayTextures();

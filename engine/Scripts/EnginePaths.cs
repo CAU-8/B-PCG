@@ -95,10 +95,15 @@ public static class EnginePaths
         return first.StartsWith('#') ? first.TrimStart('#').Trim() : "";
     }
 
-    /// <summary>지난 실행 하나 (회랑 manifest 가 있는 실행 폴더).</summary>
-    public sealed record RunEntry(string Name, string Dir, string Profile, string Seed, bool HasGlobe, DateTime Time)
+    /// <summary>
+    /// 지난 실행 하나 (회랑 manifest 가 있는 실행 폴더). Generator 는 회랑 목차의 generator: B-PCG 실행은 빈 글, 노이즈 비교본은 "noise".
+    /// </summary>
+    public sealed record RunEntry(string Name, string Dir, string Profile, string Seed, bool HasGlobe, DateTime Time, string Generator = "")
     {
         public string CorridorDir => Path.Combine(Dir, Runs.CorridorDir);
+
+        /// <summary>노이즈 비교본 실행인지.</summary>
+        public bool IsNoise => Generator == Bpcg.NoiseWorld.NoiseCorridor.Generator;
     }
 
     /// <summary>user://runs 아래의 지난 실행 (새것 먼저).</summary>
@@ -120,7 +125,7 @@ public static class EnginePaths
             OrderedDictionary<string, object?>? m = Json.ReadObject(man);
             runs.Add(new RunEntry(
                 Path.GetFileName(dir), dir, Json.Str(m, "profile", "?"), Json.Str(m, "seed", "?"),
-                File.Exists(Path.Combine(dir, Runs.GlobeDir, "globe.json")), File.GetLastWriteTime(man)));
+                File.Exists(Path.Combine(dir, Runs.GlobeDir, "globe.json")), File.GetLastWriteTime(man), Json.Str(m, "generator", "")));
         }
         return runs.OrderByDescending(r => r.Time).ToList();
     }

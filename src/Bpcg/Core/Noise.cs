@@ -48,7 +48,7 @@ public static class Noise
     }
 
     /// <summary>이미 섞은 시드 s 로 3D 그래디언트 노이즈 한 값.</summary>
-    private static double Noise3Mixed(double x, double y, double z, ulong s)
+    internal static double Noise3Mixed(double x, double y, double z, ulong s)
     {
         double fx = Math.Floor(x);
         double fy = Math.Floor(y);

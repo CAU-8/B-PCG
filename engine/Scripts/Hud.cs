@@ -46,6 +46,9 @@ public partial class Hud : CanvasLayer
     private Button? _colorButton;
     private Button? _lampButton;
     private string _statusText = "";
+
+    /// <summary>왼쪽 위 상태 글 (화면 속도 줄 빼고). 검사 장면이 읽습니다.</summary>
+    public string StatusText => _statusText;
     private string _perfLine = "";
     private double _perfTimer;
 

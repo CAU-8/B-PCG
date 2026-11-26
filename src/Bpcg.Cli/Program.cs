@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Bpcg.Core;
 using Bpcg.IO;
+using Bpcg.NoiseWorld;
 
 namespace Bpcg.Cli;
 
@@ -62,12 +63,13 @@ public static class Program
         ["hero"] = ["--planet", "--profile", "--out", "--seed", "--set", "--from", "--flat"],
         ["bake"] = ["--hero", "--out", "--engine", "--seed", "--set", "--no-globe"],
         ["all"] = ["--planet", "--profile", "--out", "--seed", "--set", "--flat", "--engine"],
+        ["noise"] = ["--planet", "--profile", "--out", "--seed", "--set", "--engine"],
     };
 
     // 값을 받지 않는 옵션 (있으면 켜짐).
     private static readonly HashSet<string> Flags = ["--flat", "--engine", "--no-globe"];
 
-    private const string Usage = "usage: bpcg {planet,hero,bake,all,compare,figures} ...";
+    private const string Usage = "usage: bpcg {planet,hero,bake,all,noise,compare,figures} ...";
 
     /// <summary>bpcg --help 가 보여 주는 사용법. 옵션 이름은 <see cref="Allowed"/> 와 같아야 합니다 (시험이 봅니다).</summary>
     public const string Help = Usage + """
@@ -81,6 +83,7 @@ public static class Program
           planet   행성만 만듭니다 (<out>/planet)
           hero     히어로 유역을 만듭니다. --from <행성을 만든 실행 폴더> 나 --flat 이 필요합니다
           bake     히어로 유역에서 회랑과 지구본을 굽습니다. --hero <히어로 묶음 폴더> 가 필요합니다
+          noise    비교용 노이즈 비교본: 같은 크기·시드의 행성·회랑·지구본을 오늘날 게임처럼 노이즈만으로 만듭니다
           compare  기존 지형 생성 방법과 같은 시드로 비교합니다 (bpcg compare methods|run|list|render)
           figures  결과 그림을 그립니다 (bpcg figures results|cubesphere)
           studio   브라우저에서 값을 바꿔 돌리고 지도로 봅니다 (uv run bpcg studio)
@@ -89,12 +92,12 @@ public static class Program
           --planet <이름>    행성 설정 configs/planets/<이름>.toml (기본 earth)
           --profile <이름>   크기와 해상도 묶음 configs/profiles/<이름>.toml: tiny, laptop, lab (기본 laptop)
           --seed <정수>      출발 번호. 같은 시드면 같은 행성이 나옵니다
-          --out <폴더>       결과를 쓸 실행 폴더 (기본 out/<행성 이름>)
+          --out <폴더>       결과를 쓸 실행 폴더 (기본 out/<행성 이름>, noise 는 out/<행성 이름>-noise)
           --set 키=값        설정 값 하나를 바꿉니다. 여러 번 쓸 수 있습니다 (예: --set landscape.theta=0.5)
           --from <폴더>      hero: 행성을 만든 실행 폴더. 이때 --set 은 hero. 로 시작하는 키만 받습니다
           --flat             hero, all: 행성 없이, 정해 둔 융기와 출구로 히어로 유역만 만듭니다
           --hero <폴더>      bake: 히어로 묶음 폴더. 이때 --set 은 detail., profile.corridor. 로 시작하는 키만 받습니다
-          --engine           bake, all: engine/baked 에도 써서 Godot 가 바로 읽게 합니다
+          --engine           bake, all, noise: engine/baked 에도 써서 Godot 가 바로 읽게 합니다
           --no-globe         bake: 지구본을 굽지 않습니다
 
         예
@@ -102,6 +105,7 @@ public static class Program
           uv run bpcg all --profile laptop --seed 15 --out out/s15
           uv run bpcg hero --from out/earth --set 'hero.site_lat_lon_deg=[8.39, -0.92]'
           uv run bpcg bake --hero out/earth/hero --engine
+          uv run bpcg noise --profile tiny --seed 0
         """;
 
     private static bool WantsHelp(string[] argv) =>
@@ -112,7 +116,7 @@ public static class Program
     {
         if (argv.Length == 0 || !Allowed.ContainsKey(argv[0]))
         {
-            throw new CliExit($"{Usage}\nbpcg: error: 명령은 planet, hero, bake, all, compare, figures 가운데 하나여야 합니다", 2);
+            throw new CliExit($"{Usage}\nbpcg: error: 명령은 planet, hero, bake, all, noise, compare, figures 가운데 하나여야 합니다", 2);
         }
         var a = new Args { Command = argv[0] };
         string[] ok = Allowed[a.Command];
@@ -196,7 +200,8 @@ public static class Program
         return a;
     }
 
-    private static Config ConfigOf(Args args)
+    // noise 이면 노이즈 설정 절 [noise](configs/noise/default.toml)을 붙인 뒤 --set 을 맞춰 봅니다 (--set noise.caves.tunnel_radius_m=3 처럼).
+    private static Config ConfigOf(Args args, bool noise = false)
     {
         OrderedDictionary<string, object?> overrides = Runs.SetOverrides(args.Set);
         if (args.Seed is long seed)
@@ -206,6 +211,10 @@ public static class Program
         CheckConfigName("planets", args.Planet, "--planet", "행성 설정");
         CheckConfigName("profiles", args.Profile, "--profile", "프로필");
         Config b = Config.LoadConfig(args.Planet, args.Profile);
+        if (noise)
+        {
+            b = NoiseRuns.WithNoise(b);
+        }
         if (overrides.Count == 0)
         {
             return b;
@@ -381,6 +390,15 @@ public static class Program
         return 0;
     }
 
+    // 노이즈 비교본: 같은 행성 설정·프로필·시드로, 물리 계산 없이 노이즈만으로 행성·회랑·지구본을 만듭니다.
+    private static int CmdNoise(Args args)
+    {
+        Config cfg = ConfigOf(args, noise: true);
+        string runDir = args.Out ?? Path.Combine(Paths.Out, PlanetRunName(args.Planet) + "-noise");
+        NoiseRuns.All(cfg, runDir, args.Engine ? EngineBaked : null, Say);
+        return 0;
+    }
+
     // 윈도우 콘솔은 기본 코드 페이지(한국어 윈도우는 CP949)로 글자를 씁니다. 스튜디오와 시험은 기록 줄을
     // UTF-8 로 읽으므로, 그대로 두면 한글 기록 줄이 깨져 진행률과 경고를 읽지 못합니다. 그래서 UTF-8 로 맞춥니다.
     private static void UseUtf8Output()
@@ -430,6 +448,7 @@ public static class Program
                 "planet" => CmdPlanet(args),
                 "hero" => CmdHero(args),
                 "bake" => CmdBake(args),
+                "noise" => CmdNoise(args),
                 _ => CmdAll(args),
             };
         }

@@ -589,11 +589,23 @@ public partial class Main : Node3D
         return float.NaN;
     }
 
+    /// <summary>상태 글 맨 위에 띄우는, 노이즈 비교본임을 알리는 줄.</summary>
+    public const string NoiseWorldLine = "노이즈 비교본: B-PCG 와 비교하려고 판·침식·물의 흐름 계산 없이 노이즈만으로 만든 땅";
+
+    /// <summary>
+    /// 지금 연 회랑이 노이즈 비교본(목차의 generator 가 "noise")인지. B-PCG 가 구운 회랑에는 generator 가 없습니다.
+    /// </summary>
+    public bool IsNoiseWorld => Json.Str(Baked.Manifest, "generator", "") == Bpcg.NoiseWorld.NoiseCorridor.Generator;
+
     /// <summary>왼쪽 위 상태 글을 다시 씁니다 (화면 캡처가 찍기 전에도 부름).</summary>
     public void UpdateStatus()
     {
         Vector3 eye = Player.EyePosition();
         var lines = new List<string>();
+        if (IsNoiseWorld)
+        {
+            lines.Add(NoiseWorldLine);
+        }
         string mode = Player.Noclip ? "날기 (땅을 뚫고 지나감)" : "걷기";
         lines.Add($"{mode} · 속력 {Player.CurrentSpeedMS():F0} m/s");
         string where = $"동 {eye.X:+0;-0;+0} m, 북 {-eye.Z:+0;-0;+0} m (회랑 가운데 기준)";

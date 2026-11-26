@@ -47,13 +47,27 @@ public sealed class StageProgress
         S("지구본 자료 쓰기", "엔진 파일 굽기", 1.5, @"^\[(지구본\] 끝|전체\] 끝)", true),
     ];
 
+    /// <summary>노이즈 비교본(Bpcg.NoiseWorld.NoiseRuns.All)의 단계. 무게는 laptop 프로필 시드 0 에서 잰 시간 [s] (2026-11-27).</summary>
+    public static readonly Stage[] NoiseStages =
+    [
+        S("행성 지도 칸마다 노이즈 읽기·해안 맞추기", "노이즈 비교본", 1.2, @"^\[노이즈\] 행성 지도"),
+        S("걸을 히어로 자리 고르기", "노이즈 비교본", 0.2, @"^\[노이즈\] 히어로 자리"),
+        S("히어로 유역 칸마다 노이즈 읽기", "노이즈 비교본", 0.4, @"^\[노이즈\] 히어로 유역"),
+        S("회랑 고르기", "노이즈 비교본", 0.1, @"^\[노이즈\] 회랑:"),
+        S("지표 높이맵 쓰기", "노이즈 비교본", 0.7, @"^\[노이즈\] 높이맵"),
+        S("바다·강 수면, 지하수면, 동굴 입구 구멍 쓰기", "노이즈 비교본", 0.1, @"^\[노이즈\] 물:"),
+        S("3D 노이즈 동굴 벽 모양 만들기", "노이즈 비교본", 6.5, @"^\[노이즈\] 동굴 메시"),
+        S("땅속 암석 상자 쓰기 (재질 부피)", "노이즈 비교본", 1.7, @"^\[노이즈\] 재질 부피"),
+        S("지구본 자료 쓰기", "노이즈 비교본", 0.8, @"^\[(지구본\] 끝|노이즈\] 끝)"),
+    ];
+
     private readonly Stage[] _stages;
     private readonly double _total;
     private int _done;
 
-    public StageProgress(bool flat)
+    public StageProgress(bool flat, bool noise = false)
     {
-        _stages = flat ? Stages.Where(s => !s.PlanetOnly).ToArray() : Stages;
+        _stages = noise ? NoiseStages : flat ? Stages.Where(s => !s.PlanetOnly).ToArray() : Stages;
         _total = _stages.Sum(s => s.Weight);
     }
 

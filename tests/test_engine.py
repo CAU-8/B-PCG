@@ -28,6 +28,9 @@ Godot 는 사용자 폴더에 설정과 user:// 를 쓰므로 HOME (리눅스 XD
   2 m 로 구운 동굴 회랑에서 걷는 플레이어가 입구로 걸어 들어가 통로 바닥에 서고,
   입구 구멍마다 떨어져 동굴 바닥에 서는지도 봄.
 - test_engine_globe_malformed: .bin 크기가 틀린 지구본에 '읽지 못했습니다' 알림이 뜨는지 봄.
+- test_engine_noise_world: 처음 화면의 '노이즈 비교본'(--generate --noise)으로 만든 결과가 C# 콘솔
+  (Bpcg.Cli noise)과 파일까지 같은지, 그 회랑·지구본을 B-PCG 와 같은 검사 장면이 열고
+  상태 글 맨 위에 '노이즈 비교본' 줄을 띄우는지 봄.
 - test_fixture_globe_follows_contract: 대체 자료 자체가 약속을 지키는지 (Godot 없이).
 """
 
@@ -375,6 +378,52 @@ def test_engine_loads_console_bake(engine, cave_run, tmp_path):
     assert "그 아래로 떨어지면 처음 자리로 돌아옴" in out
     out = _scene(engine, GLOBE_SCENE, _baked(baked), "--expect-globe", ok="BPCG_GLOBE_OK")
     assert f"필드 {len(meta['fields'])} 개 모두 고름" in out
+    assert "이름표 '히어로 유역 (" in out
+
+
+def test_engine_noise_world(engine, csharp_cli, tmp_path):
+    godot, env, _ = engine
+    proc = _godot(
+        godot,
+        env,
+        ["--", "--generate", "--noise", "--profile=tiny", "--seed=0", "--quit-when-done"],
+        GENERATE_TIMEOUT_S,
+    )
+    out = _check_clean(proc, "엔진 안 노이즈 비교본 생성")
+    assert proc.returncode == 0, f"종료 코드 {proc.returncode}:\n{_tail(proc)}"
+    m = GENERATE_OK.search(out)
+    assert m, f"BPCG_GENERATE_OK 가 없습니다:\n{_tail(proc)}"
+    assert "[노이즈] 끝" in out and "노이즈 비교본" in out
+    run = Path(m.group(1).strip())
+    assert run.name.endswith("-noise")
+
+    cli = tmp_path / "cli"
+    csharp_cli("noise", "--profile", "tiny", "--seed", "0", "--out", cli)
+    names = _files(run)
+    assert names == _files(cli), "엔진과 콘솔이 쓴 노이즈 비교본 파일 목록이 다릅니다"
+    different = []
+    for name in sorted(names):
+        a, b = run / name, cli / name
+        if name.endswith(".json"):
+            ja = _drop_seconds(json.loads(a.read_text(encoding="utf-8")))
+            jb = _drop_seconds(json.loads(b.read_text(encoding="utf-8")))
+            same = ja == jb
+        else:
+            same = a.read_bytes() == b.read_bytes()
+        if not same:
+            different.append(name)
+    assert not different, f"엔진 안 노이즈 비교본과 콘솔 결과가 다른 파일: {different}"
+
+    corridor = run / "corridor"
+    man = json.loads((corridor / "manifest.json").read_text(encoding="utf-8"))
+    out = _scene(engine, SMOKE_SCENE, _baked(corridor), "--expect-baked", ok="BPCG_SMOKE_OK")
+    assert "만든 방법: 노이즈 비교본, 상태 글 첫 줄 '노이즈 비교본: " in out
+    assert "레이어: terrain, surround, water, water_table" in out
+    assert f"입구 {man['caves']['n_entrances']}," in out
+    if "caves" in man["file_meta"]:
+        assert f"동굴 삼각형 {man['file_meta']['caves']['faces']} (gltf_runtime)" in out
+    out = _scene(engine, GLOBE_SCENE, _baked(corridor), "--expect-globe", ok="BPCG_GLOBE_OK")
+    assert "BPCG_GLOBE_OK (no data)" not in out
     assert "이름표 '히어로 유역 (" in out
 
 
