@@ -170,8 +170,12 @@ public sealed class FeatureRunTests(FeatureRun run) : IClassFixture<FeatureRun>
         long nSinks = (long)karst["n_sinks"]!;
         Assert.True(nSinks > 0, "덮어쓴 설정으로도 히어로 유역에 땅속으로 사라지는 개울이 생기지 않았습니다. 이 시험이 기능을 보지 못합니다");
         Assert.True((long)karst["n_springs"]! > 0, "사라진 개울의 물이 다시 솟는 샘이 없습니다");
-        Assert.True((bool)karst["settled"]!, "물을 다시 모으는 횟수 안에 샘의 자리가 정해지지 않았습니다");
         double lost = (double)karst["lost_m3_per_yr"]!;
+        // 물을 위쪽 칸부터 한 번에 모으므로(KarstStreams.Route) 사라진 물과 솟은 물의 합이 같습니다.
+        Assert.Equal(1.0, (double)karst["risen_m3_per_yr"]! / lost, 9);
+        // 동굴 층을 만든 뒤 샘까지 물이 빠지지 않는 자리는 막고 다시 계산하므로(8.5의 5번), 되풀이 상한 안에 그런 자리가 남지 않습니다.
+        Assert.InRange((long)karst["cave_rounds"]!, 1L, KarstStreams.MaxCaveRounds);
+        Assert.Equal(0L, (long)karst["n_without_spring"]!);
 
         CellGraph g = run.Hero.Graph;
         FieldSet f = run.Hero.Fields;
@@ -289,7 +293,12 @@ public sealed class FeatureRunTests(FeatureRun run) : IClassFixture<FeatureRun>
             // 물이 들어가는 싱크홀은 적어도 한 층에 그 물을 보냅니다.
             Assert.True(fed[i] || !(net.SinkDischarge[i] > 0.0), $"싱크홀 {s} 로 들어간 물이 어느 층의 통로에도 없습니다");
             // 싱크홀은 샘까지 길이 닿는 동굴 층에만 둡니다. 그 길은 같은 칸을 두 번 지나지 않고 샘(다음 칸이 없는 통로 칸)에서 끝납니다.
-            Assert.Contains(Enumerable.Range(0, net.NLevels), k => net.Parent[(k * n) + s] >= 0);
+            // 개울이 사라지는 칸이 그 자체로 샘이면(아래층이 산비탈로 열리는 입구나 강가 샘), 물은 수직굴로 내려가 그 자리에서
+            // 나오므로 길이 0 입니다(10장 4번 '싱크홀'). 빗물 싱크홀은 샘 칸에 두지 않으므로 늘 다음 칸이 있습니다.
+            Assert.Contains(Enumerable.Range(0, net.NLevels), k => net.Flow[(k * n) + s] > 0.0);
+            Assert.True(
+                net.SinkIsStream[i] || Enumerable.Range(0, net.NLevels).Any(k => net.Parent[(k * n) + s] >= 0),
+                $"빗물 싱크홀 {s} 에서 샘으로 가는 통로가 없습니다");
             for (int k = 0; k < net.NLevels; k++)
             {
                 int c = s;
