@@ -199,7 +199,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
 - **도구와 위치.** 두 겹입니다.
     - C# 단위 시험: `tests/Bpcg.Tests/`(xunit v3). 함수 하나를 golden 자료와 비트 단위로 맞대어 봅니다. golden 자료는 옛 Python 판이 만든 기준 결과이고, `tests/golden/data/`에 있습니다(큰 사례는 `out/golden/`). C# 판이 옛 Python 판과 같은 답을 내는지 확인합니다. `dotnet test --solution Bpcg.slnx`로 돕니다. 큰 사례가 없으면 그 시험만 건너뜁니다.
     - 결과 검사: `tests/test_<대상>.py`(pytest). C# 콘솔(`bpcg all` 등)이 쓴 묶음·굽기 파일을 읽어 불변식(물은 아래로, 넓이 합, 형식 약속)을 봅니다. 엔진은 `tests/test_engine.py`가 Godot을 띄워 봅니다.
-- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 132개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
+- **출력이 바뀌었는지 보는 시험.** `tests/Bpcg.Tests/RunDigestTests.cs`가 tiny 프로필·시드 0으로 전체 단계를 돌리고, 결과 파일 133개의 지문(SHA-256)을 `tests/fixtures/run_digest_tiny_seed0.json`과 비교합니다. 코드를 고친 뒤 결과가 한 바이트라도 달라지면 바뀐 파일 이름과 함께 실패합니다. 출력을 일부러 바꾼 PR은 `BPCG_UPDATE_DIGEST=1 dotnet test --solution Bpcg.slnx`로 지문 파일을 다시 써서 함께 올립니다([tests/fixtures/README.md](../tests/fixtures/README.md)).
 - **지문 시험이 보지 못하는 기능을 켠 시험.** tiny 프로필·시드 0에는 석회암 땅에서 땅속으로 사라지는 개울, 그 개울이 들어가는 구멍(싱크홀)에서 샘까지의 동굴 통로, 증발이 많아 넘치지 못하는 호수가 생기지 않습니다. 그래서 이 기능들이 바뀌어도 지문 시험은 잡지 못합니다.
     - `tests/Bpcg.Tests/FeatureRunTests.cs`가 tiny 프로필에 설정 다섯 개를 덮어써(`FeatureRun.Overrides`) 세 기능이 생기게 합니다. 행성과 히어로 유역(행성에서 고른 강 유역 하나를 더 촘촘한 칸으로 다시 계산한 땅)을 메모리에서 만들고, 파일은 쓰지 않습니다.
     - 정확한 값 대신 성질을 봅니다. 예를 들어 땅속으로 사라진 물과 샘에서 다시 솟은 물의 합이 같은지, 넘치지 못하는 호수가 들어오는 물보다 많이 증발시키지 않는지 봅니다. 그래서 기능을 고쳐 값이 바뀌어도, 성질을 지키면 시험은 그대로 통과합니다.
@@ -234,7 +234,7 @@ C# 이름 규칙은 `.editorconfig`에 적혀 있습니다. 이 저장소는 경
     - 크기도 큽니다. 파일럿 자료만 약 4.5 GB입니다.
 - **경로.** 코드에 절대 경로를 쓰지 않습니다. C#은 `Bpcg.Core.Paths`, 파이썬은 `bpcg_studio.paths`로만 찾습니다. 절대 경로는 팀원 컴퓨터마다 다르고, 이 저장소는 맥·윈도우·리눅스에서 돕니다(11절).
 - **다른 디스크에 둘 때.** 큰 자료는 `BPCG_DATA=/다른/디스크/data`로 옮겨 쓸 수 있습니다.
-- **결과 파일.** 콘솔·스튜디오의 생성 결과는 `out/`에, `--engine`으로 엔진에 넘기는 결과는 `engine/baked/`에, 엔진 처음 화면의 결과는 Godot `user://runs/`에 씁니다. 모두 git에서 빠집니다. 같은 설정으로 다시 만들 수 있고 크기 때문입니다. 예를 들어 laptop 실행의 동굴 메시 `caves.glb` 하나가 시드 0·3·15에서 3.2~5.4 MB로, 커밋할 수 있는 바이너리 크기(1 MB)를 넘습니다([brief.md](brief.md) 9절).
+- **결과 파일.** 콘솔·스튜디오의 생성 결과는 `out/`에, `--engine`으로 엔진에 넘기는 결과는 `engine/baked/`에, 엔진 처음 화면의 결과는 Godot `user://runs/`에 씁니다. 모두 git에서 빠집니다. 같은 설정으로 다시 만들 수 있고 크기 때문입니다. 예를 들어 laptop 실행의 동굴 메시 `caves.glb` 하나가 시드 0·3·15에서 0.9~8.3 MB로, 커밋할 수 있는 바이너리 크기(1 MB)를 넘습니다([brief.md](brief.md) 9절).
 
 ## 9. 라이선스
 
