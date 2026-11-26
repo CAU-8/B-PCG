@@ -712,10 +712,15 @@ public static class Pipeline
         return new StageResult(output, rivers, apexes, res, diag);
     }
 
-    /// <summary>L0 에서 쓰는 설정 (l0_config): landscape.deposition_g_l0 가 있으면 deposition_g 를 바꿉니다.</summary>
+    /// <summary>
+    /// L0 에서 쓰는 설정 (l0_config): landscape.deposition_g_l0 가 있으면 deposition_g 를 그 값으로 바꿉니다. 그 키가 없거나
+    /// 비어 있으면, 또는 landscape 절이 없으면 받은 설정을 그대로 돌려줍니다. 점수표(Scorecard.Build)는 히어로만 셀 때도 이 함수를
+    /// 부르므로, 합격선만 담은 작은 설정에서도 멈추면 안 됩니다. 두 번 거쳐도 결과는 같습니다. 행성 점수표의 설정은
+    /// GeneratePlanet 에서 한 번, Scorecard.Build 에서 또 한 번 이 함수를 거칩니다.
+    /// </summary>
     public static Config L0Config(Config cfg)
     {
-        if (!cfg.Sec("landscape").Contains("deposition_g_l0"))
+        if (!cfg.Contains("landscape") || !cfg.Sec("landscape").Contains("deposition_g_l0"))
         {
             return cfg;
         }

@@ -45,9 +45,16 @@ public static class Materials
         return (h, Ocean.OceanMask(graph, zPlatform, h));
     }
 
-    /// <summary>설정이 해수면을 바다가 덮는 비율(ocean.target_fraction)로 정하는지. 거짓이면 물의 부피로 정합니다.</summary>
+    /// <summary>
+    /// 설정이 해수면을 바다가 덮는 비율(ocean.target_fraction)로 정하는지. 거짓이면 물의 부피로 정합니다. ocean 절이 없는 설정도
+    /// 거짓입니다. 점수표(Scorecard.Build)는 히어로만 셀 때도 이 함수를 부르므로, 합격선만 담은 작은 설정에서도 멈추면 안 됩니다.
+    /// </summary>
     public static bool UsesOceanFraction(Config cfg)
     {
+        if (!cfg.Contains("ocean"))
+        {
+            return false;
+        }
         Section ocean = cfg.Sec("ocean");
         return ocean.Contains("target_fraction") && ocean.Get("target_fraction") is not null;
     }

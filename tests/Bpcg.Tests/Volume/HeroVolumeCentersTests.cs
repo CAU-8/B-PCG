@@ -7,16 +7,28 @@ namespace Bpcg.Tests.Volume;
 
 /// <summary>
 /// 3D 샘플 함수가 대표점(흔들어 둔 격자점)의 값을 칸 중심의 값으로 옮겨 쓰는지 봅니다 (docs/pipeline.md 10장 '입력').
-/// tiny 프로필·시드 0 의 행성과 히어로 유역을 한 번 만들어 씁니다 (약 3초).
+/// tiny 프로필의 행성과 히어로 유역을 만들어 씁니다. 지하수면과 층 바닥은 시드 0, 강가 샘은 시드 <see cref="KarstSeed"/> 의
+/// 히어로 유역을 봅니다 (둘을 만드는 데 모두 약 2초).
 /// </summary>
 public sealed class HeroVolumeCentersTests
 {
-    private static readonly Lazy<(HeroState Hero, Config Cfg)> Tiny = new(() =>
+    /// <summary>
+    /// 강가 샘을 보는 tiny 시드. 강가 샘은 동굴 통로가 강둑으로 열리는 구멍입니다. 동굴은 지하수면 높이에 석회암처럼 물에 녹는
+    /// 암석이 있는 히어로 유역에만 생깁니다. 시드 0 히어로 유역은 화강암만 드러나 동굴도 강가 샘도 없습니다. 시드 4 에는 아래층
+    /// 동굴 688칸과 강가 샘 29곳이 있습니다 (2026-11-26). 파이썬 시험의 karst_hero(tests/conftest.py 의 KARST_SEED)와 같은 시드입니다.
+    /// </summary>
+    private const long KarstSeed = 4;
+
+    private static readonly Lazy<(HeroState Hero, Config Cfg)> Tiny = new(() => Generate(Config.LoadConfig("earth", "tiny")));
+
+    private static readonly Lazy<(HeroState Hero, Config Cfg)> Karst =
+        new(() => Generate(Config.LoadConfig("earth", "tiny", [new("planet.seed", KarstSeed)])));
+
+    private static (HeroState Hero, Config Cfg) Generate(Config cfg)
     {
-        Config cfg = Config.LoadConfig("earth", "tiny");
         PlanetState planet = Pipeline.GeneratePlanet(cfg, null);
         return (Pipeline.GenerateHero(cfg, planet, null), cfg);
-    });
+    }
 
     private static HeroVolume Volume() => new(Tiny.Value.Hero, Tiny.Value.Cfg);
 
@@ -59,9 +71,9 @@ public sealed class HeroVolumeCentersTests
     [Fact]
     public void BankSpringHolesEndInTheRiverWater()
     {
-        HeroVolume vol = Volume();
+        var vol = new HeroVolume(Karst.Value.Hero, Karst.Value.Cfg);
         int nBank = vol.NBankSprings;
-        Assert.True(nBank > 0, "강가 샘이 없어 시험이 아무것도 확인하지 않습니다");
+        Assert.True(nBank > 0, $"tiny 시드 {KarstSeed} 히어로 유역에 강가 샘이 없어 시험이 아무것도 확인하지 않습니다. 강가 샘이 있는 시드로 KarstSeed 를 바꾸세요");
         int first = vol.EntranceCapsules.Length - nBank;
         double[] x = new double[nBank];
         double[] y = new double[nBank];

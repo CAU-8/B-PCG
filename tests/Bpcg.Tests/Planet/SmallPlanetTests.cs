@@ -184,14 +184,48 @@ public sealed class SmallPlanetTests
         Assert.Equal(1_000.0, earth["bimodal_min_separation_m"]);
 
         PlanetState small = Pipeline.GeneratePlanet(cfg, null);
+        // 점수표에는 히어로 단계의 값(퇴적 항을 켠 landscape.deposition_g)이 든 설정을 그대로 줍니다.
         OrderedDictionary<string, object?> card = Pipeline.Score(cfg, planetFields: small.Fields, planetGraph: small.Graph);
         var law = (OrderedDictionary<string, object?>)card["planet.law_consistency"]!;
-        // 행성 단계는 퇴적 항을 끄고 풀었습니다. 같은 설정으로 다시 셈하면 경사가 법칙과 소수 여섯째 자리까지 맞습니다.
-        // 히어로 단계의 값(퇴적 항 켬)으로 셈하면 칸이 작은 이 행성에서는 수십 % 어긋나게 나옵니다.
-        Assert.True((double)law["value"]! < 1.0e-6, $"행성 단계 경사 법칙의 어긋남 가운데값이 {law["value"]} 입니다. 1e-6 보다 작아야 합니다.");
+        // 행성 단계는 퇴적 항을 끄고(landscape.deposition_g_l0) 풀었습니다. 같은 설정으로 다시 셈하면 어긋남의 가운데값이 1e-6 보다
+        // 작습니다. 칸의 절반 이상에서 경사가 법칙과 소수 여섯째 자리까지 맞는다는 뜻입니다.
+        (double median, double max) = LawFit(small, Pipeline.L0Config(cfg));
+        Assert.True(median < 1.0e-6, $"행성 단계 설정으로 셈한 경사 법칙의 어긋남 가운데값이 {median} 입니다. 1e-6 보다 작아야 합니다.");
+        // 점수표의 값은 가장 크게 어긋난 칸의 값이고, 행성 단계 설정으로 셈한 값과 같아야 합니다. 솔버 뒤에 지나는 물이 1% 안에서
+        // 바뀐 칸은 정상상태로 남아 이 값이 0 보다 조금 크지만, 합격선(1%) 안이라 합격입니다.
+        Assert.Equal(max, (double)law["value"]!);
         Assert.Equal(true, law["pass"]);
+        // 히어로 단계의 값(퇴적 항 켬)으로 셈하면 칸이 작은 이 행성에서는 가운데값부터 수십 % 어긋납니다.
+        (double heroMedian, _) = LawFit(small, cfg);
+        Assert.True(heroMedian > 0.1, $"히어로 단계 설정으로 셈한 경사 법칙의 어긋남 가운데값이 {heroMedian} 입니다. 0.1 보다 커야 합니다.");
         var sea = (OrderedDictionary<string, object?>)card["planet.ocean_fraction"]!;
         Assert.Equal("forced", sea["kind"]);
+    }
+
+    /// <summary>
+    /// 점수표의 경사 법칙 검사(planet.law_consistency)와 같은 칸에서, 솔버가 낸 경사 S 가 설정 cfg 로 다시 셈한 법칙 경사와
+    /// 어긋난 정도 |S − 법칙|/법칙 의 가운데값과 가장 큰 값. 보는 칸은 물을 이웃으로 내보내는 육지 칸입니다. 솔버 뒤에 고친 칸
+    /// (정상상태 아님, 선상지)과, 물을 받는 이웃과의 사이에 층 경계가 있는 칸은 뺍니다.
+    /// </summary>
+    private static (double Median, double Max) LawFit(PlanetState planet, Config cfg)
+    {
+        FieldSet f = planet.Fields;
+        long[] rcv = f.Get<long>("receiver");
+        double[] law = Bpcg.Metrics.Drainage.LawSlopeFromFields(
+            planet.Graph, rcv, f.GetFloat64("discharge_m3_per_yr"), f.GetFloat64("drainage_area_m2"),
+            f.GetFloat64("sediment_flux_m3_per_yr"), f.GetFloat64("uplift_m_per_yr"), f.GetFloat64("k_s"), f.GetFloat64("s_crit"), cfg);
+        bool[] ocean = f.Get<bool>("is_ocean");
+        bool[] notSteady = f.Get<bool>("not_steady");
+        bool[] fan = f.Get<bool>("fan");
+        bool[] cross = Bpcg.Metrics.Drainage.LawCrossMask(
+            rcv, f.GetFloat64("z_m"), f.GetFloat64("strata_bottom_m"), f.Columns["strata_bottom_m"]);
+        bool[] use = new bool[rcv.Length];
+        for (int c = 0; c < use.Length; c++)
+        {
+            use[c] = !ocean[c] && rcv[c] != c && !notSteady[c] && !fan[c] && !cross[c];
+        }
+        OrderedDictionary<string, object?> r = Bpcg.Metrics.Drainage.LawConsistency(f.GetFloat64("slope"), law, f.GetFloat64("s_crit"), use);
+        return ((double)r["median"]!, (double)r["max"]!);
     }
 
     /// <summary>육지 칸 가운데 융기가 음수(가라앉는 땅)인 칸의 비율.</summary>

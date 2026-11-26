@@ -24,8 +24,10 @@ public sealed class RiftSegmentTests
     /// <summary>
     /// 남위 30° 아래가 바다이고 북쪽으로 갈수록 높아지는 행성 (면당 32칸, 칸 한 변 약 310 km). 적도를 따라 한 바퀴(약 4만 km) 도는
     /// 폭 두 칸의 띠(위도 ±2.3° 안, 256칸)가 한 해 0.03 mm 씩 가라앉고, 흙은 들어오지 않습니다. 몫이 1 인 칸은 3천만 년 동안 흙이
-    /// 메우지 못한 깊이가 900 m 입니다. 바닥은 바다보다 낮아지지 않게 줄인 높이(Hollows.LoweredBed)라, 약 500 m 의 땅이 170~200 m
-    /// 까지 내려갑니다. 기온은 어디나 25 °C 라 얼음이 덮인 적이 없어, 얼음이 긁은 자리는 생기지 않습니다.
+    /// 메우지 못한 깊이가 900 m 입니다. 기온은 어디나 25 °C 라 얼음이 덮인 적이 없어, 얼음이 긁은 자리는 생기지 않습니다.
+    /// 띠의 땅은 약 960~1,060 m 라, 900 m 를 그대로 빼도 바닥(약 60~160 m)이 바다 1 m 위보다 높습니다. 그래서 웅덩이 바닥을 같은
+    /// 비율로 얕게 누르지 않고(Hollows.ShapeBeds), 칸마다 바닥 = 땅 높이 − 900 m × 가라앉는 몫 입니다. 땅이 이보다 낮아 바닥을
+    /// 누르면, 누르는 비율이 웅덩이마다 달라 나누었을 때와 나누지 않았을 때의 바닥을 칸끼리 견줄 수 없습니다.
     /// </summary>
     private static (CellGraph Graph, double[] Z, bool[] Ocean, bool[] Belt, BasinCauses Causes) RiftPlanet()
     {
@@ -42,7 +44,7 @@ public sealed class RiftSegmentTests
             double up = unit[(c * 3) + 2];
             lat[c] = Math.Asin(up);
             ocean[c] = up < -0.5;
-            z[c] = ocean[c] ? 0.0 : 10.0 + (1000.0 * (up + 0.5));
+            z[c] = ocean[c] ? 0.0 : 10.0 + (2000.0 * (up + 0.5));
             belt[c] = !ocean[c] && Math.Abs(up) < 0.04;
             uplift[c] = belt[c] ? SinkMPerYr : 0.0;
         }
@@ -96,6 +98,16 @@ public sealed class RiftSegmentTests
         Assert.Equal(1, CountBasins(g, whole.Hollow));
         Assert.Equal(belt.Count(b => b), whole.NTectonic);
         Assert.Equal(0, whole.NGlacial);
+        // 띠의 칸은 모두 몫 1 이라, 가라앉는 속도 × 가라앉아 온 햇수(900 m)를 그대로 뺀 바닥입니다. 누른 웅덩이는 없습니다.
+        double fullDepth = -SinkMPerYr * Cfg(0.0).F("uplift.orogen_duration_myr") * 1.0e6;
+        Assert.True(whole.NSqueezed == 0, $"바닥을 같은 비율로 얕게 누른 웅덩이가 {whole.NSqueezed}개라, 칸마다의 바닥을 견줄 수 없습니다");
+        for (int c = 0; c < n; c++)
+        {
+            if (belt[c])
+            {
+                Assert.Equal(z[c] - fullDepth, whole.Z[c], 9);
+            }
+        }
 
         // 나누면 턱(가라앉는 몫 0)이 띠를 끊어 분지가 여럿 생깁니다. 턱 칸은 낮추지 않아 처음 높이 그대로입니다.
         int previous = 0;
@@ -106,11 +118,13 @@ public sealed class RiftSegmentTests
             int sills = Enumerable.Range(0, n).Count(c => belt[c] && !parted.Hollow[c]);
             Assert.True(basins >= 2, $"분지 하나와 턱을 합친 길이 {segment / 1e3} km: 띠가 분지 {basins}개로만 나뉩니다");
             Assert.True(sills > 0, $"분지 하나와 턱을 합친 길이 {segment / 1e3} km: 턱 칸이 없습니다");
+            Assert.True(parted.NSqueezed == 0, $"분지 하나와 턱을 합친 길이 {segment / 1e3} km: 바닥을 같은 비율로 얕게 누른 웅덩이가 {parted.NSqueezed}개입니다");
             for (int c = 0; c < n; c++)
             {
                 // 낮춘 칸은 띠 안에만 있고, 어느 칸도 나누지 않았을 때보다 깊이 낮아지지 않습니다 (몫 ≤ 1).
+                // 바닥은 넘칠 높이에서 깊이를 빼 다시 구한 값이라(Hollows.ShapeBeds), 반올림 차이 1e-9 m 는 봐줍니다.
                 Assert.True(!parted.Hollow[c] || belt[c], $"칸 {c} 는 가라앉는 띠 밖인데 낮췄습니다");
-                Assert.True(parted.Z[c] >= whole.Z[c], $"칸 {c} 가 나누지 않았을 때보다 깊이 낮아졌습니다");
+                Assert.True(parted.Z[c] >= whole.Z[c] - 1e-9, $"칸 {c} 가 나누지 않았을 때보다 깊이 낮아졌습니다");
                 Assert.True(parted.Hollow[c] || parted.Z[c] == z[c], $"물이 고이지 않는 칸 {c} 의 높이가 바뀌었습니다");
             }
             // 분지 하나와 턱을 합친 길이를 줄이면 띠가 더 잘게 나뉩니다.

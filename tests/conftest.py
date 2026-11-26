@@ -6,7 +6,7 @@
 | tiny_planet_again | planet --profile tiny --seed 0 (다른 폴더) | 결정성 |
 | flat_run | hero --flat --profile tiny --seed 3 → bake | 평면 히어로 |
 | cave_run | hero --flat (강 문턱·n 을 낮춤) → bake | 동굴·선상지 호수가 꼭 생기는 회랑 |
-| karst_hero | planet --profile tiny --seed 5 → hero --from | 아래층 동굴이 있는 히어로 유역 |
+| karst_hero | planet --profile tiny --seed 4 → hero --from | 아래층 동굴이 있는 히어로 유역 |
 | no_detail_run | bake --set detail.fractal_gain=0 | 프랙탈 디테일을 끈 굽기 |
 
 dotnet 이 없으면 C# 결과를 쓰는 시험은 모두 건너뜁니다 (.NET 10 SDK 필요).
@@ -24,8 +24,11 @@ CAVE_OVERRIDES = ("landscape.slope_exponent_n=1.0", "rivers.min_discharge_m3_per
 
 # 행성에서 고른 히어로 유역에 아래층 동굴이 있는 tiny 시드.
 # 시드 0 히어로 유역은 화강암만 드러나 동굴이 없습니다. tiny 시드 0~7 가운데
-# 2, 4, 5 의 히어로 유역에 아래층 동굴이 있고, 5 가 가장 많습니다(875칸, 2026-11-26).
-KARST_SEED = "5"
+# 2, 4, 6 의 히어로 유역에 아래층 동굴이 있고, 4 가 가장 많습니다(688칸, 2026-11-26).
+# 6 의 아래층 동굴은 강 수면보다 1 km 넘게 높은 지하수면에 있어 땅 모양을 따라 기웁니다.
+# 그래서 아래층 동굴이 평평한지 보는 시험에 쓰지 않습니다.
+# C# 시험 HeroVolumeCentersTests 의 KarstSeed 도 이 시드입니다(강가 샘 29곳).
+KARST_SEED = "4"
 
 
 @pytest.fixture(scope="session")

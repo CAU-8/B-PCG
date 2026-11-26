@@ -121,7 +121,10 @@ def test_lower_caves_lie_flat_in_platform_karst(karst_hero, cfg):
     # 석회암 지하수면은 가까운 강 높이에 거의 평평하고, 아래층 동굴도 그렇습니다.
     # 지구 카르스트의 지하수면 기울기는 0.001~0.005 입니다(설정 groundwater.karst_gradient).
     c0 = karst_hero["cave_level_0_m"].astype(np.float64)
-    assert np.isfinite(c0).any(), "tiny 시드 5 히어로 유역에는 아래층 동굴이 있어야 합니다"
+    assert np.isfinite(c0).any(), (
+        f"tiny 시드 {karst_hero.manifest['seed']} 히어로 유역에 아래층 동굴이 없어 시험이 아무것도 "
+        "확인하지 않습니다. tests/conftest.py 의 KARST_SEED 를 아래층 동굴이 있는 시드로 바꾸세요"
+    )
     g = _neighbor_gradients(karst_hero, c0)
     grad = float(cfg["groundwater"]["karst_gradient"])
     assert np.percentile(g, 90) <= 5 * grad, np.percentile(g, [50, 90, 99])
